@@ -15,10 +15,9 @@
 本插件并未更改原名，只需更换上游源并强制拉取即可：
 
 ```bash
-cp -r gsuid_core/gsuid_core/plugins/WutheringWavesUID ./WutheringWavesUID_bak
-cd gsuid_core/gsuid_core/plugins/WutheringWavesUID
-git remote set-url origin https://github.com/Loping151/XutheringWavesUID.git
-git fetch --all && git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)
+mv -r gsuid_core/gsuid_core/plugins/WutheringWavesUID ./WutheringWavesUID_bak
+cd gsuid_core/gsuid_core/plugins/
+git clone https://github.com/Loping151/XutheringWavesUID.git WutheringWavesUID
 ```
 将继承原有数据和配置。
 
@@ -35,10 +34,6 @@ git clone https://github.com/Loping151/XutheringWavesUID.git WutheringWavesUID
 的扩展，具体安装方式可参考[GenshinUID](https://github.com/KimigaiiWuyi/GenshinUID)**
 >
 > **如果已经是最新版本的`gsuid_core`, 可以直接对bot发送`core安装插件WutheringWavesUID`，然后重启core以应用安装**
-
-## 丨反馈渠道
-
-- QQ群号：[653696746](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=hmB3ejtTx6cIDHegsLM91jd1Rn97eGAe&authKey=HqcnRdI0S98dUBcpHxwjWv72LYpUYE%2BSXVOEjiuBrAZbepCHPzP86szZFhxeiQkG&noverify=0&group_code=653696746)
 
 ## 丨其他
 
