@@ -91,6 +91,7 @@ def init_dir():
         JINLINGZI_GUIDE_PATH,
         JIEXING_GUIDE_PATH,
         XIAOYANG_GUIDE_PATH,
+        XFM_GUIDE_PATH,
         CUSTOM_CARD_PATH,
         OTHER_PATH,
         CALENDAR_PATH,

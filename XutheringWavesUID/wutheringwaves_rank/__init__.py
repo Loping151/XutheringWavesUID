@@ -18,6 +18,8 @@ sv_waves_rank_total_list = SV("ww练度总排行", priority=0)
 async def send_rank_card(bot: Bot, ev: Event):
     if not ev.group_id:
         return await bot.send("请在群聊中使用")
+    
+    char = ev.regex_dict.get("char")
 
     rank_type = "伤害"
     if "评分" in char:
@@ -38,15 +40,9 @@ async def send_rank_card(bot: Bot, ev: Event):
     rf"^(?P<char>{PATTERN})(?:总排行|总排名)(?P<pages>\d+)?$", block=True
 )
 async def send_all_rank_card(bot: Bot, ev: Event):
-    match = re.search(
-        rf"^(?P<char>{PATTERN})(?:总排行|总排名)(?P<pages>\d+)?$",
-        ev.raw_text,
-    )
-    if not match:
-        return
     
-    char = match.group("char")
-    pages = match.group("pages")
+    char = ev.regex_dict.get("char")
+    pages = ev.regex_dict.get("pages")
 
     if pages:
         pages = int(pages)
