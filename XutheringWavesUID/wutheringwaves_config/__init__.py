@@ -38,13 +38,14 @@ async def send_config_ev(bot: Bot, ev: Event):
         func = "体力背景"
         value = ev.text.replace("体力背景", "").strip()
         if not value:
-            return await bot.send("[鸣潮] 请输入正确的角色名...\n", at_sender)
+            char_name = ""
+        #     return await bot.send("[鸣潮] 请输入正确的角色名...\n", at_sender)
         char_name = alias_to_char_name(value)
-        if not char_name:
-            return await bot.send(
-                f"[鸣潮] 角色名【{value}】无法找到, 可能暂未适配, 请先检查输入是否正确！\n",
-                at_sender,
-            )
+        # if not char_name:
+        #     return await bot.send(
+        #         f"[鸣潮] 角色名【{value}】无法找到, 可能暂未适配, 请先检查输入是否正确！\n",
+        #         at_sender,
+        #     )
         im = await set_waves_user_value(ev, func, uid, char_name)
     elif "群排行" in ev.text:
         if ev.user_pm > 3:

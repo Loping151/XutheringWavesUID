@@ -162,6 +162,7 @@ async def _draw_stamina_img(ev: Event, valid: Dict) -> Image.Image:
     force_not_use_custom = False
     
     if user and user.stamina_bg_value:
+        logger.info(f"[鸣潮][每日信息]用户自定义体力背景: {user.stamina_bg_value}")
         force_use_bg = "背景" in user.stamina_bg_value
         force_not_use_bg = "立绘" in user.stamina_bg_value
         force_not_use_custom = "官方" in user.stamina_bg_value

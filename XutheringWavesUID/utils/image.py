@@ -132,6 +132,11 @@ async def get_random_waves_bg(char_id: Optional[str] = None, force_not_use_custo
             path = random.choice(os.listdir(custom_dir))
             if path:
                 return Image.open(f"{custom_dir}/{path}").convert("RGBA"), True
+        else:
+            name = f"{char_id}.webp"
+            path = ROLE_BG_PATH / name
+            if os.path.exists(path):
+                return Image.open(path).convert("RGBA"), True
         
     else:
         bg_list = [
@@ -146,7 +151,7 @@ async def get_random_waves_bg(char_id: Optional[str] = None, force_not_use_custo
                     return Image.open(f"{custom_dir}/{path}").convert("RGBA"), True
                 
         else:
-            name = f"{char_id}.webp"
+            name = random.choice(os.listdir(f"{ROLE_BG_PATH}"))
             path = ROLE_BG_PATH / name
             if os.path.exists(path):
                 return Image.open(path).convert("RGBA"), True
