@@ -225,7 +225,7 @@ async def compress_all_custom_card(bot: Bot, ev: Event):
     
     task_list = []
     for PATH in CUSTOM_PATH_MAP.values():
-        for char_id_path in PATH:
+        for char_id_path in PATH.iterdir():
             if not char_id_path.is_dir():
                 continue
             for img_path in char_id_path.iterdir():
