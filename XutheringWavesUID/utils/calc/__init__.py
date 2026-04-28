@@ -9,3 +9,5 @@ def reload_wuwacalc_module():
         globals()["WuWaCalc"] = w
     except ImportError:
         return None
+
+reload_wuwacalc_module()
