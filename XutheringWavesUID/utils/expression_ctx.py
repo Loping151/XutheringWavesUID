@@ -46,18 +46,23 @@ class WavesCharRank(BaseModel):
         }
 
 
-async def get_waves_char_rank(uid, all_role_detail, need_expected_damage=False, need_overall_score=False):
+async def get_waves_char_rank(
+    uid, all_role_detail, need_expected_damage=False, need_overall_score=False
+):
     if not all_role_detail:
         all_role_detail = await get_all_role_detail_info(uid)
     return _compute_char_rank(all_role_detail, need_expected_damage, need_overall_score)
 
 
-def _compute_one_char_rank(role_detail, need_expected_damage=False, need_overall_score=False):
+def _compute_one_char_rank(
+    role_detail, need_expected_damage=False, need_overall_score=False
+):
     """单角色评分计算; role_detail 可为 dict 或 RoleDetailData。
 
     入参/返回值均可 pickle, 供 gsuid_core.pool.to_process 丢进程池并行调用。
     """
     from .calc import WuWaCalc
+
     if not isinstance(role_detail, RoleDetailData):
         role_detail = RoleDetailData(**role_detail)
 
@@ -81,7 +86,9 @@ def _compute_one_char_rank(role_detail, need_expected_damage=False, need_overall
         for i, _phantom in enumerate(equipPhantomList):
             if _phantom and _phantom.phantomProp:
                 props = _phantom.get_props()
-                _score, _bg = calc_phantom_score(role_detail.role.roleId, props, _phantom.cost, calc.calc_temp)
+                _score, _bg = calc_phantom_score(
+                    role_detail.role.roleId, props, _phantom.cost, calc.calc_temp
+                )
                 phantom_score += _score
 
         if need_expected_damage:
@@ -89,21 +96,29 @@ def _compute_one_char_rank(role_detail, need_expected_damage=False, need_overall
             if rankDetail:
                 calc.role_card = calc.enhance_summation_card_value(calc.phantom_card)
                 calc.damageAttribute = calc.card_sort_map_to_attribute(calc.role_card)
-                _, expected_damage = rankDetail["func"](calc.damageAttribute, role_detail)
+                _, expected_damage = rankDetail["func"](
+                    calc.damageAttribute, role_detail
+                )
                 expected_damage = comma_separated_number(expected_damage)
                 expected_name = rankDetail["title"]
 
         if need_overall_score:
             try:
-                scoreDetail = ScoreDetailRegister.find_class(str(role_detail.role.roleId))
+                scoreDetail = ScoreDetailRegister.find_class(
+                    str(role_detail.role.roleId)
+                )
                 if scoreDetail:
-                    score_calc = scoreDetail[0] if isinstance(scoreDetail, list) else scoreDetail
+                    score_calc = (
+                        scoreDetail[0] if isinstance(scoreDetail, list) else scoreDetail
+                    )
                     setattr(calc, "_score_title", score_calc.get("title", ""))
                     score_report = score_calc["func"](calc, role_detail)
                     if score_report is not None:
                         overall_score = round(float(score_report.score), 2)
             except Exception as e:
-                logger.debug(f"[鸣潮·评分] 综合评分计算失败 {role_detail.role.roleId}: {e}")
+                logger.debug(
+                    f"[鸣潮·评分] 综合评分计算失败 {role_detail.role.roleId}: {e}"
+                )
 
         for ph_detail in calc.phantom_pre.get("ph_detail", []):
             if ph_detail.get("ph_name") and ph_detail.get("ph_num") == 5:
@@ -117,9 +132,15 @@ def _compute_one_char_rank(role_detail, need_expected_damage=False, need_overall
         if role_detail.role.roleId == 1606:
             roccia_part_1, roccia_part_2 = False, False
             for ph_detail in calc.phantom_pre.get("ph_detail", []):
-                if ph_detail.get("ph_name") == "沉日劫明" and ph_detail.get("ph_num") >= 2:
+                if (
+                    ph_detail.get("ph_name") == "沉日劫明"
+                    and ph_detail.get("ph_num") >= 2
+                ):
                     roccia_part_1 = True
-                if ph_detail.get("ph_name") == "幽夜隐匿之帷" and ph_detail.get("ph_num") >= 2:
+                if (
+                    ph_detail.get("ph_name") == "幽夜隐匿之帷"
+                    and ph_detail.get("ph_num") >= 2
+                ):
                     roccia_part_2 = True
             if roccia_part_1 and roccia_part_2:
                 sonataName = "洛2+2"
@@ -134,7 +155,9 @@ def _compute_one_char_rank(role_detail, need_expected_damage=False, need_overall
             "chain": role_detail.get_chain_num(),
             "chainName": role_detail.get_chain_name(),
             "score": phantom_score,
-            "score_bg": get_total_score_bg(role_detail.role.roleName, phantom_score, calc.calc_temp),
+            "score_bg": get_total_score_bg(
+                role_detail.role.roleName, phantom_score, calc.calc_temp
+            ),
             "overall_score": overall_score,
             "expected_damage": expected_damage,
             "weaponId": role_detail.weaponData.weapon.weaponId,
@@ -146,7 +169,9 @@ def _compute_one_char_rank(role_detail, need_expected_damage=False, need_overall
     )
 
 
-def _compute_char_rank(all_role_detail, need_expected_damage=False, need_overall_score=False):
+def _compute_char_rank(
+    all_role_detail, need_expected_damage=False, need_overall_score=False
+):
     if isinstance(all_role_detail, dict):
         temp = all_role_detail.values()
     else:

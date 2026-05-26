@@ -157,11 +157,12 @@ async def send_card(
         return meta
 
     # 全量刷新不算综合评分, 仅单角色刷新时算; 后台上传不阻塞出图
+    # 只算本次刷新的角色
     async def _upload_rank():
         try:
             if len(waves_data) == 1:
                 results = await asyncio.gather(
-                    *(asyncio.to_thread(_compute_one_char_rank, rd, True, True) for rd in save_data),
+                    *(asyncio.to_thread(_compute_one_char_rank, rd, True, True) for rd in waves_data),
                     return_exceptions=True,
                 )
                 ranks = [r for r in results if isinstance(r, WavesCharRank)]
@@ -250,7 +251,12 @@ async def save_card_info(
         logger.exception(f"save_card_info save failed {path}:", e)
 
     # 保存charListData.json（角色评分缓存）
-    waves_char_rank = await get_waves_char_rank(uid, save_data, True)
+    # 只有本次发生变化的角色才重新评分
+    rank_source = list(refresh_update.values())
+    if rank_source:
+        waves_char_rank = await get_waves_char_rank(uid, rank_source, True)
+    else:
+        waves_char_rank = []
 
     # 候选门槛: 不在漂泊者列表、本次确有变更、有旧分、旧分>140、
     #   跨档 / 单角色刷新 delta∈(0,50) ; 否则 delta∈(3,50)
