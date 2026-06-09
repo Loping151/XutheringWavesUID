@@ -13,7 +13,7 @@ from gsuid_core.logger import logger
 
 from ..utils.single_flight import SingleFlightLock
 from ..utils.util import get_hide_uid_pref, hide_uid
-from .gacha_handler import fetch_mcgf_data, merge_gacha_data
+from .gacha_handler import fetch_mcgf_data, merge_gacha_data, fetch_xhh_data, merge_xhh_data
 from .get_gachalogs import (
     save_gachalogs,
     export_gachalogs,
@@ -214,6 +214,54 @@ async def get_gacha_log_by_link(bot: Bot, ev: Event):
                 await bot.send([im, MessageSegment.image(card_img)])
         else:
             await bot.send(im)
+    finally:
+        gacha_import_lock.release(f"{ev.user_id}_{uid}")
+
+
+@sv_get_gachalog_by_link.on_command(("导入小黑盒抽卡记录"), block=True)
+async def get_gacha_log_by_xhh(bot: Bot, ev: Event):
+    uid = await WavesBind.get_uid_by_game(ev.user_id, ev.bot_id)
+    if not uid:
+        return await bot.send(ERROR_CODE[WAVES_CODE_103])
+
+    heybox_id = ev.text.strip()
+    if not heybox_id or not heybox_id.isdigit():
+        return await bot.send("请输入小黑盒ID，例如：导入小黑盒抽卡记录 12345678")
+
+    if not gacha_import_lock.acquire(f"{ev.user_id}_{uid}"):
+        return
+    try:
+        xhh_data = await fetch_xhh_data(heybox_id)
+        if not xhh_data:
+            return await bot.send("获取小黑盒数据失败，请检查ID是否正确或该用户是否已导入鸣潮抽卡记录")
+
+        xhh_uid = str(xhh_data.get("user_info", {}).get("uid", ""))
+        if xhh_uid != uid:
+            return await bot.send(f"小黑盒对应的鸣潮UID为{xhh_uid}，与当前绑定UID {uid}不匹配！")
+
+        export_res = await export_gachalogs(uid)
+        original_data = {"info": {}, "list": []}
+
+        if export_res["retcode"] == "ok":
+            import aiofiles
+
+            async with aiofiles.open(export_res["url"], "r", encoding="utf-8") as f:
+                original_data = json.loads(await f.read())
+
+        if len(original_data.get("list", [])) == 0:
+            return await bot.send("当前无抽卡记录，无法合并，请先用链接导入抽卡记录后再尝试合并！")
+
+        merged_data = await asyncio.to_thread(merge_xhh_data, original_data, xhh_data)
+
+        merged_json_str = json.dumps(merged_data, ensure_ascii=False)
+        im = await import_gachalogs(ev, merged_json_str, "json", uid, force_overwrite=True)
+        if im.startswith("🌱"):
+            await bot.send("小黑盒导入仅补充早于本地记录的历史数据，不会覆盖已有记录！")
+        return await bot.send(im)
+
+    except Exception as e:
+        logger.exception(f"[鸣潮·小黑盒导入] 合并失败 uid={uid}: {e}")
+        return await bot.send("处理过程中发生错误，请稍后重试")
     finally:
         gacha_import_lock.release(f"{ev.user_id}_{uid}")
 
