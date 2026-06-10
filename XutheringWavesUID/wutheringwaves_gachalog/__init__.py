@@ -287,10 +287,10 @@ async def get_gacha_log_by_xhh(bot: Bot, ev: Event):
     if not uid:
         return await bot.send(ERROR_CODE[WAVES_CODE_103])
 
-    heybox_id = _parse_import_uid(ev.text)
+    heybox_id = ev.text.strip()
     if not heybox_id:
         return await bot.send(
-            f"请带上UID，例如：{PREFIX}导入小黑盒抽卡记录123456789"
+            f"请带上小黑盒ID，例如：{PREFIX}导入小黑盒抽卡记录12345678"
         )
 
     if not gacha_import_lock.acquire(f"{ev.user_id}_{uid}"):
