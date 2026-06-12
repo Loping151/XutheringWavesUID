@@ -18,6 +18,14 @@ sv_waves_code = SV("鸣潮兑换码")
 invalid_code_list = ("MINGCHAO",)
 
 url = "https://newsimg.5054399.com/comm/mlcxqcommon/static/wap/js/data_102.js?{}&callback=?&_={}"
+request_headers = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+    ),
+    "Referer": "https://www.4399.com/",
+    "Accept": "*/*",
+}
 
 
 @sv_waves_code.on_fullmatch(
@@ -63,7 +71,8 @@ async def get_code_list():
 
     async def fetch(proxy=None):
         async with httpx.AsyncClient(proxy=proxy, timeout=None) as client:
-            res = await client.get(new_url, timeout=10)
+            res = await client.get(new_url, headers=request_headers, timeout=10)
+            res.raise_for_status()
             json_data = res.text.split("=", 1)[1].strip().rstrip(";")
             logger.debug(f"[鸣潮·获取兑换码] url:{new_url}, codeList:{json_data}")
             return json.loads(json_data)
