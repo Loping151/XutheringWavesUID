@@ -52,7 +52,7 @@ sv_gacha_web = SV("waves抽卡网页")
 ERROR_MSG_NOTIFY = f"请给出正确的抽卡记录链接, 可发送【{PREFIX}抽卡帮助】"
 ERROR_MSG_IMPORT_TYPE = (
     "请指定导入类型，支持的方式：\n"
-    f"{PREFIX}导入工坊抽卡记录+uid（9位数字UID）\n"
+    f"{PREFIX}导入工坊抽卡记录+uid\n"
     f"{PREFIX}导入小黑盒抽卡记录+小黑盒ID\n"
     "请将【+uid】替换为对应的9位数字UID，或将【+小黑盒ID】替换为对应的小黑盒ID"
 )
