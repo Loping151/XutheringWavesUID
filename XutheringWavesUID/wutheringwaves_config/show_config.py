@@ -27,6 +27,19 @@ SHOW_CONIFG: Dict[str, GSC] = {
         "自定义抽卡登录页面HTML文件路径，请自行确保模板格式正确，尤其注意在移动端显示良好",
         str(show_path / "index_cloud.html"),
     ),
+    "LoginAddTokenHtmlPath": GsStrConfig(
+        "添加Token页面HTML路径，一般不用改，可直接上传",
+        "自定义添加Token页面HTML文件路径，请自行确保模板格式正确",
+        str(show_path / "add_token.html"),
+    ),
+    "LoginAddTokenHtmlUpload": GsImageConfig(
+        "上传添加Token页面模板（上传格式html）",
+        "",
+        str(show_path / "add_token.html"),
+        str(show_path),
+        "add_token",
+        "html",
+    ),
     "Login404HtmlPath": GsStrConfig(
         "404页面HTML路径，一般不用改，可直接上传",
         "自定义404页面HTML文件路径，请自行确保模板格式正确，尤其注意在移动端显示良好",

@@ -45,7 +45,7 @@ msg_notify = [
 ]
 
 
-@waves_add_ck.on_prefix(("添加CK", "添加ck", "添加Token", "添加token", "添加TOKEN"), block=True)
+@waves_add_ck.on_command(("添加CK", "添加ck", "添加Token", "添加token", "添加TOKEN", "token登录", "Token登录"), block=True)
 async def send_waves_add_ck_msg(bot: Bot, ev: Event):
     at_sender = True if ev.group_id else False
     text = ev.text.strip()
@@ -66,11 +66,9 @@ async def send_waves_add_ck_msg(bot: Bot, ev: Event):
         )
 
     if not ck:
-        msg = "\n".join(msg_notify)
-        return await bot.send(
-            (" " if at_sender else "") + msg,
-            at_sender,
-        )
+        from .add_token_web import add_token_web
+
+        return await add_token_web(bot, ev)
 
     ck_msg = await add_cookie(ev, ck, did, is_login=False)
     # 严格匹配 deal.add_cookie 的成功文案，避免 "请求成功" 等内部占位被误判为成功

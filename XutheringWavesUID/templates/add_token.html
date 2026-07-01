@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>添加 Token - XutheringWavesUID</title>
+  <link rel="icon" href="https://web-static.kurobbs.com/resource/prod/icon.ico" type="image/x-icon">
+  <!-- GSAP -->
+  <script>
+    (function () {
+      var d = document.documentElement;
+      d.classList.add('gsap-anim');
+      var srcs = [
+        'https://lib.baomitu.com/gsap/3.13.0/gsap.min.js',
+        'https://cdn.staticfile.org/gsap/3.13.0/gsap.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js'
+      ];
+      var done = false, i = 0, timer;
+      function reveal() { if (done) return; done = true; clearTimeout(timer); d.classList.remove('gsap-anim'); }
+      function ready() { if (done) return; done = true; clearTimeout(timer); window.dispatchEvent(new Event('gsapready')); }
+      function next() {
+        if (done) return;
+        if (i >= srcs.length) { reveal(); return; }
+        var s = document.createElement('script');
+        s.src = srcs[i++];
+        s.onload = function () { window.gsap ? ready() : next(); };
+        s.onerror = next;
+        document.head.appendChild(s);
+        clearTimeout(timer);
+        timer = setTimeout(next, 2000);
+      }
+      next();
+      setTimeout(reveal, 8000);
+    })();
+  </script>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: 'Microsoft YaHei', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif;
+    }
+
+    body {
+      background-image: url('https://prod-alicdn-community.kurobbs.com/forum/465dcb694966492aba4d4982c47f0e8520240914.jpg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: inherit;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      filter: blur(8px);
+      z-index: -1;
+    }
+
+    .login-container {
+      background-color: rgba(255, 255, 255, 0.2);
+      padding: 2rem;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      width: 320px;
+      transition: all 0.3s ease;
+    }
+
+    .login-container:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.45);
+    }
+
+    .login-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 2rem;
+      justify-content: space-between;
+    }
+
+    .banner {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 3px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      margin-right: 0.5rem;
+    }
+
+    .banner img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .banner-text {
+      flex: 1;
+      padding-right: 1rem;
+      margin-left: 0.5rem;
+    }
+
+    .welcome-text {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.25rem;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .logo-text {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.25rem;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .kurobbs-text {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #e6e6e6;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .input-group {
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #fff;
+      font-weight: 500;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 8px;
+      box-sizing: border-box;
+      font-size: 16px;
+      background-color: rgba(255, 255, 255, 0.9);
+      transition: all 0.3s ease;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.6);
+    }
+
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    button:hover {
+      background-color: #357abd;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-content {
+      background-color: #fefefe;
+      margin: 15% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 300px;
+      border-radius: 10px;
+      text-align: center;
+      transform: scale(0.7);
+      transition: transform 0.3s ease;
+    }
+
+    .modal.show {
+      display: block;
+      opacity: 1;
+    }
+
+    .modal.show .modal-content {
+      transform: scale(1);
+    }
+
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .close:hover,
+    .close:focus {
+      color: #000;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .user-id-display {
+      text-align: center;
+      color: yellow;
+      font-size: 0.8em;
+      margin-bottom: 10px;
+    }
+
+    .countdown {
+      font-size: 0.9em;
+      color: #666;
+      margin-top: 10px;
+    }
+
+    .redirect-button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    .redirect-button:hover {
+      background-color: #357abd;
+    }
+    .gsap-anim .login-container { visibility: hidden; }
+    .login-container.vx-introing,
+    .login-container.vx-introing * { transition: none !important; }
+    #vxToast {
+      position: fixed; left: 50%; top: 20px;
+      z-index: 3000; max-width: 86%; padding: 11px 18px;
+      border-radius: 10px; font-size: 14px; font-weight: 600;
+      line-height: 1.4; text-align: center; color: #1b2733;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      opacity: 0; visibility: hidden; pointer-events: none;
+    }
+    #vxToast.is-error { color: #fff; background: #d9534f; }
+  </style>
+</head>
+<body>
+<div class="login-container">
+  <div class="login-header">
+    <div class="banner-text">
+      <div class="welcome-text">添加 Token</div>
+      <div class="logo-text">XutheringWavesUID</div>
+      <div class="kurobbs-text">库街区</div>
+    </div>
+    <div class="banner">
+      <img src="https://web-static.kurobbs.com/adminConfig/27/role_icon/1727419309663.png" alt="Banner">
+    </div>
+  </div>
+  <form id="tokenForm">
+    <div class="input-group">
+      <label for="token">Token</label>
+      <input type="text" id="token" name="token" required placeholder="请输入库街区 token" autocomplete="off">
+    </div>
+    <div id="userIdDisplay" class="user-id-display">你的账号: {{ userId }} 请勿使用别人的链接</div>
+    <button type="submit" id="submitBtn">添加</button>
+  </form>
+</div>
+
+<div id="successModal" class="modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h2>提交成功</h2>
+    <p>请返回聊天窗口查看结果</p>
+    <p class="countdown">5秒后自动关闭</p>
+    <button class="redirect-button">关闭</button>
+  </div>
+</div>
+
+<script>
+  const tokenInput = document.getElementById('token');
+  const submitBtn = document.getElementById('submitBtn');
+  const tokenForm = document.getElementById('tokenForm');
+  const modal = document.getElementById('successModal');
+  const closeBtn = modal.querySelector('.close');
+
+  tokenInput.addEventListener('input', function () {
+    submitBtn.disabled = this.value === "";
+  });
+
+  tokenForm.addEventListener('submit', function (e) {
+    const data = {
+      token: tokenInput.value,
+      auth: "{{ auth }}"
+    }
+    e.preventDefault();
+    submitBtn.disabled = true;
+    fetch('{{ server_url }}/waves/add_token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (res) {
+      if (res.success) {
+        showSuccessModal();
+      } else {
+        alert('提交失败' + (res.msg ? ': ' + res.msg : '，请重试'));
+        submitBtn.disabled = false;
+      }
+    })
+    .catch(function () {
+      alert('网络错误，请重试');
+      submitBtn.disabled = false;
+    });
+  });
+
+  function showSuccessModal() {
+    const countdownElement = modal.querySelector('.countdown');
+    const redirectButton = modal.querySelector('.redirect-button');
+    let countdown = 5;
+
+    modal.classList.add('show');
+    setTimeout(function () {
+      modal.querySelector('.modal-content').style.transform = 'scale(1)';
+      modal.querySelector('.modal-content').style.opacity = '1';
+    }, 10);
+
+    function updateCountdown() {
+      countdownElement.textContent = countdown + '秒后自动关闭';
+      if (countdown <= 0) {
+        clearInterval(timer);
+        closeModal();
+      }
+      countdown--;
+    }
+
+    const timer = setInterval(updateCountdown, 1000);
+
+    redirectButton.addEventListener('click', function () {
+      clearInterval(timer);
+      closeModal();
+    });
+
+    modal.querySelector('.close').addEventListener('click', function () {
+      clearInterval(timer);
+      closeModal();
+    });
+  }
+
+  closeBtn.addEventListener('click', closeModal);
+
+  function closeModal() {
+    modal.querySelector('.modal-content').style.transform = 'scale(0.7)';
+    setTimeout(function () {
+      modal.classList.remove('show');
+    }, 300);
+  }
+
+  window.addEventListener('click', function (event) {
+    if (event.target === modal) {
+      closeModal();
+    }
+  });
+
+  function loadBackgroundImage() {
+    const img = new Image();
+    img.onload = function () {
+      document.body.style.backgroundImage = 'linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.4)), url(' + img.src + ')';
+      document.body.classList.add('bg-loaded');
+    };
+    img.src = 'https://prod-alicdn-community.kurobbs.com/forum/465dcb694966492aba4d4982c47f0e8520240914.jpg';
+  }
+
+  window.addEventListener('load', loadBackgroundImage);
+
+  // GSAP 动效层
+  function vxInit() {
+    if (!window.gsap) return;
+    var card = document.querySelector('.login-container');
+    if (!card) return;
+    var REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    var toast = document.createElement('div');
+    toast.id = 'vxToast';
+    document.body.appendChild(toast);
+    gsap.set(toast, { xPercent: -50 });
+    var toastTl;
+    function vxToast(msg) {
+      var s = String(msg == null ? '' : msg);
+      var isErr = /失败|出错|错误|请完成|稍后|不存在|超时|异常/.test(s);
+      toast.textContent = s;
+      toast.className = isErr ? 'is-error' : '';
+      if (toastTl) toastTl.kill();
+      gsap.killTweensOf(toast);
+      toastTl = gsap.timeline()
+        .fromTo(toast, { autoAlpha: 0, y: REDUCE ? 0 : -14 },
+          { autoAlpha: 1, y: 0, duration: REDUCE ? 0.2 : 0.4, ease: 'back.out(1.7)' })
+        .to(toast, { autoAlpha: 0, y: REDUCE ? 0 : -10, duration: 0.4, ease: 'power2.in' }, '+=2.4');
+      if (isErr) shake();
+    }
+    window.alert = function (m) { vxToast(m); };
+
+    var shaking = false;
+    function shake() {
+      if (REDUCE || shaking) return;
+      shaking = true;
+      card.classList.add('vx-introing');
+      gsap.to(card, {
+        keyframes: [{ x: -8 }, { x: 7 }, { x: -6 }, { x: 4 }, { x: 0 }],
+        duration: 0.45, ease: 'power1.inOut', clearProps: 'transform',
+        onComplete: function () { card.classList.remove('vx-introing'); shaking = false; }
+      });
+    }
+
+    gsap.matchMedia().add({
+      full: '(prefers-reduced-motion: no-preference)',
+      reduce: '(prefers-reduced-motion: reduce)'
+    }, function (ctx) {
+      if (ctx.conditions.reduce) { gsap.set(card, { autoAlpha: 1 }); return; }
+      card.classList.add('vx-introing');
+      var bits = gsap.utils.toArray('.banner-text > *, .banner');
+      var fields = gsap.utils.toArray('#tokenForm .input-group, #tokenForm .user-id-display');
+      var submit = card.querySelector('button[type="submit"]');
+      var tl = gsap.timeline({
+        defaults: { ease: 'expo.out' },
+        onComplete: function () { card.classList.remove('vx-introing'); }
+      });
+      tl.from(card, { autoAlpha: 0, y: 26, scale: 0.97, duration: 0.7, clearProps: 'transform' })
+        .from(bits, { autoAlpha: 0, y: 12, stagger: 0.06, duration: 0.5, clearProps: 'transform' }, '-=0.4')
+        .from(fields, { autoAlpha: 0, y: 14, stagger: 0.08, duration: 0.5, clearProps: 'transform' }, '-=0.3')
+        .from(submit, { autoAlpha: 0, y: 12, duration: 0.5, clearProps: 'transform' }, '-=0.25');
+      return function () { tl.kill(); card.classList.remove('vx-introing'); };
+    });
+  }
+  if (window.gsap) vxInit();
+  else window.addEventListener('gsapready', vxInit, { once: true });
+</script>
+</body>
+</html>
