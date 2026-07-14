@@ -10,7 +10,7 @@ from gsuid_core.ai_core.register import ai_tools
 from ._cache import ALL_ATTRS, load_chars, load_monster_resist
 
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮攻略")
 async def get_monster_resistance_wuwa(
     ctx: RunContext[ToolContext],
     monster_name: str,
@@ -49,7 +49,7 @@ async def get_monster_resistance_wuwa(
     return "\n".join(lines)
 
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮攻略")
 async def recommend_against_monster_wuwa(
     ctx: RunContext[ToolContext],
     monster_name: str,

@@ -77,12 +77,11 @@ def _score_rating(score: float) -> str:
 
 # ─── get_user_wuwa_uids ───────────────────────────────
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮面板")
 async def get_user_wuwa_uids(
     ctx: RunContext[ToolContext],
     target_user_id: Optional[str] = None,
 ) -> str:
-    logger.info(f"[鸣潮·AI工具] get_user_wuwa_uids 入口 target_user_id={target_user_id!r}")
     """查询用户已绑定的全部鸣潮 UID 列表（与战双等其它游戏 UID 区分）。
 
     用于回答「我绑定了哪些 UID / 我有几个鸣潮号 / 我当前默认 UID 是多少」。
@@ -94,6 +93,7 @@ async def get_user_wuwa_uids(
     Returns:
         绑定的鸣潮 UID 列表 + 默认 UID。未绑定则提示。
     """
+    logger.info(f"[鸣潮·AI工具] get_user_wuwa_uids 入口 target_user_id={target_user_id!r}")
     ev = ctx.deps.ev if ctx and ctx.deps else None
     if ev is None:
         return "无法获取当前对话 Event"
@@ -116,15 +116,12 @@ async def get_user_wuwa_uids(
 
 # ─── get_user_wuwa_char_list ──────────────────────────
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮面板")
 async def get_user_wuwa_char_list(
     ctx: RunContext[ToolContext],
     uid: Optional[str] = None,
     target_user_id: Optional[str] = None,
 ) -> str:
-    logger.info(
-        f"[鸣潮·AI工具] get_user_wuwa_char_list 入口 uid={uid!r} target_user_id={target_user_id!r}"
-    )
     """查询某 UID 的鸣潮角色列表（已在展柜或绑定 cookie 拉取过），含等级/共鸣链/武器/谐振。
 
     数据来自 PLAYER_PATH/<uid>/rawData.json（XW 缓存）。
@@ -137,6 +134,9 @@ async def get_user_wuwa_char_list(
     Returns:
         角色 Markdown 表格 (名字 / 等级 / 共鸣链 / 武器 + 谐振)。
     """
+    logger.info(
+        f"[鸣潮·AI工具] get_user_wuwa_char_list 入口 uid={uid!r} target_user_id={target_user_id!r}"
+    )
     ev = ctx.deps.ev if ctx and ctx.deps else None
     target_uid = uid
     if target_uid:
@@ -180,18 +180,17 @@ async def get_user_wuwa_char_list(
 
 # ─── get_user_wuwa_char_detail ────────────────────────
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮面板")
 async def get_user_wuwa_char_detail(
     ctx: RunContext[ToolContext],
     char_name: str,
     uid: Optional[str] = None,
 ) -> str:
-    logger.info(
-        f"[鸣潮·AI工具] get_user_wuwa_char_detail 入口 char_name={char_name!r} uid={uid!r}"
-    )
     """查询某 UID 某角色的完整面板详情（等级 / 共鸣链 / 武器谐振 / 技能等级 / 装备的 5 个声骸）。
 
-    用于回答「我的长离是几链 / 长离武器是啥 / 长离技能等级」。
+    鸣潮（Wuthering Waves）游戏内的角色面板。用户说「<角色>面板 / <角色>练度 / 看看我的
+    <角色> / 我的<角色>几链」时调用；char_name 直接填用户原话里的角色名（如长离、玄翎秧秧、
+    卡提希娅），别名/俗称均可，后端会模糊匹配。
 
     Args:
         char_name: 角色中文名。模糊匹配。
@@ -200,6 +199,9 @@ async def get_user_wuwa_char_detail(
     Returns:
         Markdown 格式的角色完整面板详情。
     """
+    logger.info(
+        f"[鸣潮·AI工具] get_user_wuwa_char_detail 入口 char_name={char_name!r} uid={uid!r}"
+    )
     if not char_name:
         return "请提供 char_name 角色名"
     ev = ctx.deps.ev if ctx and ctx.deps else None
@@ -264,20 +266,17 @@ async def get_user_wuwa_char_detail(
 
 # ─── get_user_wuwa_char_scores ────────────────────────
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮面板")
 async def get_user_wuwa_char_scores(
     ctx: RunContext[ToolContext],
     uid: Optional[str] = None,
     top_n: int = 20,
 ) -> str:
-    logger.info(
-        f"[鸣潮·AI工具] get_user_wuwa_char_scores 入口 uid={uid!r} top_n={top_n}"
-    )
     """查询某 UID 的练度评分排行（来自 charListData.json，XW 评分缓存）。
 
     数据来源 `PLAYER_PATH/<uid>/charListData.json`，格式 `{roleId: score}`。
     用户练度统计图 `练度统计` 命令计算后会落盘到这里，AI 用同一份数据。
-    用于回答「我练度最高的角色是谁 / 我前 N 强角色」。
+    用于回答「我练度最高的角色是谁 / 我前 N 强角色 / 我的鸣潮练度统计」。
 
     Args:
         uid: 鸣潮 9 位 UID。留空则用当前对话用户的默认绑定 UID。
@@ -286,6 +285,9 @@ async def get_user_wuwa_char_scores(
     Returns:
         Markdown 表格 (排名 / 角色名 / 评分 / 评级)。
     """
+    logger.info(
+        f"[鸣潮·AI工具] get_user_wuwa_char_scores 入口 uid={uid!r} top_n={top_n}"
+    )
     ev = ctx.deps.ev if ctx and ctx.deps else None
     target_uid = uid
     if target_uid:
@@ -326,16 +328,15 @@ async def get_user_wuwa_char_scores(
 
 # ─── get_user_wuwa_baseinfo ───────────────────────────
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮面板")
 async def get_user_wuwa_baseinfo(
     ctx: RunContext[ToolContext],
     uid: Optional[str] = None,
 ) -> str:
-    logger.info(f"[鸣潮·AI工具] get_user_wuwa_baseinfo 入口 uid={uid!r}")
     """查询某 UID 的鸣潮账号基本信息（漂泊者等级 / 世界等级 / 活跃天数 / 成就 / 角色数 / 奇藏箱数 / 周本进度等）。
 
     数据源 `PLAYER_PATH/<uid>/baseInfo.json`，由 `卡片` 命令拉取后落盘。
-    用于回答「我账号怎样 / 我等级多少 / 多少天了 / 多少成就」。
+    用于回答「我鸣潮账号怎样 / 我等级多少 / 多少天了 / 多少成就」。
 
     Args:
         uid: 鸣潮 9 位 UID。留空则用当前对话用户的默认绑定 UID。
@@ -343,6 +344,7 @@ async def get_user_wuwa_baseinfo(
     Returns:
         Markdown 文本，含账号概览各项数值。
     """
+    logger.info(f"[鸣潮·AI工具] get_user_wuwa_baseinfo 入口 uid={uid!r}")
     ev = ctx.deps.ev if ctx and ctx.deps else None
     target_uid = uid
     if target_uid:

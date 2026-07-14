@@ -15,7 +15,7 @@ from gsuid_core.ai_core.models import ToolContext
 from gsuid_core.ai_core.register import ai_tools
 
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮资料库")
 async def search_wuwa_kb(
     ctx: RunContext[ToolContext],
     query: str,

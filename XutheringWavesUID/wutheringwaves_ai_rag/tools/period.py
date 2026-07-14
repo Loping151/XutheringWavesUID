@@ -80,12 +80,11 @@ def _matrix_index() -> List[Dict]:
     return items
 
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮攻略")
 async def get_current_period_wuwa(
     ctx: RunContext[ToolContext],
     mode: str = "all",
 ) -> str:
-    logger.info(f"[鸣潮·AI工具] get_current_period_wuwa 入口 mode={mode!r}")
     """查询鸣潮当期玩法概况：逆境深塔 / 冥歌海墟 / 全息矩阵。
 
     用于回答「当期深塔什么样」「现在矩阵推荐谁」「这期海墟 buff」等。
@@ -98,6 +97,7 @@ async def get_current_period_wuwa(
     Returns:
         当期期数 + 起止日期（如有）+ 跟进 search_wuwa_kb 查询建议。
     """
+    logger.info(f"[鸣潮·AI工具] get_current_period_wuwa 入口 mode={mode!r}")
     from ...wutheringwaves_abyss.period import (
         get_tower_period_number,
         get_slash_period_number,

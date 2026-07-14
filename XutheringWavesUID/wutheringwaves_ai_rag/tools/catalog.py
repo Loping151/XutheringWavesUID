@@ -10,7 +10,7 @@ from gsuid_core.ai_core.register import ai_tools
 from ._cache import load_chars, load_echoes, load_weapons, load_weapon_alias
 
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮资料库")
 async def filter_chars_wuwa(
     ctx: RunContext[ToolContext],
     attribute: Optional[str] = None,
@@ -45,7 +45,7 @@ async def filter_chars_wuwa(
     return "\n".join(parts)
 
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮资料库")
 async def filter_weapons_wuwa(
     ctx: RunContext[ToolContext],
     weapon_type: Optional[str] = None,
@@ -76,7 +76,7 @@ async def filter_weapons_wuwa(
     return "\n".join(parts)
 
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮资料库")
 async def filter_echoes_wuwa(
     ctx: RunContext[ToolContext],
     cost: Optional[int] = None,
@@ -111,7 +111,7 @@ async def filter_echoes_wuwa(
     return "\n".join(parts)
 
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮资料库")
 async def get_sonata_echoes_wuwa(
     ctx: RunContext[ToolContext],
     sonata_name: str,
@@ -141,7 +141,7 @@ async def get_sonata_echoes_wuwa(
     return "\n".join(parts)
 
 
-@ai_tools(category="self")
+@ai_tools(category="common", context_tags=["鸣潮"], capability_domain="鸣潮资料库")
 async def get_char_signature_weapon_wuwa(
     ctx: RunContext[ToolContext],
     char_name: str,
