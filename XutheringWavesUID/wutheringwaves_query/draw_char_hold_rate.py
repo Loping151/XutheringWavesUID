@@ -158,7 +158,7 @@ def _render_char_hold_rate(
     title_mask_draw.text((300, 430), title_text, "white", waves_font_58, "lm")
 
     # count
-    title = f"样本数量: {data.get('total_player_count', 0)} 人" if group_id else "数据由玩家自愿上传，仅供参考，不代表全体玩家"
+    title = f"样本数量: {data.get('total_player_count', 0)} 人" if group_id else "仅统计90天内活跃，数据仅供参考，不代表全体玩家"
     title_mask_draw.text(
         (300, 500),
         title,
