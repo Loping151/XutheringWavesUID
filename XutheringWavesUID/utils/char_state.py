@@ -104,6 +104,33 @@ async def record_refresh_batch(uid: str, changed_ids, unchanged_ids) -> bool:
     return await save_state(uid, state)
 
 
+# ─── 持有角色列表校验节流 (state.json 顶层) ──────────────────────────
+
+
+async def bump_single_refresh(uid: str, every: int, max_interval: int) -> bool:
+    """单角色刷新计数 +1; 计数达 every / 距上次校验超 max_interval / 从未校验 返回 True。"""
+    state = await load_state(uid)
+    if state is None:
+        return False
+    last = int(state.get("last_owned_check_at", 0) or 0)
+    count = int(state.get("single_refresh_count", 0)) + 1
+    if last == 0 or int(time.time()) - last > max_interval or count >= every:
+        return True
+    state["single_refresh_count"] = count
+    await save_state(uid, state)
+    return False
+
+
+async def mark_owned_checked(uid: str) -> bool:
+    """记录一次持有角色列表校验, 单刷计数清零。"""
+    state = await load_state(uid)
+    if state is None:
+        return False
+    state["single_refresh_count"] = 0
+    state["last_owned_check_at"] = int(time.time())
+    return await save_state(uid, state)
+
+
 # ─── 跨函数透传 advice 文本 (key=id(ev), pop-once) ────────────────────
 
 _PENDING_ADVICE: Dict[int, str] = {}

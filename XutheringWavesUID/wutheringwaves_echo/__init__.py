@@ -43,10 +43,5 @@ async def send_echo_list_msg(bot: Bot, ev: Event):
     else:
         page_num = 1
 
-    if page_num > 5:
-        page_num = 5
-    elif page_num < 1:
-        page_num = 1
-
     im = await get_draw_list(ev, uid, user_id, page_num)
     return await bot.send(im)

@@ -23,11 +23,15 @@ from ..wutheringwaves_config import PREFIX, WutheringWavesConfig
 from .resource.RESOURCE_PATH import PLAYER_PATH, CACHE_PATH
 from .char_info_utils import get_all_roleid_detail_info_int
 from .player_store import read_player_json, write_player_json, player_json_exists
-from .char_state import record_refresh_batch
+from .char_state import record_refresh_batch, bump_single_refresh, mark_owned_checked
 from .api.model import AccountBaseInfo as _AccountBaseInfo
 
 _BG_TASKS: set = set()
 _refresh_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+# 单刷满 N 次 / 距上次校验超过 M 秒, 强制核对一次库街区持有角色列表
+SINGLE_REFRESH_OWNED_CHECK_EVERY = 10
+OWNED_CHECK_MAX_INTERVAL = 42 * 24 * 3600
 
 
 @contextlib.asynccontextmanager
@@ -465,25 +469,34 @@ async def refresh_char(
     if request_role_ids and not is_silent_diff:
         local_roles = await get_all_roleid_detail_info_int(uid)
         has_local_role = bool(local_roles and any(rid in local_roles for rid in request_role_ids))
-        if not has_local_role and is_self_ck:
+        force_owned_check = False
+        if has_local_role and is_self_ck:
+            force_owned_check = await bump_single_refresh(
+                uid, SINGLE_REFRESH_OWNED_CHECK_EVERY, OWNED_CHECK_MAX_INTERVAL
+            )
+        if is_self_ck and (not has_local_role or force_owned_check):
             owned_role_info = await waves_api.get_owned_role_info(uid, ck)
             if not owned_role_info.success or isinstance(owned_role_info.data, str):
-                return owned_role_info.throw_msg()
-            owned_role_info = OwnedRoleInfoResponse.model_validate(owned_role_info.data)
-            owned_role_ids = {r.roleId for r in owned_role_info.roleInfoList}
-            local_role_ids = set(local_roles) if local_roles else set()
-            silent_diff_ids = [
-                rid for rid in owned_role_ids
-                if rid not in local_role_ids
-                and rid not in request_role_ids
-                and rid not in SPECIAL_CHAR_INT_ALL
-            ]
-            if not any(rid in owned_role_ids for rid in request_role_ids):
-                if silent_diff_ids:
-                    schedule_silent_diff_refresh(
-                        ev, uid, user_id, ck, is_self_ck, is_self, silent_diff_ids
-                    )
-                return error_reply(code=-110, msg="未拥有该角色，无法刷新面板")
+                if not has_local_role:
+                    return owned_role_info.throw_msg()
+                logger.warning(f"[鸣潮·角色状态] 拥有角色列表获取失败, 跳过本次校验 uid={uid}")
+            else:
+                owned_role_info = OwnedRoleInfoResponse.model_validate(owned_role_info.data)
+                owned_role_ids = {r.roleId for r in owned_role_info.roleInfoList}
+                local_role_ids = set(local_roles) if local_roles else set()
+                await mark_owned_checked(uid)
+                silent_diff_ids = [
+                    rid for rid in owned_role_ids
+                    if rid not in local_role_ids
+                    and rid not in request_role_ids
+                    and rid not in SPECIAL_CHAR_INT_ALL
+                ]
+                if not has_local_role and not any(rid in owned_role_ids for rid in request_role_ids):
+                    if silent_diff_ids:
+                        schedule_silent_diff_refresh(
+                            ev, uid, user_id, ck, is_self_ck, is_self, silent_diff_ids
+                        )
+                    return error_reply(code=-110, msg="未拥有该角色，无法刷新面板")
 
     semaphore = await semaphore_manager.get_semaphore()
 
@@ -594,6 +607,9 @@ async def refresh_char(
         is_self=is_self,
         bot_id=ev.bot_id,
     )
+
+    if refresh_type == "all" and is_self_ck and waves_datas:
+        await mark_owned_checked(uid)
 
     if silent_diff_ids and waves_datas:
         schedule_silent_diff_refresh(ev, uid, user_id, ck, is_self_ck, is_self, silent_diff_ids)

@@ -121,7 +121,7 @@ async def get_draw_list(ev: Event, uid: str, user_id: str, page: int = 1) -> Uni
     page_size = 20
     total_count = len(waves_echo_rank)
     max_page_by_total = (total_count + page_size - 1) // page_size
-    max_page = max(1, min(5, max_page_by_total))
+    max_page = max(1, max_page_by_total)
     if page > max_page:
         page = max_page
     elif page < 1:
