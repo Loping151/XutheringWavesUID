@@ -28,14 +28,16 @@ def _is_matrix_single_team_command(ev: Event) -> bool:
     return "单队" in ev.raw_text or "队伍" in ev.raw_text or "dd" in ev.raw_text or "dw" in ev.raw_text
 
 
-def _parse_matrix_rank_args(ev: Event):
-    """返回 (char_ids, page, 错误提示)"""
+def _parse_matrix_rank_args(ev: Event, strict: bool):
+    """返回 (char_ids, page, 错误提示); strict=False 时队伍解析失败按无队伍参数处理"""
     from ..utils.team_query import parse_matrix_team, split_team_and_page
     from ..wutheringwaves_rank.pagination import normalize_rank_page
 
     team_text, tail_page = split_team_and_page(ev.regex_dict.get("team"))
     page = normalize_rank_page(ev.regex_dict.get("pages") or tail_page)
     char_ids, err = parse_matrix_team(team_text)
+    if err and not strict:
+        return [], page, None
     return char_ids, page, err
 
 
@@ -274,11 +276,12 @@ Args:
 async def send_waves_rank_matrix_info(bot: Bot, ev: Event):
     from ..wutheringwaves_rank.matrix_rank import draw_all_matrix_rank_card
 
-    char_ids, page, err = _parse_matrix_rank_args(ev)
+    single_team_cmd = _is_matrix_single_team_command(ev)
+    char_ids, page, err = _parse_matrix_rank_args(ev, single_team_cmd)
     if err:
         return await bot.send(err)
 
-    single_team = _is_matrix_single_team_command(ev) or bool(char_ids)
+    single_team = single_team_cmd or bool(char_ids)
     im = await draw_all_matrix_rank_card(
         bot,
         ev,
@@ -306,11 +309,12 @@ async def send_waves_rank_matrix_list_info(bot: Bot, ev: Event):
         return await bot.send("请在群聊中使用")
     from ..wutheringwaves_rank.matrix_rank import draw_matrix_rank_list
 
-    char_ids, page, err = _parse_matrix_rank_args(ev)
+    single_team_cmd = _is_matrix_single_team_command(ev)
+    char_ids, page, err = _parse_matrix_rank_args(ev, single_team_cmd)
     if err:
         return await bot.send(err)
 
-    single_team = _is_matrix_single_team_command(ev) or bool(char_ids)
+    single_team = single_team_cmd or bool(char_ids)
     im = await draw_matrix_rank_list(
         bot, ev, single_team=single_team, page=page, char_ids=char_ids
     )

@@ -1,11 +1,12 @@
 """矩阵队伍参数解析: 三个角色名/别名, 或三字首字缩写 (如 爱达千)。"""
 
 import re
-from typing import List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
-from . import name_convert
 from .name_convert import (
+    get_all_char_id,
     ensure_data_loaded,
+    char_id_to_char_name,
     char_name_to_char_id,
     alias_to_char_name_optional,
 )
@@ -16,26 +17,34 @@ TEAM_SIZE = 3
 
 _SEP = re.compile(r"[\s,，、/|]+")
 _FORMAT_HINT = f"请输入{TEAM_SIZE}个角色名, 或{TEAM_SIZE}字首字缩写(如: 爱达千)"
+_NOT_FOUND_HINT = "未找到指定角色，请检查输入！"
+
+_initial_index: Dict[str, List[int]] = {}
+_initial_index_size = 0
 
 
-def _all_char_id2name() -> List[Tuple[int, str]]:
-    """(char_id, name) 列表; 过滤非四位数字的自定义角色, 漂泊者归一到主 id。"""
+def _get_initial_index() -> Dict[str, List[int]]:
+    """首字 -> 角色 id 列表; 漂泊者归一到主 id, 排除非四位数字的自定义角色。"""
+    global _initial_index, _initial_index_size
     ensure_data_loaded()
-    seen = set()
-    result = []
-    for char_id, name in name_convert.id2name.items():
-        if not (char_id.isdigit() and len(char_id) == 4):
-            continue
-        mapped_id = int(SPECIAL_CHAR_RANK_MAP.get(char_id, char_id))
-        if mapped_id in seen:
-            continue
-        seen.add(mapped_id)
-        result.append((mapped_id, name))
-    return result
-
-
-def _candidates_by_initial(initial: str) -> List[int]:
-    return sorted(cid for cid, name in _all_char_id2name() if name.startswith(initial))
+    all_char_id = get_all_char_id()
+    if _initial_index_size != len(all_char_id):
+        index: Dict[str, List[int]] = {}
+        for char_id in all_char_id:
+            if not (char_id.isdigit() and len(char_id) == 4):
+                continue
+            name = char_id_to_char_name(char_id)
+            if not name:
+                continue
+            mapped_id = int(SPECIAL_CHAR_RANK_MAP.get(char_id, char_id))
+            char_ids = index.setdefault(name[0], [])
+            if mapped_id not in char_ids:
+                char_ids.append(mapped_id)
+        for char_ids in index.values():
+            char_ids.sort()
+        _initial_index = index
+        _initial_index_size = len(all_char_id)
+    return _initial_index
 
 
 def _pick_by_reference(candidates: List[int], ref_id: int) -> int:
@@ -45,25 +54,37 @@ def _pick_by_reference(candidates: List[int], ref_id: int) -> int:
 
     same_attr = []
     if ref_attr is not None:
-        for cid in candidates:
-            model = get_char_model(cid)
+        for char_id in candidates:
+            model = get_char_model(char_id)
             if model and model.attributeId == ref_attr:
-                same_attr.append(cid)
+                same_attr.append(char_id)
 
     pool = same_attr or candidates
-    return min(pool, key=lambda cid: (abs(cid % 100 - ref_id % 100), cid))
+    return min(pool, key=lambda char_id: (abs(char_id % 100 - ref_id % 100), char_id))
 
 
-def _resolve_by_initials(text: str) -> Tuple[List[int], Optional[str]]:
+def _token_candidates(token: str) -> List[int]:
+    """单字按首字取候选, 其余走别名解析"""
+    if len(token) == 1:
+        return list(_get_initial_index().get(token, []))
+
+    char_name = alias_to_char_name_optional(token)
+    char_id = char_name_to_char_id(char_name) if char_name else None
+    if not (char_id and char_id.isdigit()):
+        return []
+    return [int(char_id)]
+
+
+def _resolve_tokens(tokens: List[str]) -> Tuple[List[int], Optional[str]]:
     candidates = []
-    for initial in text:
-        matched = _candidates_by_initial(initial)
+    for token in tokens:
+        matched = _token_candidates(token)
         if not matched:
-            return [], "未找到首字对应的角色，请检查输入！"
+            return [], _NOT_FOUND_HINT
         candidates.append(matched)
 
     resolved: List[Optional[int]] = [m[0] if len(m) == 1 else None for m in candidates]
-    ref_id = next((cid for cid in resolved if cid is not None), None)
+    ref_id = next((char_id for char_id in resolved if char_id is not None), None)
     if ref_id is None:
         ref_id = candidates[0][0]
         resolved[0] = ref_id
@@ -72,7 +93,7 @@ def _resolve_by_initials(text: str) -> Tuple[List[int], Optional[str]]:
         if resolved[index] is None:
             resolved[index] = _pick_by_reference(matched, ref_id)
 
-    return [cid for cid in resolved if cid is not None], None
+    return [char_id for char_id in resolved if char_id is not None], None
 
 
 def split_team_and_page(text: Optional[str]) -> Tuple[str, Optional[str]]:
@@ -93,20 +114,14 @@ def parse_matrix_team(text: str) -> Tuple[List[int], Optional[str]]:
         return [], None
 
     tokens = [t for t in _SEP.split(text) if t]
-    if len(tokens) == TEAM_SIZE:
-        char_ids = []
-        for token in tokens:
-            char_name = alias_to_char_name_optional(token)
-            char_id = char_name_to_char_id(char_name) if char_name else None
-            if not (char_id and char_id.isdigit()):
-                return [], "未找到指定角色，请检查输入！"
-            char_ids.append(int(char_id))
-    elif len(tokens) == 1 and len(tokens[0]) == TEAM_SIZE:
-        char_ids, err = _resolve_by_initials(tokens[0])
-        if err:
-            return [], _FORMAT_HINT
-    else:
+    if len(tokens) == 1 and len(tokens[0]) == TEAM_SIZE:
+        tokens = list(tokens[0])
+    if len(tokens) != TEAM_SIZE:
         return [], _FORMAT_HINT
+
+    char_ids, err = _resolve_tokens(tokens)
+    if err:
+        return [], _FORMAT_HINT if len(text) == TEAM_SIZE else err
 
     if len(set(char_ids)) != TEAM_SIZE:
         return [], "队伍中出现重复角色"
