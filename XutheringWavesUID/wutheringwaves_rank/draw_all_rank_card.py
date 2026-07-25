@@ -146,7 +146,7 @@ async def draw_all_rank_card(bot: Bot, ev: Event, char: str, rank_type: str, pag
 
     char_model = get_char_model(char_id)
     if not char_model:
-        return f"[鸣潮] 角色名【{char}】暂未适配！\n"
+        return f"[鸣潮] 角色名【{char_name}】暂未适配！\n"
 
     attribute_name = ATTRIBUTE_ID_MAP[char_model.attributeId]
 
@@ -170,8 +170,10 @@ async def draw_all_rank_card(bot: Bot, ev: Event, char: str, rank_type: str, pag
                 waves_ids=[str(u) for u in group_uids if u],
             )
         )
-        if not resp or not resp.data:
+        if not resp:
             return "获取群排行失败"
+        if not resp.data or not resp.data.details:
+            return "暂无排行数据"
         details = [d for d in resp.data.details if d.overall_score > 0]
         if not details:
             return "[鸣潮] 群内暂无该角色综合评分数据\n需【登录】并【刷新单角色面板】上传后才会上榜"
@@ -203,8 +205,8 @@ async def draw_all_rank_card(bot: Bot, ev: Event, char: str, rank_type: str, pag
             return "获取排行失败"
         if rankInfoList.message and not rankInfoList.data:
             return rankInfoList.message
-        if not rankInfoList.data:
-            return "获取排行失败"
+        if not rankInfoList.data or not rankInfoList.data.details:
+            return "暂无排行数据"
         details = rankInfoList.data.details
 
     totalNum = len([rank for rank in details if rank.rank > 0])

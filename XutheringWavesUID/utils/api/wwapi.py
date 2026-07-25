@@ -398,6 +398,7 @@ class MatrixRankItem(BaseModel):
     waves_id: str
     version: str
     single_team: bool = False
+    char_ids: List[int] = []
 
 
 class MatrixCharDetail(BaseModel):

@@ -94,8 +94,8 @@ async def draw_total_rank(bot: Bot, ev: Event, pages: int) -> Union[str, bytes]:
     if rankInfoList.message and not rankInfoList.data:
         return rankInfoList.message
 
-    if not rankInfoList.data:
-        return "获取练度总排行失败"
+    if not rankInfoList.data or not rankInfoList.data.rank_list:
+        return "暂无排行数据"
 
     # 设置图像尺寸
     width = 1300

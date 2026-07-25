@@ -109,7 +109,7 @@ async def char_alias_list(char_name: str) -> Union[str, bytes]:
 
     alias_list = alias_to_char_name_list(char_name)
     if not alias_list:
-        return f"角色【{char_name}】不存在，请检查输入"
+        return "未找到指定角色，请检查输入！"
     
     alias_list = [std_char_name] + [alias for alias in alias_list if alias != std_char_name]
 

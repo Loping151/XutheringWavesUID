@@ -28,6 +28,17 @@ def _is_matrix_single_team_command(ev: Event) -> bool:
     return "单队" in ev.raw_text or "队伍" in ev.raw_text or "dd" in ev.raw_text or "dw" in ev.raw_text
 
 
+def _parse_matrix_rank_args(ev: Event):
+    """返回 (char_ids, page, 错误提示)"""
+    from ..utils.team_query import parse_matrix_team, split_team_and_page
+    from ..wutheringwaves_rank.pagination import normalize_rank_page
+
+    team_text, tail_page = split_team_and_page(ev.regex_dict.get("team"))
+    page = normalize_rank_page(ev.regex_dict.get("pages") or tail_page)
+    char_ids, err = parse_matrix_team(team_text)
+    return char_ids, page, err
+
+
 @sv_waves_abyss.on_fullmatch(
     (
         "查询深渊",
@@ -249,49 +260,58 @@ async def send_waves_rank_slash_list_info(bot: Bot, ev: Event):
 
 
 @sv_waves_rank_matrix.on_regex(
-    r"^(?:矩阵总排行|jzzph|jzzpm|jzddzph|jzddzpm|jzdwzph|jzdwzpm|矩阵总排行榜|矩阵单队总排行|矩阵单队总排行榜|矩阵队伍总排行|矩阵队伍总排行榜)(?P<pages>\d+)?$",
+    r"^(?:矩阵总排行|jzzph|jzzpm|jzddzph|jzddzpm|jzdwzph|jzdwzpm|矩阵总排行榜|矩阵单队总排行|矩阵单队总排行榜|矩阵队伍总排行|矩阵队伍总排行榜)(?P<pages>\d+)?(?P<team>[\s,，、/|]*[一-鿿\d][\s\S]*)?$",
     block=True,
     to_ai='''查询全体终焉矩阵积分总排行（跨群）。
 
 当用户问「矩阵总排行 / 全体矩阵积分」时调用；问「矩阵单队总排行 / 矩阵队伍总排行」时按最高单队积分查询。
 
 Args:
-    text: 可在命令末尾加页码。例: "矩阵总排行2"、"矩阵单队总排行2"。
+    text: 可加页码（命令后或末尾均可）。带三个角色名 / 三字首字缩写时只排该队伍（顺序无关、buff 不限）。
+        例: "矩阵总排行2"、"矩阵单队总排行 今汐 折枝 守岸人"、"矩阵单队总排行 今折守 2"。
 ''',
 )
 async def send_waves_rank_matrix_info(bot: Bot, ev: Event):
     from ..wutheringwaves_rank.matrix_rank import draw_all_matrix_rank_card
-    from ..wutheringwaves_rank.pagination import normalize_rank_page
 
-    single_team = _is_matrix_single_team_command(ev)
-    page = normalize_rank_page(ev.regex_dict.get("pages"))
+    char_ids, page, err = _parse_matrix_rank_args(ev)
+    if err:
+        return await bot.send(err)
+
+    single_team = _is_matrix_single_team_command(ev) or bool(char_ids)
     im = await draw_all_matrix_rank_card(
         bot,
         ev,
         single_team=single_team,
         page=page,
+        char_ids=char_ids,
     )
     return await bot.send(im)
 
 
 @sv_waves_rank_matrix_list.on_regex(
-    r"^(?:矩阵排行|jzph|jzpm|jzddph|jzddpm|jzdwph|jzdwpm|矩阵排行榜|矩阵排名|矩阵群排行|矩阵群排行榜|矩阵群排名|群矩阵排行|群矩阵排名|矩阵单队排行|矩阵单队排行榜|矩阵队伍排行|矩阵队伍排行榜)(?P<pages>\d+)?$",
+    r"^(?:矩阵排行|jzph|jzpm|jzddph|jzddpm|jzdwph|jzdwpm|矩阵排行榜|矩阵排名|矩阵群排行|矩阵群排行榜|矩阵群排名|群矩阵排行|群矩阵排名|矩阵单队排行|矩阵单队排行榜|矩阵队伍排行|矩阵队伍排行榜)(?P<pages>\d+)?(?P<team>[\s,，、/|]*[一-鿿\d][\s\S]*)?$",
     block=True,
     to_ai='''查询本群终焉矩阵积分排行，仅群聊可用。
 
 当用户在群里问「群里谁矩阵积分最高 / 矩阵排行」时调用；问「矩阵单队排行 / 矩阵队伍排行」时按最高单队积分查询。私聊会被拒绝。
 
 Args:
-    text: 可在命令末尾加页码。例: "矩阵排行2"、"矩阵单队排行2"。
+    text: 可加页码（命令后或末尾均可）。带三个角色名 / 三字首字缩写时只排该队伍（顺序无关、buff 不限）。
+        例: "矩阵排行2"、"矩阵单队排行 今汐 折枝 守岸人"、"矩阵单队排行 今折守 2"。
 ''',
 )
 async def send_waves_rank_matrix_list_info(bot: Bot, ev: Event):
     if not ev.group_id:
         return await bot.send("请在群聊中使用")
     from ..wutheringwaves_rank.matrix_rank import draw_matrix_rank_list
-    from ..wutheringwaves_rank.pagination import normalize_rank_page
 
-    single_team = _is_matrix_single_team_command(ev)
-    page = normalize_rank_page(ev.regex_dict.get("pages"))
-    im = await draw_matrix_rank_list(bot, ev, single_team=single_team, page=page)
+    char_ids, page, err = _parse_matrix_rank_args(ev)
+    if err:
+        return await bot.send(err)
+
+    single_team = _is_matrix_single_team_command(ev) or bool(char_ids)
+    im = await draw_matrix_rank_list(
+        bot, ev, single_team=single_team, page=page, char_ids=char_ids
+    )
     return await bot.send(im)

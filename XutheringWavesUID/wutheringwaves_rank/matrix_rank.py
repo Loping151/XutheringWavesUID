@@ -50,6 +50,7 @@ from ..utils.api.wwapi import (
 )
 from ..utils.player_store import read_player_json
 from ..utils.ascension.char import get_char_model
+from ..utils.name_convert import char_id_to_char_name
 from ..utils.database.models import WavesBind, WavesUser
 from ..wutheringwaves_config import PREFIX, WutheringWavesConfig
 from ..utils.fonts.waves_fonts import (
@@ -155,6 +156,23 @@ def _paste_matrix_chain_badge(
     avatar.paste(badge, badge_pos, badge)
 
 
+def _matrix_team_label(char_ids: Optional[List[int]]) -> str:
+    if not char_ids:
+        return ""
+    names = [char_id_to_char_name(str(cid)) or str(cid) for cid in char_ids]
+    return " / ".join(names)
+
+
+def _draw_subtitle_suffix(draw, text: str, pos, prev_text: str) -> None:
+    if not text:
+        return
+    try:
+        prev_width = draw.textlength(prev_text, font=waves_font_20)
+    except Exception:
+        prev_width = waves_font_20.getsize(prev_text)[0]
+    draw.text((pos[0] + prev_width + 16, pos[1]), text, GREY, waves_font_20, "lm")
+
+
 async def get_rank(item: MatrixRankItem) -> Optional[MatrixRankRes]:
     WavesToken = WutheringWavesConfig.get_config("WavesToken").data
 
@@ -186,6 +204,7 @@ async def draw_all_matrix_rank_card(
     ev: Event,
     single_team: bool = False,
     page: int = 1,
+    char_ids: Optional[List[int]] = None,
 ):
     waves_id = await WavesBind.get_uid_by_game(ev.user_id, ev.bot_id)
     page_num = RANK_PAGE_SIZE
@@ -195,6 +214,7 @@ async def draw_all_matrix_rank_card(
         waves_id=waves_id or "",
         version=get_version(dynamic=True, waves_id=waves_id or "", pages=page),
         single_team=single_team,
+        char_ids=char_ids or [],
     )
 
     rankInfoList = await get_rank(item)
@@ -204,8 +224,8 @@ async def draw_all_matrix_rank_card(
     if rankInfoList.message and not rankInfoList.data:
         return rankInfoList.message
 
-    if not rankInfoList.data:
-        return "获取矩阵排行失败"
+    if not rankInfoList.data or not rankInfoList.data.rank_list:
+        return "暂无该队伍的排行数据" if char_ids else "暂无排行数据"
 
     # 设置图像尺寸
     width = MATRIX_SINGLE_TOTAL_WIDTH if single_team else MATRIX_TOTAL_WIDTH
@@ -259,6 +279,12 @@ async def draw_all_matrix_rank_card(
             waves_font_20,
             "lm",
         )
+        _draw_subtitle_suffix(
+            title_bg_draw,
+            _matrix_team_label(char_ids),
+            (period_pos[0] + period_width + 16, period_pos[1]),
+            date_text,
+        )
 
     # 遮罩
     char_mask = Image.open(TEXT_PATH / "char_mask.png").convert("RGBA")
@@ -271,6 +297,7 @@ async def draw_all_matrix_rank_card(
 
     rank_list = rankInfoList.data.rank_list
     board_7digit = any(rank.score >= 1_000_000 for rank in rank_list)
+    board_6digit = any(rank.score >= 100_000 for rank in rank_list)
     tasks = [get_avatar(rank.user_id, getattr(rank, "sender_avatar", "")) for rank in rank_list]
     results = await asyncio.gather(*tasks)
     bar = _get_matrix_rank_bar(width)
@@ -381,7 +408,7 @@ async def draw_all_matrix_rank_card(
                 "mm",
             )
 
-        team_base_x = 600 if single_team else 575
+        team_base_x = (580 if board_6digit else 600) if single_team else 575
         team_spacing = 230 if (not single_team and board_7digit) else 250
 
         # 按分数排序取最高和次高
@@ -561,7 +588,8 @@ class MatrixRankListInfo:
 
     def __init__(self, user_id: str, uid: str,
                  matrix_data: Optional[MatrixDetail] = None,
-                 matched_char_ids: Optional[Dict] = None):
+                 matched_char_ids: Optional[Dict] = None,
+                 team_key: Optional[Tuple[int, ...]] = None):
         self.user_id = user_id
         self.uid = uid
         self.matrix_data = matrix_data
@@ -582,9 +610,15 @@ class MatrixRankListInfo:
                         ids = matched.get(f"1_{idx}", [])
                         self.all_char_ids.extend(ids)
 
-                    # 按分数降序取前两队展示
+                    # 按分数降序取前两队展示; 指定队伍时只留该组合的最高分队
                     indexed_teams = list(enumerate(mode_1.teams))
                     indexed_teams.sort(key=lambda x: x[1].score, reverse=True)
+                    if team_key is not None:
+                        indexed_teams = [
+                            (idx, t)
+                            for idx, t in indexed_teams
+                            if tuple(sorted(matched.get(f"1_{idx}", []))) == team_key
+                        ][:1]
                     for orig_idx, t in indexed_teams[:2]:
                         ids = matched.get(f"1_{orig_idx}", [])
                         self.top_teams.append(
@@ -601,6 +635,7 @@ async def get_all_matrix_rank_info(
     users: List[WavesBind],
     tokenLimitFlag: bool = False,
     wavesTokenUsersMap: Optional[Dict[Tuple[str, str], str]] = None,
+    team_key: Optional[Tuple[int, ...]] = None,
 ) -> List[MatrixRankListInfo]:
     """从本地获取所有用户的矩阵排行信息"""
     from ..utils.resource.RESOURCE_PATH import PLAYER_PATH
@@ -642,7 +677,7 @@ async def get_all_matrix_rank_info(
                 matrix_data = MatrixDetail.model_validate(matrix_data)
 
                 rankInfo = MatrixRankListInfo(
-                    user.user_id, uid, matrix_data, matched_char_ids
+                    user.user_id, uid, matrix_data, matched_char_ids, team_key
                 )
                 if rankInfo.score > 0:
                     rankInfoList.append(rankInfo)
@@ -702,8 +737,10 @@ async def draw_matrix_rank_list(
     ev: Event,
     single_team: bool = False,
     page: int = 1,
+    char_ids: Optional[List[int]] = None,
 ):
     """绘制矩阵群排行 (PIL)"""
+    team_key = tuple(sorted(char_ids)) if char_ids else None
     start_time = time.time()
     logger.info(f"[鸣潮·矩阵排行] 群排行 start: {start_time}")
 
@@ -721,7 +758,9 @@ async def draw_matrix_rank_list(
         msg.append("")
         return "\n".join(msg)
 
-    rankInfoList = await get_all_matrix_rank_info(list(users), tokenLimitFlag, wavesTokenUsersMap)
+    rankInfoList = await get_all_matrix_rank_info(
+        list(users), tokenLimitFlag, wavesTokenUsersMap, team_key
+    )
     if len(rankInfoList) == 0:
         msg = []
         msg.append(f"[鸣潮] 群【{ev.group_id}】暂无矩阵排行数据")
@@ -734,6 +773,8 @@ async def draw_matrix_rank_list(
     if single_team:
         rankInfoList = [i for i in rankInfoList if _get_matrix_rank_score(i, True) > 0]
         if not rankInfoList:
+            if team_key:
+                return f"[鸣潮] 群【{ev.group_id}】暂无该队伍的矩阵记录"
             return (
                 f"[鸣潮] 群【{ev.group_id}】暂无矩阵单队排行数据\n"
                 f"请先使用【{PREFIX}矩阵】保存单队记录！"
@@ -814,6 +855,9 @@ async def draw_matrix_rank_list(
     except Exception:
         period_width = waves_font_20.getsize(period_label)[0]
     title_bg_draw.text((225 + period_width + 16, 360), date_text, GREY, waves_font_20, "lm")
+    _draw_subtitle_suffix(
+        title_bg_draw, _matrix_team_label(char_ids), (225 + period_width + 16, 360), date_text
+    )
 
     # 遮罩
     char_mask = Image.open(TEXT_PATH / "char_mask.png").convert("RGBA")

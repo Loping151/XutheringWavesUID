@@ -489,7 +489,7 @@ async def _safe_fetter_icon(set_name: str) -> Optional[Image.Image]:
 async def draw_phantom_total_rank(bot: Bot, ev: Event, char: str, pages: int) -> Union[str, bytes]:
     char_id = char_name_to_char_id(char)
     if not char_id:
-        return f"未找到角色[{char}]"
+        return "未找到指定角色, 请检查输入是否正确！"
     char = char_id_to_char_name(char_id) or char
     self_uid = await WavesBind.get_uid_by_game(ev.user_id, ev.bot_id)
     if not self_uid:
@@ -507,8 +507,8 @@ async def draw_phantom_total_rank(bot: Bot, ev: Event, char: str, pages: int) ->
         return "获取声骸总排行失败"
     if rankInfoList.message and not rankInfoList.data:
         return rankInfoList.message
-    if not rankInfoList.data:
-        return "获取声骸总排行失败"
+    if not rankInfoList.data or not rankInfoList.data.rank_list:
+        return "暂无排行数据"
 
     ranking = rankInfoList.data.rank_list
     details = list(ranking)

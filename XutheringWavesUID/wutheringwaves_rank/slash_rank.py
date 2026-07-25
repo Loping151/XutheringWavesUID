@@ -145,8 +145,8 @@ async def draw_all_slash_rank_card(bot: Bot, ev: Event, page: int = 1):
     if rankInfoList.message and not rankInfoList.data:
         return rankInfoList.message
 
-    if not rankInfoList.data:
-        return "获取排行失败"
+    if not rankInfoList.data or not rankInfoList.data.rank_list:
+        return "暂无排行数据"
 
     # 设置图像尺寸
     width = 1300
