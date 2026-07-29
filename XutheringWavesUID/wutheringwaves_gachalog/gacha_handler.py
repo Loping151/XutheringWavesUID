@@ -16,7 +16,7 @@ from .merge_utils import (
     GachaMergeError,
     validate_draw_total,
     group_flat_gacha_logs,
-    assert_valid_gacha_pity,
+    warn_gacha_pity_violations,
 )
 from ..utils.resource.RESOURCE_PATH import MAP_PATH
 
@@ -373,7 +373,7 @@ def _merge_external_five_stars(
             item.pop("_source_idx", None)
         merged_list.extend(pool_items)
 
-    assert_valid_gacha_pity(group_flat_gacha_logs(merged_list))
+    warn_gacha_pity_violations(group_flat_gacha_logs(merged_list), source)
     logger.success(
         f"[鸣潮·抽卡合并] {source}合并完成，共 {len(merged_list)} 条记录"
     )

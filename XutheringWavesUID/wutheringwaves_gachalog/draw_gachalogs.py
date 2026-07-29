@@ -49,9 +49,8 @@ from ..utils.resource.constant import NORMAL_LIST
 from ..utils.resource.RESOURCE_PATH import CARD_POLYGON_PATH, PLAYER_PATH
 from .get_gachalogs import gacha_type_meta_data
 from .merge_utils import (
-    GachaMergeError,
-    assert_valid_gacha_pity,
     has_history_gap_before,
+    warn_gacha_pity_violations,
 )
 
 TEXT_PATH = Path(__file__).parent / "texture2d"
@@ -319,7 +318,7 @@ async def get_gacha_stats(uid: str) -> Dict:
             continue
 
         try:
-            assert_valid_gacha_pity(raw_data.get("data", {}))
+            warn_gacha_pity_violations(raw_data.get("data", {}), f"uid={uid} ")
             total_data = _compute_pool_stats(raw_data.get("data", {}))
             stats_data = _total_to_stats(total_data)
         except Exception:
@@ -386,10 +385,7 @@ async def draw_card(uid: str, ev: Event):
         return f"[鸣潮] 你还没有抽卡记录噢!\n 请查看 {PREFIX}抽卡帮助 中的提示导入!"
 
     gachalogs = raw_data["data"]
-    try:
-        assert_valid_gacha_pity(gachalogs)
-    except GachaMergeError as exc:
-        return f"[鸣潮] 抽卡记录存在异常：{exc}，请重新导入或联系管理员修复"
+    warn_gacha_pity_violations(gachalogs, f"uid={uid} ")
     title_num = len([1 for i in gachalogs.keys() if "新手" not in i])
 
     total_data = _compute_pool_stats(gachalogs)

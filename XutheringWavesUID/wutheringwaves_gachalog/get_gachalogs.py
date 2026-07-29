@@ -17,11 +17,12 @@ from .model import WWUIDGacha
 from ..version import XutheringWavesUID_version
 from ..utils.util import hide_uid, get_hide_uid_pref
 from .merge_utils import (
+    GACHA_HARD_PITY,
     GachaMergeError,
-    assert_valid_gacha_pity,
     clear_history_gap_before,
     has_history_gap_before,
     mark_history_gap_before,
+    warn_gacha_pity_violations,
 )
 from ..utils.api.model import GachaLog
 from ..utils.waves_api import waves_api
@@ -681,11 +682,7 @@ async def save_gachalogs(
                         f"卡池[{gacha_name}]记录时间顺序异常，导入已中止，原记录未修改"
                     )
 
-    try:
-        assert_valid_gacha_pity(gachalogs_new)
-    except GachaMergeError as exc:
-        logger.warning(f"[鸣潮·抽卡导入] 保底合法性校验失败 uid={uid}: {exc}")
-        return f"抽卡记录合法性校验失败：{exc}。导入已中止，原记录未修改"
+    pity_violations = warn_gacha_pity_violations(gachalogs_new, f"uid={uid} ")
 
     # 初始化最后保存的数据
     result = {"uid": uid, "data_time": current_time}
@@ -734,6 +731,12 @@ async def save_gachalogs(
         im.append(
             "⚠️检测到历史断档，已在断点处重新计算保底，避免跨缺失记录产生80抽以上数据："
             + "、".join(gap_pools)
+        )
+    if pity_violations:
+        im.append(
+            f"⚠️以下卡池存在超过{GACHA_HARD_PITY}抽的区间（历史记录缺失所致），"
+            "已照常合并，保底统计仅供参考："
+            + "、".join(sorted({v.pool for v in pity_violations}))
         )
     im = "\n".join(im)
     return im

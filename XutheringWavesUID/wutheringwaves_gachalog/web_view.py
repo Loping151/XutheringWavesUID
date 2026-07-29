@@ -34,7 +34,7 @@ from ..utils.resource.constant import NORMAL_LIST
 from ..utils.waves_api import waves_api
 from ..wutheringwaves_config import PREFIX, WutheringWavesConfig
 from .get_gachalogs import gacha_type_meta_data
-from .merge_utils import assert_valid_gacha_pity, has_history_gap_before
+from .merge_utils import warn_gacha_pity_violations, has_history_gap_before
 
 GACHA_WEB_TTL = 600  # 10 分钟
 
@@ -408,7 +408,7 @@ def _build_pool_view(name: str, logs: List[Dict]) -> Dict:
 async def _load_gacha_data(uid: str) -> Dict:
     path = PLAYER_PATH / str(uid) / "gacha_logs.json"
     raw = await read_player_json(path) or {}
-    assert_valid_gacha_pity(raw.get("data", {}))
+    warn_gacha_pity_violations(raw.get("data", {}), f"uid={uid} ")
     return raw
 
 
