@@ -195,64 +195,36 @@ async def waves_delete_inactive_group_members(bot: Bot, ev: Event):
     threshold_time = int(time.time()) - (active_days * 24 * 60 * 60)
     bot_self_id = ev.bot_self_id or ""
 
-    uid_to_user_pairs: Dict[str, set[tuple[str, str]]] = {}
-
-    for bind in binds:
-        if not bind.user_id:
-            continue
-        platform = bind.bot_id or ev.bot_id
-
-        uid_list = [u for u in (bind.uid or "").split("_") if u]
-        pgr_uid_list = [u for u in (bind.pgr_uid or "").split("_") if u]
-        for uid in uid_list + pgr_uid_list:
-            uid_to_user_pairs.setdefault(uid, set()).add((bind.user_id, platform))
-
-    if not uid_to_user_pairs:
-        return await bot.send(f"[鸣潮] 群【{ev.group_id}】暂无绑定记录")
-
-    inactive_uids: set[str] = set()
-    for uid, user_pairs in uid_to_user_pairs.items():
-        latest_time = None
-        for user_id, platform in user_pairs:
-            last_active_time = await WavesUserActivity.get_user_last_active_time(
-                user_id, platform, bot_self_id
-            )
-            if last_active_time is not None:
-                if latest_time is None or last_active_time > latest_time:
-                    latest_time = last_active_time
-        # 无活跃记录视为宽限期, 不入集合
-        if latest_time is not None and latest_time < threshold_time:
-            inactive_uids.add(uid)
-
-    if not inactive_uids:
-        return await bot.send("[鸣潮] 本群暂无不活跃群成员")
-
     updated = 0
     for bind in binds:
         group_list = [g for g in (bind.group_id or "").split("_") if g]
         if ev.group_id not in group_list:
             continue
-        uid_list = [u for u in (bind.uid or "").split("_") if u]
-        pgr_uid_list = [u for u in (bind.pgr_uid or "").split("_") if u]
-        # 任一 uid 仍活跃则整行豁免, 避免小号拖累大号
-        all_uids = uid_list + pgr_uid_list
-        if not all_uids or not all(uid in inactive_uids for uid in all_uids):
+        if not bind.user_id:
+            continue
+
+        platform = bind.bot_id or ev.bot_id
+        last_active_time = await WavesUserActivity.get_user_last_active_time(
+            bind.user_id, platform, bot_self_id
+        )
+        # 无活跃记录视为宽限期, 不清理
+        if last_active_time is None or last_active_time >= threshold_time:
             continue
 
         new_group_list = [g for g in group_list if g != ev.group_id]
         await WavesBind.update_data(
             user_id=bind.user_id,
-            bot_id=bind.bot_id,
+            bot_id=platform,
             **{"group_id": "_".join(new_group_list)},
         )
         updated += 1
-        
-    logger.info(f"[鸣潮·用户] 已移除不活跃群成员 UID 数：{len(inactive_uids)}，更新绑定记录数：{updated}")
+
+    logger.info(f"[鸣潮·用户] 已移除不活跃群成员绑定记录数：{updated}")
 
     if updated == 0:
         return await bot.send("[鸣潮] 本群暂无可清理的不活跃群成员")
     return await bot.send(
-        f"[鸣潮] 已移除不活跃群成员，UID 数：{len(inactive_uids)}"
+        f"[鸣潮] 已移除不活跃群成员，绑定记录数：{updated}"
     )
 
 
