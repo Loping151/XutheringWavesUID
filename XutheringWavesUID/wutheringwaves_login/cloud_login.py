@@ -114,17 +114,6 @@ async def _login_then_update(bot: Bot, ev: Event, uid: str, record_id: str):
 
 # ===== 指令入口 ===============================================
 async def cloud_login_entry(bot: Bot, ev: Event):
-    from ..utils.waves_build.safety import auth_calc
-
-    # 校验总服务器授权 (WavesToken) 有效性; 无效则不生成登录会话, 避免无效登录
-    if not await asyncio.to_thread(auth_calc):
-        at_sender = True if ev.group_id else False
-        return await bot.send(
-            f"{GAME_TITLE} 云登录需后端处理，请接入总服务器后使用\n"
-            "与总排行共用同一接入，已接入总排行则无需额外申请",
-            at_sender=at_sender,
-        )
-
     # 每次抽卡登录都走完整登录流程, 允许为不同 uid 各建一条记录
     # (复用/续期已有记录交给 更新抽卡记录)
     url, is_local = await get_url()
