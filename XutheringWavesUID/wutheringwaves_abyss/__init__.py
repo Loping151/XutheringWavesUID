@@ -77,6 +77,7 @@ async def send_waves_abyss_info(bot: Bot, ev: Event):
     if is_intl_uid(uid):
         return await bot.send(intl_unavailable_msg(uid))
     await bot.logger.info(f"[鸣潮·查询深塔] user_id={user_id} uid={uid}")
+    await WavesBind.insert_waves_uid(user_id, ev.bot_id, uid, ev.group_id, lenth_limit=9)
 
     im = await draw_abyss_img(ev, uid, user_id)
     if isinstance(im, str):
@@ -121,6 +122,7 @@ async def send_waves_challenge_info(bot: Bot, ev: Event):
     if is_intl_uid(uid):
         return await bot.send(intl_unavailable_msg(uid))
     await bot.logger.info(f"[鸣潮·查询全息] user_id={user_id} uid={uid}")
+    await WavesBind.insert_waves_uid(user_id, ev.bot_id, uid, ev.group_id, lenth_limit=9)
 
     im = await draw_challenge_img(ev, uid, user_id)
     at_sender = True if ev.group_id else False
@@ -165,6 +167,7 @@ async def send_waves_slash_info(bot: Bot, ev: Event):
         return await bot.send(error_reply(WAVES_CODE_103))
     if is_intl_uid(uid):
         return await bot.send(intl_unavailable_msg(uid))
+    await WavesBind.insert_waves_uid(user_id, ev.bot_id, uid, ev.group_id, lenth_limit=9)
 
     im = await draw_slash_img(ev, uid, user_id)
     if isinstance(im, str):
@@ -210,6 +213,7 @@ async def send_waves_matrix_info(bot: Bot, ev: Event):
         return await bot.send(error_reply(WAVES_CODE_103))
     if is_intl_uid(uid):
         return await bot.send(intl_unavailable_msg(uid))
+    await WavesBind.insert_waves_uid(user_id, ev.bot_id, uid, ev.group_id, lenth_limit=9)
 
     im = await draw_matrix_img(ev, uid, user_id)
     if isinstance(im, str):

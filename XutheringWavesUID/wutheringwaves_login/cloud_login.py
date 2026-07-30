@@ -120,7 +120,8 @@ async def cloud_login_entry(bot: Bot, ev: Event):
     if not await asyncio.to_thread(auth_calc):
         at_sender = True if ev.group_id else False
         return await bot.send(
-            f"{GAME_TITLE} 云登录需后端处理，请接入总服务器后使用",
+            f"{GAME_TITLE} 云登录需后端处理，请接入总服务器后使用\n"
+            "与总排行共用同一接入，已接入总排行则无需额外申请",
             at_sender=at_sender,
         )
 

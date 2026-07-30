@@ -220,6 +220,8 @@ async def get_gacha_log_by_mcgf(bot: Bot, ev: Event):
     if not uid:
         return await bot.send(ERROR_CODE[WAVES_CODE_103])
 
+    await WavesBind.insert_waves_uid(ev.user_id, ev.bot_id, uid, ev.group_id, lenth_limit=9)
+
     target_uid = _parse_import_uid(ev.text)
     if not target_uid:
         return await bot.send(
@@ -241,6 +243,8 @@ async def get_gacha_log_by_link(bot: Bot, ev: Event):
     uid = await WavesBind.get_uid_by_game(ev.user_id, ev.bot_id)
     if not uid:
         return await bot.send(ERROR_CODE[WAVES_CODE_103])
+
+    await WavesBind.insert_waves_uid(ev.user_id, ev.bot_id, uid, ev.group_id, lenth_limit=9)
 
     user_pref = await get_hide_uid_pref(uid, ev.user_id, ev.bot_id)
 
@@ -302,6 +306,8 @@ async def get_gacha_log_by_xhh(bot: Bot, ev: Event):
     uid = await WavesBind.get_uid_by_game(ev.user_id, ev.bot_id)
     if not uid:
         return await bot.send(ERROR_CODE[WAVES_CODE_103])
+
+    await WavesBind.insert_waves_uid(ev.user_id, ev.bot_id, uid, ev.group_id, lenth_limit=9)
 
     heybox_id = ev.text.strip()
     if not heybox_id:
@@ -392,6 +398,8 @@ async def update_gacha_log_by_cloud(bot: Bot, ev: Event):
     if not uid:
         return await bot.send(ERROR_CODE[WAVES_CODE_103])
 
+    await WavesBind.insert_waves_uid(ev.user_id, ev.bot_id, uid, ev.group_id, lenth_limit=9)
+
     user_pref = await get_hide_uid_pref(uid, ev.user_id, ev.bot_id)
 
     record = await WavesGachaCloud.select_record(ev.user_id, ev.bot_id, uid)
@@ -468,6 +476,8 @@ async def get_gacha_log_by_file(bot: Bot, ev: Event):
     if not ck:
         await bot.logger.info(f"[鸣潮·JSON导入抽卡] 用户 {ev.user_id} (UID:{uid}) 未登录或Cookie失效，忽略此次导入。这是为了避免被别人绑定uid后上传json覆盖真实玩家的抽卡数据")
         return
+
+    await WavesBind.insert_waves_uid(ev.user_id, ev.bot_id, uid, ev.group_id, lenth_limit=9)
 
     lock_key = _gacha_import_lock_key(uid)
     if not gacha_import_lock.acquire(lock_key):

@@ -82,9 +82,11 @@ async def get_all_gacha_rank_info(
     min_pull: int,
     tokenLimitFlag: bool = False,
     wavesTokenUsersMap: Optional[Dict[Tuple[str, str], str]] = None,
-) -> List[GachaRankCard]:
-    """获取所有用户的抽卡排行信息"""
+) -> Tuple[List[GachaRankCard], int, int]:
+    """获取所有用户的抽卡排行信息，附带未达阈值的人数与其中最高总抽数"""
     rankInfoList = []
+    below_count = 0
+    below_max = 0
 
     for user in users:
         if not user.user_id:
@@ -104,6 +106,8 @@ async def get_all_gacha_rank_info(
 
                 rankInfo = GachaRankCard(user.user_id, uid, stats)
                 if rankInfo.total_count < min_pull:
+                    below_count += 1
+                    below_max = max(below_max, rankInfo.total_count)
                     continue
 
                 rankInfoList.append(rankInfo)
@@ -111,7 +115,7 @@ async def get_all_gacha_rank_info(
                 logger.debug(f"[鸣潮·唤取排行] 获取 uid={uid} 数据失败: {e}")
                 continue
 
-    return rankInfoList
+    return rankInfoList, below_count, below_max
 
 
 async def draw_gacha_rank_card(bot, ev: Event) -> Union[str, bytes]:
@@ -148,13 +152,20 @@ async def draw_gacha_rank_card(bot, ev: Event) -> Union[str, bytes]:
             msg.append(f"当前排行开启了登录验证，请使用命令【{PREFIX}登录】登录后此功能！")
         return "\n".join(msg)
 
-    rankInfoList = await get_all_gacha_rank_info(list(users), min_pull, tokenLimitFlag, wavesTokenUsersMap)
+    rankInfoList, below_count, below_max = await get_all_gacha_rank_info(
+        list(users), min_pull, tokenLimitFlag, wavesTokenUsersMap
+    )
     if len(rankInfoList) == 0:
         msg = []
-        msg.append(f"[鸣潮] 群【{ev.group_id}】暂无抽卡排行数据")
-        msg.append(f"请使用【{PREFIX}导入抽卡记录】后再使用此功能！")
-        if tokenLimitFlag:
-            msg.append(f"当前排行开启了登录验证，请使用命令【{PREFIX}登录】登录后此功能！")
+        if below_count:
+            msg.append(f"[鸣潮] 群【{ev.group_id}】暂无满足条件的抽卡排行数据")
+            msg.append(f"已有{below_count}位玩家导入抽卡记录，但总抽数均未达到阈值{min_pull}（当前最高{below_max}）")
+            msg.append(f"群管理可使用【{PREFIX}设置抽卡条件{below_max}】调整本群阈值")
+        else:
+            msg.append(f"[鸣潮] 群【{ev.group_id}】暂无抽卡排行数据")
+            msg.append(f"请使用【{PREFIX}导入抽卡记录】后再使用此功能！")
+            if tokenLimitFlag:
+                msg.append(f"当前排行开启了登录验证，请使用命令【{PREFIX}登录】登录后此功能！")
         return "\n".join(msg)
 
     # 按加权抽数排序（分数越低越欧，反向排序则是非）
