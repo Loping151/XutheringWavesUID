@@ -159,6 +159,12 @@ def _parse_import_uid(text: str):
     return match.group(1) if match else None
 
 
+def _skipped_pool_tip(skipped_pools: list[str]) -> str:
+    return "⚠️以下卡池本次未合并，本地记录保持不变，可下次再试：\n" + "\n".join(
+        skipped_pools
+    )
+
+
 async def _merge_mcgf_gacha(bot: Bot, ev: Event, uid: str, target_uid: str):
     try:
         latest_data = await fetch_mcgf_data(target_uid)
@@ -178,7 +184,7 @@ async def _merge_mcgf_gacha(bot: Bot, ev: Event, uid: str, target_uid: str):
 
         if not original_data["info"].get("uid") == latest_data["data"].get("uid"):
             return await bot.send("导入数据UID与当前UID不匹配，无法合并！")
-        merged_data = await asyncio.to_thread(
+        merged_data, skipped_pools = await asyncio.to_thread(
             merge_gacha_data, original_data, latest_data
         )
 
@@ -191,6 +197,8 @@ async def _merge_mcgf_gacha(bot: Bot, ev: Event, uid: str, target_uid: str):
                 "导入仅包含早于本地记录的部分，此后请使用链接导入更新数据，"
                 "或删除抽卡记录后再次链接导入+合并！"
             )
+        if skipped_pools:
+            im += "\n" + _skipped_pool_tip(skipped_pools)
         return await bot.send(im)
 
     except GachaMergeError as e:
@@ -328,7 +336,9 @@ async def get_gacha_log_by_xhh(bot: Bot, ev: Event):
                 "当前抽卡记录无有效记录，无法对齐导入数据，请先用链接导入抽卡记录后再尝试合并！"
             )
 
-        merged_data = await asyncio.to_thread(merge_xhh_data, original_data, xhh_data)
+        merged_data, skipped_pools = await asyncio.to_thread(
+            merge_xhh_data, original_data, xhh_data
+        )
 
         merged_json_str = json.dumps(merged_data, ensure_ascii=False)
         im = await import_gachalogs(
@@ -338,6 +348,8 @@ async def get_gacha_log_by_xhh(bot: Bot, ev: Event):
             await bot.send(
                 "小黑盒导入仅补充早于本地记录的历史数据，不会覆盖已有记录！"
             )
+        if skipped_pools:
+            im += "\n" + _skipped_pool_tip(skipped_pools)
         return await bot.send(im)
 
     except GachaMergeError as e:

@@ -40,6 +40,10 @@ POOL_TYPE_MAP = {
 }
 KNOWN_POOL_CODES = set(POOL_TYPE_MAP.values())
 
+POOL_CODE_TO_NAME: dict[str, str] = {}
+for _pool_name, _pool_code in POOL_TYPE_MAP.items():
+    POOL_CODE_TO_NAME.setdefault(_pool_code, _pool_name)
+
 FILLER_ITEM = {
     "resourceId": 21040023,
     "qualityLevel": 3,
@@ -246,12 +250,101 @@ def _append_rebuilt_five_star(
     return card["time"]
 
 
+def _pool_display(pool_id: str) -> str:
+    return POOL_CODE_TO_NAME.get(pool_id, pool_id)
+
+
+def _build_pool_items(
+    pool_id: str,
+    source: str,
+    local_all: list[dict],
+    local_fives: list[dict],
+    source_fives: list[dict],
+) -> list[dict]:
+    """构建单个卡池的合并结果，按旧到新返回。"""
+    if not source_fives:
+        return list(local_all)
+
+    if not local_all:
+        logger.debug(
+            f"[鸣潮·抽卡合并] Pool {pool_id}: 本地池为空，使用{source}完整重建"
+        )
+        pool_items: list[dict] = []
+        previous_time: Optional[str] = None
+        for card in source_fives:
+            previous_time = _append_rebuilt_five_star(
+                pool_items, card, pool_id, source, previous_time
+            )
+        return pool_items
+
+    if not local_fives:
+        raise GachaMergeError(
+            f"本地卡池[{pool_id}]有记录但没有五星，无法与{source}建立可靠锚点"
+        )
+
+    _validate_external_overlap(local_fives, source_fives, source, pool_id)
+    match_idx = _find_five_star_anchor(local_fives, source_fives)
+    if match_idx is None:
+        raise GachaMergeError(
+            f"本地卡池[{pool_id}]与{source}没有可靠五星锚点，已拒绝分离拼接"
+        )
+
+    oldest_local = local_fives[0]
+    logger.debug(
+        f"[鸣潮·抽卡合并] Pool {pool_id}: 在{source}索引{match_idx}对齐"
+        f" {oldest_local.get('name')} ({oldest_local.get('time')})"
+    )
+    pool_items = []
+    previous_time = None
+    for card in source_fives[:match_idx]:
+        previous_time = _append_rebuilt_five_star(
+            pool_items, card, pool_id, source, previous_time
+        )
+
+    anchor = source_fives[match_idx]
+    anchor_internal_idx = oldest_local.get("_internal_idx", -1)
+    known_before_anchor = []
+    for item in local_all:
+        if item.get("_internal_idx", -2) == anchor_internal_idx:
+            break
+        known_before_anchor.append(item)
+
+    expected_before_anchor = validate_draw_total(
+        anchor.get("draw_total"),
+        source,
+        pool_id,
+        str(anchor.get("name", "未知五星")),
+    ) - 1
+    missing = expected_before_anchor - len(known_before_anchor)
+    if missing < 0:
+        raise GachaMergeError(
+            f"本地卡池[{pool_id}]锚点前已有{len(known_before_anchor)}抽，"
+            f"超过{source}记录的{expected_before_anchor}抽"
+        )
+    filler_anchor_time = (
+        known_before_anchor[0]["time"]
+        if known_before_anchor
+        else oldest_local["time"]
+    )
+    # 缺失抽位于已有真实抽之前，合成时间也必须早于最老的已知记录。
+    filler_time = get_filler_time(filler_anchor_time, previous_time)
+    for _ in range(missing):
+        filler = FILLER_ITEM.copy()
+        filler["cardPoolType"] = pool_id
+        filler["time"] = filler_time
+        pool_items.append(filler)
+    pool_items.extend(local_all)
+    return pool_items
+
+
 def _merge_external_five_stars(
     original_data: dict,
     external_fives: list[dict],
     export_info: dict,
     source: str,
-) -> dict:
+    skipped_pools: Optional[dict[str, str]] = None,
+) -> tuple[dict, list[str]]:
+    skipped: dict[str, str] = dict(skipped_pools or {})
     original_list = [
         {**item, "_internal_idx": index}
         for index, item in enumerate(original_data.get("list", []))
@@ -294,77 +387,17 @@ def _merge_external_five_stars(
             item for item in local_all if item.get("qualityLevel") == 5
         ]
 
-        if not source_fives:
-            pool_items = local_all
-        elif not local_all:
-            logger.debug(
-                f"[鸣潮·抽卡合并] Pool {pool_id}: 本地池为空，使用{source}完整重建"
+        # 单池对齐失败只放弃该池，本地记录原样保留，留给下次合并。
+        try:
+            pool_items = _build_pool_items(
+                pool_id, source, local_all, local_fives, source_fives
             )
-            pool_items = []
-            previous_time: Optional[str] = None
-            for card in source_fives:
-                previous_time = _append_rebuilt_five_star(
-                    pool_items, card, pool_id, source, previous_time
-                )
-        elif not local_fives:
-            raise GachaMergeError(
-                f"本地卡池[{pool_id}]有记录但没有五星，无法与{source}建立可靠锚点"
+        except GachaMergeError as exc:
+            logger.warning(
+                f"[鸣潮·抽卡合并] Pool {pool_id}: 放弃合并，保留本地记录: {exc}"
             )
-        else:
-            _validate_external_overlap(
-                local_fives, source_fives, source, pool_id
-            )
-            match_idx = _find_five_star_anchor(local_fives, source_fives)
-            if match_idx is None:
-                raise GachaMergeError(
-                    f"本地卡池[{pool_id}]与{source}没有可靠五星锚点，已拒绝分离拼接"
-                )
-
-            oldest_local = local_fives[0]
-            logger.debug(
-                f"[鸣潮·抽卡合并] Pool {pool_id}: 在{source}索引{match_idx}对齐"
-                f" {oldest_local.get('name')} ({oldest_local.get('time')})"
-            )
-            pool_items = []
-            previous_time = None
-            for card in source_fives[:match_idx]:
-                previous_time = _append_rebuilt_five_star(
-                    pool_items, card, pool_id, source, previous_time
-                )
-
-            anchor = source_fives[match_idx]
-            anchor_internal_idx = oldest_local.get("_internal_idx", -1)
-            known_before_anchor = []
-            for item in local_all:
-                if item.get("_internal_idx", -2) == anchor_internal_idx:
-                    break
-                known_before_anchor.append(item)
-
-            expected_before_anchor = validate_draw_total(
-                anchor.get("draw_total"),
-                source,
-                pool_id,
-                str(anchor.get("name", "未知五星")),
-            ) - 1
-            missing = expected_before_anchor - len(known_before_anchor)
-            if missing < 0:
-                raise GachaMergeError(
-                    f"本地卡池[{pool_id}]锚点前已有{len(known_before_anchor)}抽，"
-                    f"超过{source}记录的{expected_before_anchor}抽"
-                )
-            filler_anchor_time = (
-                known_before_anchor[0]["time"]
-                if known_before_anchor
-                else oldest_local["time"]
-            )
-            # 缺失抽位于已有真实抽之前，合成时间也必须早于最老的已知记录。
-            filler_time = get_filler_time(filler_anchor_time, previous_time)
-            for _ in range(missing):
-                filler = FILLER_ITEM.copy()
-                filler["cardPoolType"] = pool_id
-                filler["time"] = filler_time
-                pool_items.append(filler)
-            pool_items.extend(local_all)
+            skipped[pool_id] = str(exc)
+            pool_items = list(local_all)
 
         # 单池先按旧到新构建，再整体反转；不能再次只按秒排序。
         pool_items.reverse()
@@ -374,13 +407,43 @@ def _merge_external_five_stars(
         merged_list.extend(pool_items)
 
     warn_gacha_pity_violations(group_flat_gacha_logs(merged_list), source)
+    notes = [
+        f"[{_pool_display(pool_id)}] {reason}"
+        for pool_id, reason in sorted(skipped.items())
+    ]
     logger.success(
         f"[鸣潮·抽卡合并] {source}合并完成，共 {len(merged_list)} 条记录"
+        f"，放弃 {len(notes)} 个卡池"
     )
-    return {"info": export_info, "list": merged_list}
+    return {"info": export_info, "list": merged_list}, notes
 
 
-def merge_gacha_data(original_data: dict, latest_data: dict) -> dict:
+def _parse_mcgf_card(card: dict, pool_id: str, source_idx: int) -> dict:
+    card_name = str(card.get("name") or "")
+    if not card_name:
+        raise GachaMergeError("工坊五星记录缺少名称，无法安全导入")
+    card_time = _validate_gacha_time(card.get("time"), "工坊", card_name)
+    resource_id = card.get("resourceId", card.get("item_id"))
+    if resource_id is None:
+        raise GachaMergeError(f"工坊五星[{card_name}]缺少资源ID，无法安全导入")
+    draw_total = validate_draw_total(
+        card.get("draw_total"), "工坊", pool_id, card_name
+    )
+    return {
+        "time": str(card_time),
+        "name": card_name,
+        "cardPoolType": pool_id,
+        "draw_total": draw_total,
+        "resourceId": resource_id,
+        "qualityLevel": 5,
+        "resourceType": card.get("resourceType", "角色"),
+        "_source_idx": source_idx,
+    }
+
+
+def merge_gacha_data(
+    original_data: dict, latest_data: dict
+) -> tuple[dict, list[str]]:
     logger.debug("[鸣潮·抽卡处理] 开始合并工坊抽卡记录...")
 
     export_info = original_data.get("info", {})
@@ -399,13 +462,14 @@ def merge_gacha_data(original_data: dict, latest_data: dict) -> dict:
         else:
             logger.warning("[鸣潮·抽卡处理] 无法获取 UID，info 信息可能不完整")
 
-    latest_fives: list[dict] = []
     card_analysis = latest_data.get("data", {}).get(
         "card_analysis_json", {}
     )
     if not isinstance(card_analysis, dict):
         raise GachaMergeError("工坊抽卡分析数据格式异常")
 
+    skipped_pools: dict[str, str] = {}
+    pool_cards: dict[str, list[dict]] = {}
     # 只读取一级卡池汇总。嵌套版本统计会重复出现同一记录，且可能缺少卡池字段。
     for section in card_analysis.values():
         if not isinstance(section, dict):
@@ -418,34 +482,23 @@ def merge_gacha_data(original_data: dict, latest_data: dict) -> dict:
                 raise GachaMergeError("工坊五星记录格式异常")
             pool_type = card.get("cardPoolType")
             pool_id = str(POOL_TYPE_MAP.get(pool_type, pool_type or ""))
-            card_name = str(card.get("name") or "")
             if pool_id not in KNOWN_POOL_CODES:
-                raise GachaMergeError(
-                    f"工坊五星[{card_name or '未知五星'}]的卡池类型[{pool_type}]暂不支持"
-                )
-            if not card_name:
-                raise GachaMergeError("工坊五星记录缺少名称，无法安全导入")
-            card_time = _validate_gacha_time(card.get("time"), "工坊", card_name)
-            resource_id = card.get("resourceId", card.get("item_id"))
-            if resource_id is None:
-                raise GachaMergeError(
-                    f"工坊五星[{card_name}]缺少资源ID，无法安全导入"
-                )
-            draw_total = validate_draw_total(
-                card.get("draw_total"), "工坊", str(pool_id), str(card_name)
-            )
-            latest_fives.append(
-                {
-                    "time": str(card_time),
-                    "name": str(card_name),
-                    "cardPoolType": pool_id,
-                    "draw_total": draw_total,
-                    "resourceId": resource_id,
-                    "qualityLevel": 5,
-                    "resourceType": card.get("resourceType", "角色"),
-                    "_source_idx": len(latest_fives),
-                }
-            )
+                skipped_pools[pool_id or "未知"] = "该卡池类型暂不支持"
+                continue
+            pool_cards.setdefault(pool_id, []).append(card)
+
+    latest_fives: list[dict] = []
+    for pool_id, cards in pool_cards.items():
+        try:
+            parsed = [
+                _parse_mcgf_card(card, pool_id, idx)
+                for idx, card in enumerate(cards)
+            ]
+        except GachaMergeError as exc:
+            logger.warning(f"[鸣潮·抽卡处理] 工坊卡池[{pool_id}]解析失败: {exc}")
+            skipped_pools[pool_id] = str(exc)
+            continue
+        latest_fives.extend(parsed)
 
     # 国际服重定向: 存在全频调谐时, 武器精准调谐+角色 -> 角色常驻池。
     has_global_pool = any(
@@ -463,7 +516,7 @@ def merge_gacha_data(original_data: dict, latest_data: dict) -> dict:
         f"[鸣潮·抽卡处理] 解析出工坊五星记录 {len(latest_fives)} 条"
     )
     return _merge_external_five_stars(
-        original_data, latest_fives, export_info, "工坊"
+        original_data, latest_fives, export_info, "工坊", skipped_pools
     )
 
 
@@ -671,7 +724,46 @@ async def fetch_xhh_data(heybox_id: str) -> Optional[dict]:
     return None
 
 
-def merge_xhh_data(original_data: dict, xhh_data: dict) -> dict:
+def _parse_xhh_records(
+    records: list, pool_code: str, pool_type: str
+) -> list[dict]:
+    parsed: list[dict] = []
+    for rec in records:
+        if not isinstance(rec, dict):
+            raise GachaMergeError(f"小黑盒卡池[{pool_type}]五星记录格式异常")
+        name = str(rec.get("name") or "")
+        if not name:
+            if rec.get("idx") in (
+                XHH_CURRENT_PITY_IDX,
+                str(XHH_CURRENT_PITY_IDX),
+            ):
+                continue
+            raise GachaMergeError(f"小黑盒卡池[{pool_type}]五星记录缺少名称")
+        time_str = _xhh_ts_to_str(rec.get("timestamp"), name)
+        rid = _XHH_NAME_TO_ID.get(name)
+        if rid is None:
+            raise GachaMergeError(f"小黑盒五星[{name}]缺少资源映射，无法安全导入")
+        draw_total = validate_draw_total(
+            rec.get("diff"), "小黑盒", pool_code, name
+        )
+        parsed.append(
+            {
+                "time": time_str,
+                "name": name,
+                "cardPoolType": pool_code,
+                "draw_total": draw_total,
+                "resourceId": rid,
+                "qualityLevel": 5,
+                "resourceType": _xhh_resource_type(rid),
+                "_source_idx": len(parsed),
+            }
+        )
+    return parsed
+
+
+def merge_xhh_data(
+    original_data: dict, xhh_data: dict
+) -> tuple[dict, list[str]]:
     logger.debug("[鸣潮·小黑盒导入] 开始合并抽卡记录...")
     _load_xhh_name_to_id()
 
@@ -690,6 +782,7 @@ def merge_xhh_data(original_data: dict, xhh_data: dict) -> dict:
             }
 
     # 从小黑盒 gacha_record 提取5★记录
+    skipped_pools: dict[str, str] = {}
     xhh_5stars: list[dict] = []
     for pool in xhh_data.get("gacha_record", []):
         if not isinstance(pool, dict):
@@ -697,48 +790,22 @@ def merge_xhh_data(original_data: dict, xhh_data: dict) -> dict:
         pool_type = pool.get("pool_type", "")
         pool_code = XHH_POOL_MAP.get(pool_type)
         records = pool.get("records", [])
-        if not isinstance(records, list):
-            raise GachaMergeError(f"小黑盒卡池[{pool_type or '未知'}]记录格式异常")
         if not pool_code:
             if records:
-                raise GachaMergeError(
-                    f"小黑盒卡池类型[{pool_type or '未知'}]暂不支持"
-                )
+                skipped_pools[pool_type or "未知"] = "该卡池类型暂不支持"
             continue
-        for rec in records:
-            if not isinstance(rec, dict):
-                raise GachaMergeError(f"小黑盒卡池[{pool_type}]五星记录格式异常")
-            name = str(rec.get("name") or "")
-            if not name:
-                if rec.get("idx") in (
-                    XHH_CURRENT_PITY_IDX,
-                    str(XHH_CURRENT_PITY_IDX),
-                ):
-                    continue
-                raise GachaMergeError(f"小黑盒卡池[{pool_type}]五星记录缺少名称")
-            time_str = _xhh_ts_to_str(rec.get("timestamp"), name)
-            rid = _XHH_NAME_TO_ID.get(name)
-            if rid is None:
-                raise GachaMergeError(
-                    f"小黑盒五星[{name}]缺少资源映射，无法安全导入"
-                )
-            draw_total = validate_draw_total(
-                rec.get("diff"), "小黑盒", pool_code, name
-            )
-            xhh_5stars.append(
-                {
-                    "time": time_str,
-                    "name": name,
-                    "cardPoolType": pool_code,
-                    "draw_total": draw_total,
-                    "resourceId": rid,
-                    "qualityLevel": 5,
-                    "resourceType": _xhh_resource_type(rid),
-                    "_source_idx": len(xhh_5stars),
-                }
-            )
+        if not isinstance(records, list):
+            skipped_pools[pool_code] = "小黑盒返回的记录格式异常"
+            continue
+        try:
+            parsed = _parse_xhh_records(records, pool_code, pool_type)
+        except GachaMergeError as exc:
+            logger.warning(f"[鸣潮·小黑盒导入] 卡池[{pool_code}]解析失败: {exc}")
+            skipped_pools[pool_code] = str(exc)
+            continue
+        xhh_5stars.extend(parsed)
 
     logger.debug(f"[鸣潮·小黑盒导入] 解析出五星记录 {len(xhh_5stars)} 条")
     return _merge_external_five_stars(
-        original_data, xhh_5stars, export_info, "小黑盒"
+        original_data, xhh_5stars, export_info, "小黑盒", skipped_pools
     )
