@@ -59,6 +59,7 @@ ERROR_MSG_IMPORT_TYPE = (
     "请将【+uid】替换为对应的9位数字UID，或将【+小黑盒ID】替换为对应的小黑盒ID"
 )
 IMPORT_UID_RE = re.compile(r"^\s*\+?\s*(\d{9})\s*$")
+GACHA_LINK_HINT_RE = re.compile(r"record_?[Ii]d[=:]([a-zA-Z0-9]{32})")
 
 
 def _migrate_legacy_gacha_backups():
@@ -211,6 +212,8 @@ async def _merge_mcgf_gacha(bot: Bot, ev: Event, uid: str, target_uid: str):
 
 @sv_get_gachalog_by_link.on_command("导入抽卡记录", block=True)
 async def send_gacha_import_type(bot: Bot, ev: Event):
+    if GACHA_LINK_HINT_RE.search(re.sub(r'["\n\t ]+', "", ev.text)):
+        return await get_gacha_log_by_link(bot, ev)
     return await bot.send(ERROR_MSG_IMPORT_TYPE)
 
 
