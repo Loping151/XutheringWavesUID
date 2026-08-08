@@ -409,7 +409,7 @@ async def draw_all_matrix_rank_card(
             )
 
         team_base_x = (580 if board_6digit else 600) if single_team else 575
-        team_spacing = 230 if (not single_team and board_7digit) else 250
+        team_spacing = 232 if (not single_team and board_7digit) else 250
 
         # 按分数排序取最高和次高
         sorted_teams = sorted(rank_temp.teams, key=lambda t: t.score, reverse=True)
