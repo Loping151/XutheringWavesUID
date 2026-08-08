@@ -396,7 +396,7 @@ async def draw_all_matrix_rank_card(
             if single_team
             else get_score_color(rank_temp.score)
         )
-        score_center_x = 950 if single_team else 1150
+        score_center_x = 950 if single_team else 1140
         if score_color == CRYSTAL_SENTINEL:
             draw_crystal_text(role_bg, f"{rank_temp.score}", score_center_x, 55, waves_font_44, "mm")
         else:
@@ -947,7 +947,8 @@ async def draw_matrix_rank_list(
         # 上下两队: 角色头像 + buff + 得分
         team_limit = 1 if single_team else 2
         for half_index, team_info in enumerate(rankInfo.top_teams[:team_limit]):
-            base_x = 375 if single_team else 365 + half_index * 230
+            team_x_shift = 0 if single_team else (12 if half_index == 0 else 10)
+            base_x = (375 if single_team else 365 + half_index * 230) - team_x_shift
             role_spacing = 55 if single_team else 50
             buff_offset = role_spacing * 3 if single_team else 150
 

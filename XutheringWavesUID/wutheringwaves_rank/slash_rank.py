@@ -261,6 +261,7 @@ async def draw_all_slash_rank_card(bot: Bot, ev: Event, page: int = 1):
         role_bg_draw.text((210, 40), f"角色限定{char_gold_total}金", "white", waves_font_18, "lm")
 
         for half_index, slash_half in enumerate(rank_temp.half_list):
+            half_x_offset = 10 if half_index == 0 else 0
             for role_index, char_detail in enumerate(slash_half.char_detail):
                 char_id = char_detail.char_id
                 # char_level = char_detail.level
@@ -286,7 +287,10 @@ async def draw_all_slash_rank_card(bot: Bot, ev: Event, page: int = 1):
                     )
                     char_avatar.paste(info_block, (30, 30), info_block)
 
-                role_bg.alpha_composite(char_avatar, (570 + half_index * 250 + role_index * 50, 20))
+                role_bg.alpha_composite(
+                    char_avatar,
+                    (570 + half_index * 250 + half_x_offset + role_index * 50, 20),
+                )
 
             # buff
             buff_bg = Image.new("RGBA", (50, 50), (255, 255, 255, 0))
@@ -305,11 +309,11 @@ async def draw_all_slash_rank_card(bot: Bot, ev: Event, page: int = 1):
             buff_pic = buff_pic.resize((50, 50))
             buff_bg.paste(buff_pic, (0, 0), buff_pic)
 
-            role_bg.alpha_composite(buff_bg, (720 + half_index * 250, 15))
+            role_bg.alpha_composite(buff_bg, (720 + half_index * 250 + half_x_offset, 15))
 
             # 分数
             role_bg_draw.text(
-                (670 + half_index * 250, 80),
+                (670 + half_index * 250 + half_x_offset, 80),
                 f"{slash_half.score}",
                 get_score_color(slash_half.score),
                 waves_font_20,
