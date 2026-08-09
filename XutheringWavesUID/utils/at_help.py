@@ -1,13 +1,19 @@
 from gsuid_core.models import Event
 
 
+def is_at_self(ev: Event) -> bool:
+    if ev.at == ev.bot_self_id:
+        return True
+    return ev.bot_id == "qq_official" and ev.at in (ev.bot_id, ev.real_bot_id)
+
+
 def ruser_id(ev: Event) -> str:
     from ..wutheringwaves_config.wutheringwaves_config import (
         WutheringWavesConfig,
     )
 
     AtCheck = WutheringWavesConfig.get_config("AtCheck").data
-    if AtCheck and ev.at and ev.at != ev.bot_self_id:
+    if AtCheck and ev.at and not is_at_self(ev):
         return ev.at
     return ev.user_id
 
