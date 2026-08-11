@@ -69,7 +69,7 @@ async def set_waves_user_value(ev: Event, func: str, uid: str, value: str):
                 return f"已重置体力背景为默认!\n特征码[{masked_uid}]"
             if bg_random_hint:
                 return f"设置成功!\n特征码[{masked_uid}]\n当前{func}:{value}\n(未指定角色, 将按类型随机选图)"
-            return f"设置成功!\n特征码[{masked_uid}]\n当前{func}:{value}\n例:[椿](官方)(立绘/背景)\n或直接设为固定图片ID"
+            return f"设置成功!\n特征码[{masked_uid}]\n当前{func}:{value}\n例:椿 官方 立绘/背景\n或直接设为固定图片ID"
         return f"设置成功!\n特征码[{masked_uid}]\n当前{func}:{value}"
     else:
         return "设置失败!\n请检查参数是否正确!"
