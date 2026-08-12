@@ -11,7 +11,7 @@ from gsuid_core.utils.image.image_tools import crop_center_img
 
 from ..utils.cache import TimedCache
 from ..utils.database.models import WavesUser
-from ..utils.image import get_qq_avatar, get_square_avatar
+from ..utils.image import get_qq_avatar, get_square_avatar, is_qq_default_avatar
 from ..utils.resource.constant import randomize_special_char_id
 from ..wutheringwaves_config import WutheringWavesConfig
 
@@ -33,7 +33,7 @@ async def _fetch_sender_avatar_image(url: str) -> Optional[Image.Image]:
     try:
         async with httpx.AsyncClient(timeout=6, follow_redirects=False) as client:
             r = await client.get(url, headers={"Referer": ""})
-            if r.status_code != 200 or not r.content:
+            if r.status_code != 200 or not r.content or is_qq_default_avatar(r.content):
                 return None
             img = Image.open(io.BytesIO(r.content)).convert("RGBA")
         pic_cache.set(cache_key, img)

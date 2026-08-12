@@ -22,6 +22,7 @@ from gsuid_core.web_app import app
 
 from ..utils.api.model import AccountBaseInfo
 from ..utils.cache import TimedCache
+from ..utils.image import is_qq_default_avatar
 from ..utils.util import hide_uid
 from ..utils.player_store import read_player_json, player_json_exists
 from ..utils.resource.RESOURCE_PATH import (
@@ -135,15 +136,15 @@ async def _fetch_avatar_url(target: str) -> Optional[Tuple[bytes, str]]:
     try:
         async with httpx.AsyncClient(timeout=6, follow_redirects=False) as client:
             r = await client.get(target, headers={"Referer": ""})
-            if r.status_code == 200 and r.content:
+            if r.status_code == 200 and r.content and not is_qq_default_avatar(r.content):
                 return r.content, r.headers.get("content-type", "image/jpeg")
     except Exception as e:
         logger.debug(f"[鸣潮·抽卡网页] 头像抓取失败 {target}: {e}")
     return None
 
 
-async def _resolve_userpic_for_external(state: Dict, seed: str) -> Optional[Tuple[bytes, str]]:
-    """外置模式头像优先级: core 适配器 avatar -> QQ CDN -> 随机本地角色头像。"""
+async def _resolve_userpic(state: Dict, seed: str) -> Optional[Tuple[bytes, str]]:
+    """头像优先级: core 适配器 avatar -> QQ CDN -> 随机本地角色头像。"""
     base = state.get("base") or {}
     sender_avatar = base.get("sender_avatar") or ""
     if sender_avatar:
@@ -204,7 +205,7 @@ async def _push_gacha_to_external(url: str, token: str, state: Dict) -> Tuple[bo
     }
     data_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
-    userpic = await _resolve_userpic_for_external(state, token)
+    userpic = await _resolve_userpic(state, token)
 
     ref_total = len(ref_avatar) + len(ref_weapon)
     asset_uploaded = 0
@@ -535,7 +536,7 @@ def _userpic_cache_set(token: str, content: bytes, mime: str) -> None:
 
 @app.get("/waves/gacha/{token}/userpic")
 async def gacha_web_userpic(token: str):
-    """用户头像代理: 优先 QQ 头像, 抓取失败/404 则回退到随机角色头像。
+    """用户头像代理: 适配器 avatar -> QQ 头像 -> 随机角色头像。
     走服务端代理避免 q1.qlogo.cn 的 CORS 限制, 同时保证 html2canvas 能正常导出。
     """
     state = _check_token(token)
@@ -547,22 +548,10 @@ async def gacha_web_userpic(token: str):
         _userpic_bytes.move_to_end(token)
         return Response(cached[0], media_type=cached[1], headers={"Cache-Control": "max-age=600"})
 
-    qq_avatar = (state.get("base") or {}).get("qq_avatar") or ""
-    if qq_avatar:
-        full = "https:" + qq_avatar if qq_avatar.startswith("//") else qq_avatar
-        got = await _fetch_avatar_url(full)
-        if got:
-            content, mime = got
-            _userpic_cache_set(token, content, mime)
-            return Response(content, media_type=mime, headers={"Cache-Control": "max-age=600"})
-
-    fallback = _random_char_avatar(token)
-    if fallback and fallback.exists():
-        try:
-            content = fallback.read_bytes()
-            _userpic_cache_set(token, content, "image/png")
-        except Exception:
-            pass
-        return FileResponse(fallback, media_type="image/png", headers={"Cache-Control": "max-age=600"})
+    got = await _resolve_userpic(state, token)
+    if got:
+        content, mime = got
+        _userpic_cache_set(token, content, mime)
+        return Response(content, media_type=mime, headers={"Cache-Control": "max-age=600"})
 
     return JSONResponse({"error": "no_avatar"}, status_code=404)

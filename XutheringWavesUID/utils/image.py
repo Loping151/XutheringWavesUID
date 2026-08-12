@@ -805,7 +805,8 @@ async def get_event_avatar(
         if avatar_url.startswith(("http", "https")):
             try:
                 content = (await sget(avatar_url)).content
-                img = Image.open(BytesIO(content)).convert("RGBA")
+                if not is_qq_default_avatar(content):
+                    img = Image.open(BytesIO(content)).convert("RGBA")
             except Exception:
                 img = None
 
