@@ -148,7 +148,13 @@ async def _ensure_browser():
                 _playwright = await async_playwright().start()
 
             _browser = await _playwright.chromium.launch(
-                args=["--no-sandbox", "--disable-setuid-sandbox"]
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-gpu",
+                    "--no-zygote",
+                    "--renderer-process-limit=1",
+                ]
             )
             _browser_uses = 0
 
