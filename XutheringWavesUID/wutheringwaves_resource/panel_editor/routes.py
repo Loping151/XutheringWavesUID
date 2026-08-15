@@ -123,7 +123,7 @@ async def panel_edit_index(request: Request):
         return HTMLResponse(_DISABLED_HTML, status_code=200)
     require_same_origin(request)
     if not is_guest_view_enabled():
-        require_auth(request)
+        await require_auth(request)
     index = _STATIC_DIR / "index.html"
     if not index.exists():
         return HTMLResponse("<h1>Panel editor static files missing.</h1>", status_code=500)

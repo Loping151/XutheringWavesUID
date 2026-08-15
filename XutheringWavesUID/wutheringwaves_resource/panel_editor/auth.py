@@ -2,11 +2,14 @@
 
 简单密码: 用户名固定为 admin, 密码读取 WutheringWavesConfig.WavesPanelEditPassword。
 密码为空 -> 关闭工具 (返回 503)。
-失败 >= LOCKOUT_THRESHOLD 次 / WINDOW 秒 -> 锁该 IP LOCKOUT_SECONDS 秒 (返 429)。
+防爆两层: 单来源 (IPv6 按 /64) 失败超阈值锁定返 429; 全站失败速率超阈值后,
+失败路径按速率拖延时 — 校验在拖延之前, 密码对的管理员不受影响。
 跨站发起的请求一律 403; 写操作额外要求自定义请求头 (见 CSRF 小节)。
 """
 
+import asyncio
 import base64
+import ipaddress
 import secrets
 import time
 from collections import deque
@@ -21,15 +24,28 @@ from ...wutheringwaves_config import WutheringWavesConfig
 
 REALM = "WutheringWaves Panel Editor"
 
-# 每 IP 在 WINDOW 秒内最多失败 THRESHOLD 次, 触发后冷却 LOCKOUT_SECONDS。
+# 每个来源在 WINDOW 秒内最多失败 THRESHOLD 次, 触发后冷却 LOCKOUT_SECONDS。
 _BF_WINDOW = 600          # 10 分钟滑动窗口
 _BF_THRESHOLD = 5         # 5 次失败
 _BF_LOCKOUT = 900         # 锁定 15 分钟
 _BF_GC_INTERVAL = 300     # 每 5 分钟扫一次, 清掉无活动的旧条目
+_BF_MAX_TRACKED = 8192    # 字典硬上限, 防海量来源把内存撑爆
+
+# 全局闸: per-IP 锁挡不住换 IP 的分布式爆破 (僵尸网络 / 一个 IPv6 段随便切),
+# 故再叠一层全站失败速率 -> 失败路径拖延时。密码校验在拖延之前, 因此拿对密码的
+# 管理员永远不受影响, 攻击者刷得越狠自己越慢。
+_GLOBAL_WINDOW = 600
+_GLOBAL_SOFT = 20         # 全站 10 分钟内失败超过这个数开始拖
+_GLOBAL_DELAY_STEP = 0.3  # 每多失败 1 次, 延迟加这么多秒
+_GLOBAL_DELAY_MAX = 8.0
+_FAIL_DELAY_BASE = 0.4    # 每次失败的基础延迟
+_TARPIT_MAX_CONCURRENT = 32   # 同时被拖住的请求数上限, 防拖延本身变成资源占用
 
 _bf_failures: Dict[str, Deque[float]] = {}
 _bf_locks: Dict[str, float] = {}
 _bf_last_gc = 0.0
+_global_failures: Deque[float] = deque()
+_tarpit_active = 0
 
 
 def _client_ip(request: Request) -> str:
@@ -46,8 +62,23 @@ def _client_ip(request: Request) -> str:
     return direct or "?"
 
 
+def _bf_key(ip: str) -> str:
+    """限速用的来源键。IPv6 收敛到 /64: 一个家宽 IPv6 段就有 2^64 个地址,
+    按整地址计数等于不限速。"""
+    raw = ip.strip().strip("[]").split("%")[0]
+    try:
+        addr = ipaddress.ip_address(raw)
+    except ValueError:
+        return ip
+    if addr.version == 6:
+        return f"{ipaddress.ip_network(f'{addr}/64', strict=False).network_address}/64"
+    return str(addr)
+
+
 def _bf_gc(now: float) -> None:
     global _bf_last_gc
+    while _global_failures and now - _global_failures[0] > _GLOBAL_WINDOW:
+        _global_failures.popleft()
     if now - _bf_last_gc < _BF_GC_INTERVAL:
         return
     _bf_last_gc = now
@@ -59,6 +90,19 @@ def _bf_gc(now: float) -> None:
             dq.popleft()
         if not dq:
             _bf_failures.pop(ip, None)
+
+
+def _bf_evict_if_full() -> None:
+    """条目数触顶时丢掉最老的一批 (仍在锁定期的优先留)。"""
+    if len(_bf_failures) < _BF_MAX_TRACKED:
+        return
+    victims = sorted(_bf_failures.items(), key=lambda kv: kv[1][-1] if kv[1] else 0.0)
+    for ip, _ in victims[: max(1, _BF_MAX_TRACKED // 8)]:
+        if ip not in _bf_locks:
+            _bf_failures.pop(ip, None)
+    if len(_bf_locks) >= _BF_MAX_TRACKED:
+        for ip, _ in sorted(_bf_locks.items(), key=lambda kv: kv[1])[: _BF_MAX_TRACKED // 8]:
+            _bf_locks.pop(ip, None)
 
 
 def _bf_check_locked(ip: str, now: float) -> Optional[int]:
@@ -73,6 +117,8 @@ def _bf_check_locked(ip: str, now: float) -> Optional[int]:
 
 
 def _bf_record_failure(ip: str, now: float) -> None:
+    _global_failures.append(now)
+    _bf_evict_if_full()
     dq = _bf_failures.setdefault(ip, deque())
     dq.append(now)
     while dq and now - dq[0] > _BF_WINDOW:
@@ -88,6 +134,24 @@ def _bf_record_failure(ip: str, now: float) -> None:
 def _bf_record_success(ip: str) -> None:
     _bf_failures.pop(ip, None)
     _bf_locks.pop(ip, None)
+
+
+def _fail_delay() -> float:
+    over = len(_global_failures) - _GLOBAL_SOFT
+    delay = _FAIL_DELAY_BASE + (over * _GLOBAL_DELAY_STEP if over > 0 else 0.0)
+    return min(delay, _GLOBAL_DELAY_MAX)
+
+
+async def _throttle_failure() -> None:
+    """密码错了之后压住这条连接再返回 401。只作用于失败路径。"""
+    global _tarpit_active
+    if _tarpit_active >= _TARPIT_MAX_CONCURRENT:
+        return
+    _tarpit_active += 1
+    try:
+        await asyncio.sleep(_fail_delay())
+    finally:
+        _tarpit_active -= 1
 
 
 # ------------------------- CSRF -------------------------
@@ -195,12 +259,30 @@ def check_preview_rate(request: Request) -> None:
                 _preview_calls.pop(k, None)
 
 
+_MIN_PASSWORD_LEN = 12
+_weak_warned: set = set()
+
+
+def _warn_if_weak(pwd: str) -> None:
+    """限速只能压低尝试速率, 压不住太短的密码; 每种长度提醒一次, 不刷屏。"""
+    if len(pwd) >= _MIN_PASSWORD_LEN or len(pwd) in _weak_warned:
+        return
+    _weak_warned.add(len(pwd))
+    logger.warning(
+        f"[鸣潮·面板编辑] WavesPanelEditPassword 仅 {len(pwd)} 位, "
+        f"建议 ≥{_MIN_PASSWORD_LEN} 位且混合大小写/数字"
+    )
+
+
 def _configured_password() -> Optional[str]:
     pwd = WutheringWavesConfig.get_config("WavesPanelEditPassword").data
     if pwd is None:
         return None
     pwd = str(pwd).strip()
-    return pwd or None
+    if not pwd:
+        return None
+    _warn_if_weak(pwd)
+    return pwd
 
 
 def is_enabled() -> bool:
@@ -237,29 +319,29 @@ def _unauthorized() -> HTTPException:
     )
 
 
-def require_auth(request: Request) -> None:
+async def require_auth(request: Request) -> None:
     """FastAPI dependency: 仅 admin 可通过, 其它一律 401/429。"""
-    role = _resolve_role(request, allow_guest=False)
+    role = await _resolve_role(request, allow_guest=False)
     if role != "admin":
         raise _unauthorized()
 
 
-def require_auth_strict(request: Request) -> None:
+async def require_auth_strict(request: Request) -> None:
     """require_auth + 强制自定义头。给有副作用的 GET 端点用 (非 GET 已在 _resolve_role 强制)。"""
     require_csrf_header(request)
-    require_auth(request)
+    await require_auth(request)
 
 
-def auth_or_guest(request: Request) -> str:
+async def auth_or_guest(request: Request) -> str:
     """读类接口的鉴权 dependency。返回 'admin' 或 'guest'。
     - 已配置密码且配置允许访客 + 请求无 Authorization → 'guest'
     - 已配置密码且 Authorization 正确 → 'admin'
     - 其它 → 401 / 429 / 503。
     """
-    return _resolve_role(request, allow_guest=is_guest_view_enabled())
+    return await _resolve_role(request, allow_guest=is_guest_view_enabled())
 
 
-def _resolve_role(request: Request, *, allow_guest: bool) -> str:
+async def _resolve_role(request: Request, *, allow_guest: bool) -> str:
     # 放在最前: 所有走鉴权的端点都自动获得 CSRF 防护, 新增路由不会漏。
     require_same_origin(request)
     if request.method not in ("GET", "HEAD"):
@@ -274,7 +356,7 @@ def _resolve_role(request: Request, *, allow_guest: bool) -> str:
 
     now = time.monotonic()
     _bf_gc(now)
-    ip = _client_ip(request)
+    key = _bf_key(_client_ip(request))
     header = request.headers.get("authorization", "")
 
     # 无凭据: 访客模式直接放行只读, 否则要求登录。
@@ -284,7 +366,7 @@ def _resolve_role(request: Request, *, allow_guest: bool) -> str:
         raise _unauthorized()
 
     # 有凭据 → 进入登录路径, 受暴力破解保护
-    locked = _bf_check_locked(ip, now)
+    locked = _bf_check_locked(key, now)
     if locked is not None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -292,9 +374,11 @@ def _resolve_role(request: Request, *, allow_guest: bool) -> str:
             headers={"Retry-After": str(locked)},
         )
 
+    # 校验在拖延之前: 密码对的管理员任何时候都直接放行, 全局闸只压失败方。
     if _validate_basic(header, pwd):
-        _bf_record_success(ip)
+        _bf_record_success(key)
         return "admin"
 
-    _bf_record_failure(ip, now)
+    _bf_record_failure(key, now)
+    await _throttle_failure()
     raise _unauthorized()
