@@ -1,8 +1,9 @@
-"""HTTP Basic Auth 鉴权 + per-IP 暴力破解防护。
+"""HTTP Basic Auth 鉴权 + per-IP 暴力破解防护 + CSRF 防护。
 
 简单密码: 用户名固定为 admin, 密码读取 WutheringWavesConfig.WavesPanelEditPassword。
 密码为空 -> 关闭工具 (返回 503)。
 失败 >= LOCKOUT_THRESHOLD 次 / WINDOW 秒 -> 锁该 IP LOCKOUT_SECONDS 秒 (返 429)。
+跨站发起的请求一律 403; 写操作额外要求自定义请求头 (见 CSRF 小节)。
 """
 
 import base64
@@ -10,6 +11,7 @@ import secrets
 import time
 from collections import deque
 from typing import Deque, Dict, Optional
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request, status
 from gsuid_core.logger import logger
@@ -86,6 +88,81 @@ def _bf_record_failure(ip: str, now: float) -> None:
 def _bf_record_success(ip: str) -> None:
     _bf_failures.pop(ip, None)
     _bf_locks.pop(ip, None)
+
+
+# ------------------------- CSRF -------------------------
+# Basic Auth 是浏览器缓存后自动附带的环境凭据: 管理员登录过之后, 任意站点都能借他的
+# 浏览器向本服务发出带凭据的请求 (响应读不到, 但副作用已经发生)。两道闸:
+#   1. 同站校验: Sec-Fetch-Site 优先 — 它与 Host 头无关, 反代改写 Host 也不误伤;
+#      老浏览器 (或明文 HTTP, 此时浏览器不发 Sec-Fetch-*) 回退 Origin -> Referer。
+#   2. 自定义请求头: <form>/<img> 无法携带; 用 fetch 加则触发 CORS 预检, 而本服务不返
+#      任何 Access-Control-* 头, 预检必失败。非 GET 一律强制, 昂贵的 GET 手动加。
+
+CSRF_HEADER = "X-Waves-Panel-Edit"
+_CSRF_HEADER_LC = CSRF_HEADER.lower()
+
+
+def _forbidden(reason: str, request: Request) -> HTTPException:
+    logger.warning(
+        f"[鸣潮·面板编辑] 拒绝跨站请求 ip={_client_ip(request)} "
+        f"path={request.url.path} {reason}"
+    )
+    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cross-site request rejected")
+
+
+def _browser_host(request: Request) -> str:
+    """浏览器地址栏里的 host。反代下 Host 可能被改写, 故优先 X-Forwarded-Host。"""
+    fwd = request.headers.get("x-forwarded-host")
+    if fwd:
+        return fwd.split(",")[0].strip().lower()
+    return (request.headers.get("host") or "").strip().lower()
+
+
+def _url_host(value: str) -> str:
+    try:
+        return (urlsplit(value).netloc or "").lower()
+    except Exception:
+        return ""
+
+
+def _is_document_nav(request: Request) -> bool:
+    """顶级文档导航: 从别处 (聊天窗/书签栏) 点链接进入本工具是正常用法, 不能当攻击拦。"""
+    return (
+        request.method == "GET"
+        and request.headers.get("sec-fetch-mode", "").lower() == "navigate"
+        and request.headers.get("sec-fetch-dest", "").lower() == "document"
+    )
+
+
+def require_same_origin(request: Request) -> None:
+    # 自定义头到手即同站 (跨站加不上), 比 Origin/Referer 可靠: 后者会被
+    # Referrer-Policy: no-referrer 抹成 null/缺失, 误伤自家页面。
+    if request.headers.get(_CSRF_HEADER_LC) == "1":
+        return
+
+    site = request.headers.get("sec-fetch-site", "").lower()
+    if site:
+        # none = 地址栏/书签直达, same-origin = 本工具页面自己发起。
+        if site in ("same-origin", "none") or _is_document_nav(request):
+            return
+        raise _forbidden(f"sec-fetch-site={site}", request)
+
+    host = _browser_host(request)
+    origin = request.headers.get("origin")
+    if origin:
+        # Referrer-Policy: no-referrer 会把跨站 Origin 序列化成 "null", 不能放行。
+        if origin.lower() != "null" and _url_host(origin) == host:
+            return
+        raise _forbidden(f"origin={origin}", request)
+
+    referer = request.headers.get("referer")
+    if referer and _url_host(referer) != host:
+        raise _forbidden(f"referer={referer}", request)
+
+
+def require_csrf_header(request: Request) -> None:
+    if request.headers.get(_CSRF_HEADER_LC) != "1":
+        raise _forbidden(f"missing {CSRF_HEADER}", request)
 
 
 # ------------------------- 预览限速 (per-IP rolling window) -------------------------
@@ -167,6 +244,12 @@ def require_auth(request: Request) -> None:
         raise _unauthorized()
 
 
+def require_auth_strict(request: Request) -> None:
+    """require_auth + 强制自定义头。给有副作用的 GET 端点用 (非 GET 已在 _resolve_role 强制)。"""
+    require_csrf_header(request)
+    require_auth(request)
+
+
 def auth_or_guest(request: Request) -> str:
     """读类接口的鉴权 dependency。返回 'admin' 或 'guest'。
     - 已配置密码且配置允许访客 + 请求无 Authorization → 'guest'
@@ -177,6 +260,11 @@ def auth_or_guest(request: Request) -> str:
 
 
 def _resolve_role(request: Request, *, allow_guest: bool) -> str:
+    # 放在最前: 所有走鉴权的端点都自动获得 CSRF 防护, 新增路由不会漏。
+    require_same_origin(request)
+    if request.method not in ("GET", "HEAD"):
+        require_csrf_header(request)
+
     pwd = _configured_password()
     if not pwd:
         raise HTTPException(

@@ -70,8 +70,13 @@ const el = (tag, props, ...children) => {
 // ============================================================
 // API helpers
 // ============================================================
+// X-Waves-Panel-Edit: CSRF 闸门 — 后端对写操作强制此头, 跨站页面加不上 (预检必失败)。
 async function api(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, { cache: "no-store", ...opts });
+  const res = await fetch(`${API}${path}`, {
+    cache: "no-store",
+    ...opts,
+    headers: { ...(opts.headers || {}), "X-Waves-Panel-Edit": "1" },
+  });
   if (!res.ok) {
     let detail = res.statusText;
     try {

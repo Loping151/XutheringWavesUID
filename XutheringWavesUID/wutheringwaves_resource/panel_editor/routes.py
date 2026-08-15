@@ -25,6 +25,8 @@ from .auth import (
     is_enabled,
     is_guest_view_enabled,
     require_auth,
+    require_auth_strict,
+    require_same_origin,
 )
 from . import storage as st
 
@@ -35,6 +37,12 @@ _STATIC_DIR = Path(__file__).parent / "static"
 # 单边 ≤ 原图各边 3 倍且 ≤ 8000px; 同时总像素 ≤ 40MP(单边限幅挡不住极端长宽比)。
 _MAX_CROP_DIM = 8000
 _MAX_CROP_PIXELS = 40_000_000
+
+# 禁止被他站 iframe 嵌套 (点击劫持: 管理员 Basic Auth 已缓存, 隐形 iframe 里的点击即操作)。
+_FRAME_DENY = {
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "frame-ancestors 'none'",
+}
 
 
 def _try_update_orb_cache(p: Path) -> None:
@@ -113,12 +121,13 @@ async def panel_edit_index(request: Request):
     """
     if not is_enabled():
         return HTMLResponse(_DISABLED_HTML, status_code=200)
+    require_same_origin(request)
     if not is_guest_view_enabled():
         require_auth(request)
     index = _STATIC_DIR / "index.html"
     if not index.exists():
         return HTMLResponse("<h1>Panel editor static files missing.</h1>", status_code=500)
-    return FileResponse(index, media_type="text/html; charset=utf-8")
+    return FileResponse(index, media_type="text/html; charset=utf-8", headers=_FRAME_DENY)
 
 
 @app.get("/waves/panel-edit/static/{name:path}")
@@ -684,7 +693,7 @@ def _scan_all_duplicates(threshold: float) -> List[dict]:
 
 
 @app.get("/waves/panel-edit/api/duplicates")
-async def api_duplicates(threshold: float = 0.7, _: None = Depends(require_auth)):
+async def api_duplicates(threshold: float = 0.7, _: None = Depends(require_auth_strict)):
     try:
         from ...wutheringwaves_charinfo.card_utils import cv2
     except Exception:
