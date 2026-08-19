@@ -10,7 +10,7 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
 from .deal import add_cookie, get_cookie, refresh_bind, delete_cookie
-from ..utils.util import get_hide_uid_pref, hide_uid
+from ..utils.util import build_uid_masker, get_hide_uid_pref, hide_uid
 from ..utils.button import WavesButton
 from ..utils.constants import WAVES_GAME_ID
 from ..utils.database.models import WavesBind, WavesUser, WavesStaminaRecord
@@ -293,13 +293,14 @@ async def send_waves_bind_uid_msg(bot: Bot, ev: Event):
         code = await WavesBind.insert_waves_uid(qid, ev.bot_id, uid, ev.group_id, lenth_limit=9)
         if code == 0 or code == -2:
             retcode = await WavesBind.switch_uid_by_game(qid, ev.bot_id, uid)
+        masked_uid = hide_uid(uid, await get_hide_uid_pref(uid, qid, ev.bot_id))
         return await send_diff_msg(
             bot,
             code,
             {
-                0: f"[鸣潮] 特征码[{hide_uid(uid)}]绑定成功！\n\n当前仅支持查询部分信息，完整功能请使用【{PREFIX}登录】\n使用【{PREFIX}查看】查看已绑定的特征码\n使用【{PREFIX}刷新面板】更新角色面板\n更新角色面板后可以使用【{PREFIX}暗主排行】查询暗主排行",
-                -1: f"[鸣潮] 特征码[{hide_uid(uid)}]的位数不正确！",
-                -2: f"[鸣潮] 特征码[{hide_uid(uid)}]已经绑定过了！",
+                0: f"[鸣潮] 特征码[{masked_uid}]绑定成功！\n\n当前仅支持查询部分信息，完整功能请使用【{PREFIX}登录】\n使用【{PREFIX}查看】查看已绑定的特征码\n使用【{PREFIX}刷新面板】更新角色面板\n更新角色面板后可以使用【{PREFIX}暗主排行】查询暗主排行",
+                -1: f"[鸣潮] 特征码[{masked_uid}]的位数不正确！",
+                -2: f"[鸣潮] 特征码[{masked_uid}]已经绑定过了！",
                 -3: "[鸣潮] 你输入了错误的格式!",
             },
             at_sender=at_sender,
@@ -309,23 +310,25 @@ async def send_waves_bind_uid_msg(bot: Bot, ev: Event):
         if retcode == 0:
             uid_list = await WavesBind.get_uid_list_by_game(qid, ev.bot_id)
             if uid_list:
+                mask = await build_uid_masker([(u, qid) for u in uid_list], ev.bot_id)
                 _buttons: List[Any] = []
-                for uid in uid_list:
-                    _buttons.append(WavesButton(hide_uid(uid), f"切换{uid}"))
-                return await bot.send_option(f" [鸣潮] 切换特征码[{hide_uid(uid_list[0])}]成功！", _buttons)
+                for u in uid_list:
+                    _buttons.append(WavesButton(mask(u, qid), f"切换{u}"))
+                return await bot.send_option(f" [鸣潮] 切换特征码[{mask(uid_list[0], qid)}]成功！", _buttons)
             else:
                 msg = "[鸣潮] 尚未绑定任何特征码"
                 return await bot.send((" " if at_sender else "") + msg, at_sender)
         else:
-            msg = f"[鸣潮] 尚未绑定该特征码[{hide_uid(uid)}]"
+            msg = f"[鸣潮] 尚未绑定该特征码[{hide_uid(uid, await get_hide_uid_pref(uid, qid, ev.bot_id))}]"
             return await bot.send((" " if at_sender else "") + msg, at_sender)
     elif "查看" in ev.command:
         uid_list = await WavesBind.get_uid_list_by_game(qid, ev.bot_id)
         if uid_list:
-            uids = "\n".join(hide_uid(u) for u in uid_list)
+            mask = await build_uid_masker([(u, qid) for u in uid_list], ev.bot_id)
+            uids = "\n".join(mask(u, qid) for u in uid_list)
             buttons: List[Any] = []
-            for uid in uid_list:
-                buttons.append(WavesButton(hide_uid(uid), f"切换{uid}"))
+            for u in uid_list:
+                buttons.append(WavesButton(mask(u, qid), f"切换{u}"))
             return await bot.send_option(f" [鸣潮] 绑定的特征码列表为：\n{uids}", buttons)
         else:
             msg = "[鸣潮] 尚未绑定任何特征码"

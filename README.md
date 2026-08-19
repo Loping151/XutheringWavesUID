@@ -61,6 +61,8 @@ https://blog.ovoii.io/posts/notes/wwbot
 
 体力推送功能：[RoverReminder](https://github.com/Loping151/RoverReminder)
 
+dsh 移植版：[dsh-plugin-waves](https://github.com/Loping151/dsh-plugin-waves)
+
 ### 其他工具
 
 自建外置渲染：[RemoteRender](https://github.com/Loping151/RemoteRender) （或者直接使用我的）
@@ -144,4 +146,4 @@ android_termux: python3.10-3.14<br>
   - [巡游天国FM](https://space.bilibili.com/444694026)
  
   
-<img src="./assets/footer.png" alt="footer" width="1000" />
+<img src="https://prod-alicdn-community.kurobbs.com/forum/575e17ca95e74a77b37804b75d9d2c3d20260814.png" alt="footer" width="1000" />

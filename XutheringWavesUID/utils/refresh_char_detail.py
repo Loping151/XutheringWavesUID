@@ -11,7 +11,7 @@ from gsuid_core.models import Event
 
 from .hint import error_reply
 from .at_help import safe_sender_avatar
-from .util import get_version, hide_uid, resolve_hide_uid
+from .util import get_hide_uid_pref, get_version, hide_uid, resolve_hide_uid
 from .api.model import RoleList, AccountBaseInfo, OwnedRoleInfoResponse
 from .waves_api import waves_api
 from .resource.constant import SPECIAL_CHAR_INT_ALL, SPECIAL_CHAR_RANK_MAP
@@ -449,13 +449,15 @@ async def refresh_char(
         return role_info.throw_msg()
 
     if isinstance(role_info.data, dict) and "roleList" not in role_info.data:
-        return f"鸣潮特征码[{hide_uid(uid)}]的角色数据未公开展示，请【{PREFIX}登录】或在库街区展示角色"
+        user_pref = await get_hide_uid_pref(uid, user_id, ev.bot_id)
+        return f"鸣潮特征码[{hide_uid(uid, user_pref)}]的角色数据未公开展示，请【{PREFIX}登录】或在库街区展示角色"
 
     try:
         role_info = RoleList.model_validate(role_info.data)
     except Exception as e:
         logger.exception(f"[鸣潮·角色状态] {uid} 角色信息解析失败", e)
-        msg = f"鸣潮特征码[{hide_uid(uid)}]获取数据失败\n1.是否注册过库街区\n2.库街区能否查询当前鸣潮特征码数据"
+        user_pref = await get_hide_uid_pref(uid, user_id, ev.bot_id)
+        msg = f"鸣潮特征码[{hide_uid(uid, user_pref)}]获取数据失败\n1.是否注册过库街区\n2.库街区能否查询当前鸣潮特征码数据"
         return msg
 
     request_role_ids: List[int] = []

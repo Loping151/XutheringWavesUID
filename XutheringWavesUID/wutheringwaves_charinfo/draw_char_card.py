@@ -648,17 +648,10 @@ async def draw_char_detail_img(
     if damageDetail and isDraw:
         dd_len = 60 + (len(damageDetail) + 1) * 60
 
+    # 单条查询的编号跟随列表显示顺序(0值条目不占编号), 选取推迟到面板数据就绪后
     damage_calc = None
-    if not isDraw:
-        for dindex, dd in enumerate(damageDetail):  # type: ignore
-            if dindex + 1 == int(damageId):  # type: ignore
-                damage_calc = dd
-                break
-        else:
-            return f"[鸣潮] 角色【{char_name}】未找到该伤害类型[{damageId}], 请先检查输入是否正确！\n"
-    else:
-        if damageId and not damageDetail:
-            return f"[鸣潮] 角色【{char_name}】暂不支持伤害计算！\n"
+    if isDraw and damageId and not damageDetail:
+        return f"[鸣潮] 角色【{char_name}】暂不支持伤害计算！\n"
 
     ck = ""
 
@@ -751,14 +744,40 @@ async def draw_char_detail_img(
     )
     calc.role_card = calc.enhance_summation_card_value(calc.phantom_card)
 
-    damage_calc_img = None
-    if damage_calc and damageDetail and role_detail.phantomData and role_detail.phantomData.equipPhantomList:
-        damage_title = damage_calc["title"]
-        # damageAttribute = card_sort_map_to_attribute(card_map)
+    # 伤害列表预计算; 数值为0的条目(如命座未解锁的技能)不渲染
+    damage_rows = []
+    if isDraw and damageDetail and role_detail.phantomData and role_detail.phantomData.equipPhantomList:
         calc.damageAttribute = calc.card_sort_map_to_attribute(calc.role_card)
-        damageAttributeTemp = copy.deepcopy(calc.damageAttribute)
-        setattr(damageAttributeTemp, "_log_title", damage_title)
-        crit_damage, expected_damage = damage_calc["func"](damageAttributeTemp, role_detail)
+        for damage_temp in damageDetail:
+            damage_title = damage_temp["title"]
+            damageAttributeTemp = copy.deepcopy(calc.damageAttribute)
+            setattr(damageAttributeTemp, "_log_title", damage_title)
+            crit_damage, expected_damage = damage_temp["func"](damageAttributeTemp, role_detail)
+            logger.debug(f"[鸣潮·角色面板渲染] {char_name}-{damage_title} 暴击伤害: {crit_damage}")
+            logger.debug(f"[鸣潮·角色面板渲染] {char_name}-{damage_title} 期望伤害: {expected_damage}")
+            if (not crit_damage or str(crit_damage) == "0") and str(expected_damage) == "0":
+                continue
+            damage_rows.append((damage_title, crit_damage, expected_damage))
+        dd_len = 60 + (len(damage_rows) + 1) * 60
+
+    damage_calc_img = None
+    if not isDraw and damageDetail and role_detail.phantomData and role_detail.phantomData.equipPhantomList:
+        # 与列表渲染同一套过滤: 0值条目不渲染也不占编号
+        calc.damageAttribute = calc.card_sort_map_to_attribute(calc.role_card)
+        seen = 0
+        for damage_temp in damageDetail:
+            damage_title = damage_temp["title"]
+            damageAttributeTemp = copy.deepcopy(calc.damageAttribute)
+            setattr(damageAttributeTemp, "_log_title", damage_title)
+            crit_damage, expected_damage = damage_temp["func"](damageAttributeTemp, role_detail)
+            if (not crit_damage or str(crit_damage) == "0") and str(expected_damage) == "0":
+                continue
+            seen += 1
+            if seen == int(damageId):
+                damage_calc = damage_temp
+                break
+        if damage_calc is None:
+            return f"[鸣潮] 角色【{char_name}】未找到该伤害类型[{damageId}], 请先检查输入是否正确！\n"
         logger.debug(f"[鸣潮·角色面板渲染] {char_name}-{damage_title} 暴击伤害: {crit_damage}")
         logger.debug(f"[鸣潮·角色面板渲染] {char_name}-{damage_title} 期望伤害: {expected_damage}")
 
@@ -998,23 +1017,14 @@ async def draw_char_detail_img(
 
     img.paste(mz_temp, (0, 1080 + jineng_len), mz_temp)
 
-    if isDraw and damageDetail and role_detail.phantomData and role_detail.phantomData.equipPhantomList:
-        # damageAttribute = card_sort_map_to_attribute(card_map)
-        calc.damageAttribute = calc.card_sort_map_to_attribute(calc.role_card)
+    if isDraw and damage_rows:
         damage_title_bg = damage_bar1.copy()
         damage_title_bg_draw = ImageDraw.Draw(damage_title_bg)
         draw_text_with_fallback(damage_title_bg_draw, (400, 50), t("伤害类型", locale), SPECIAL_GOLD, waves_font_24, "rm")
         draw_text_with_fallback(damage_title_bg_draw, (700, 50), t("暴击伤害", locale), SPECIAL_GOLD, waves_font_24, "mm")
         draw_text_with_fallback(damage_title_bg_draw, (1000, 50), t("期望伤害", locale), SPECIAL_GOLD, waves_font_24, "mm")
         img.alpha_composite(damage_title_bg, dest=(0, 2600 + ph_sum_value + jineng_len))
-        for dindex, damage_temp in enumerate(damageDetail):
-            damage_title = damage_temp["title"]
-            damageAttributeTemp = copy.deepcopy(calc.damageAttribute)
-            setattr(damageAttributeTemp, "_log_title", damage_title)
-            crit_damage, expected_damage = damage_temp["func"](damageAttributeTemp, role_detail)
-            logger.debug(f"[鸣潮·角色面板渲染] {char_name}-{damage_title} 暴击伤害: {crit_damage}")
-            logger.debug(f"[鸣潮·角色面板渲染] {char_name}-{damage_title} 期望伤害: {expected_damage}")
-
+        for dindex, (damage_title, crit_damage, expected_damage) in enumerate(damage_rows):
             damage_bar = damage_bar2.copy() if dindex % 2 == 0 else damage_bar1.copy()
             damage_bar_draw = ImageDraw.Draw(damage_bar)
             draw_text_with_fallback(damage_bar_draw, (400, 50), t(damage_title, locale, partial=True), "white", waves_font_24, "rm")

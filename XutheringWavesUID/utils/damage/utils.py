@@ -138,7 +138,7 @@ Offtune_Buildup_Role_Ids = [1209]
 Tune_Rupture_Role_Ids = [1509, 1210]
 
 # 附加集谐·偏移 角色
-Tune_Strain_Role_Ids = [1509, 1211, 1510]
+Tune_Strain_Role_Ids = [1509, 1211, 1510, 1413]
 
 # 附加骇破·偏移 角色
 Hack_Shifting_Role_Ids = [1308, 1511]

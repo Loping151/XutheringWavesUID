@@ -189,7 +189,7 @@ def generate_random_ipv4_manual():
     return ".".join([str(random.randint(0, 255)) for _ in range(4)])
 
 
-async def get_hide_uid_pref(uid: str, user_id: str, bot_id: str) -> str:
+async def get_hide_uid_pref(uid: str, user_id: str, bot_id: str, game_id=None) -> str:
     """读 WavesUser.hide_uid_self_value, 没绑定就回空 (走全局 HideUid)。
 
     渲染入口在自己拿 ck 之外多一次 SELECT, 换来 hide_uid 可以纯按入参决策、
@@ -198,7 +198,7 @@ async def get_hide_uid_pref(uid: str, user_id: str, bot_id: str) -> str:
     from .database.models import WavesUser
     from .constants import WAVES_GAME_ID
     try:
-        user = await WavesUser.select_waves_user(uid, user_id, bot_id, game_id=WAVES_GAME_ID)
+        user = await WavesUser.select_waves_user(uid, user_id, bot_id, game_id=game_id or WAVES_GAME_ID)
         return user.hide_uid_self_value if user else ""
     except Exception:
         return ""

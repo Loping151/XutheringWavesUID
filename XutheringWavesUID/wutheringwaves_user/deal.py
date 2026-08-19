@@ -4,7 +4,7 @@ from gsuid_core.bot import Bot
 from gsuid_core.models import Event
 
 from ..utils.api.model import KuroWavesUserInfo
-from ..utils.util import hide_uid
+from ..utils.util import get_hide_uid_pref, hide_uid
 from ..utils.constants import PGR_GAME_ID, WAVES_GAME_ID
 from ..utils.waves_api import waves_api
 from ..utils.error_reply import ERROR_CODE, WAVES_CODE_103
@@ -175,9 +175,11 @@ async def add_cookie(ev: Event, ck: str, did: str, is_login: bool = False) -> st
 
     msg = []
     for role in role_list:
-        msg.append(f"[鸣潮]【{role['名字']}】特征码【{hide_uid(role['特征码'])}】登录成功!")
+        pref = await get_hide_uid_pref(role["特征码"], ev.user_id, ev.bot_id)
+        msg.append(f"[鸣潮]【{role['名字']}】特征码【{hide_uid(role['特征码'], pref)}】登录成功!")
     for role in pgr_list:
-        msg.append(f"[战双]【{role['名字']}】UID【{hide_uid(role['特征码'])}】记录成功!")
+        pref = await get_hide_uid_pref(role["特征码"], ev.user_id, ev.bot_id, game_id=PGR_GAME_ID)
+        msg.append(f"[战双]【{role['名字']}】UID【{hide_uid(role['特征码'], pref)}】记录成功!")
     return "\n".join(msg)
 
 
@@ -215,7 +217,8 @@ async def refresh_bind(ev: Event) -> str:
                     await WavesBind.switch_uid_by_game(ev.user_id, ev.bot_id, data.roleId)
                 if data.roleId not in seen_waves:
                     seen_waves.add(data.roleId)
-                    waves_msg.append(f"[鸣潮]已刷新特征码【{hide_uid(data.roleId)}】")
+                    pref = await get_hide_uid_pref(data.roleId, ev.user_id, ev.bot_id)
+                    waves_msg.append(f"[鸣潮]已刷新特征码【{hide_uid(data.roleId, pref)}】")
 
         if pgr_roles:
             for role in pgr_roles:
@@ -234,7 +237,8 @@ async def refresh_bind(ev: Event) -> str:
                     await WavesBind.switch_uid_by_game(ev.user_id, ev.bot_id, data.roleId, game_name="pgr")
                 if data.roleId not in seen_pgr:
                     seen_pgr.add(data.roleId)
-                    pgr_msg.append(f"[战双]已刷新特征码【{hide_uid(data.roleId)}】")
+                    pref = await get_hide_uid_pref(data.roleId, ev.user_id, ev.bot_id, game_id=PGR_GAME_ID)
+                    pgr_msg.append(f"[战双]已刷新特征码【{hide_uid(data.roleId, pref)}】")
 
     if not waves_msg and not pgr_msg:
         if invalid:

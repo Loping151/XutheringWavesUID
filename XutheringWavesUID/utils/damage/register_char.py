@@ -6,6 +6,7 @@ from .utils import (
     CHAR_ATTR_FREEZING,
     CHAR_ATTR_CELESTIAL,
     Hack_Shifting_Role_Ids,
+    Tune_Strain_Role_Ids,
     temp_atk,
     temp_def,
     hit_damage,
@@ -530,7 +531,7 @@ class Char_1211(CharAbstract):
             # 每超 10% 谐度破坏增幅 +8, 上限 40 点。
             # 假定与莫宁组队 (+50% 偏谐值累积效率), 直接按上限 +40 计入
             title = f"{self.name}-固有技能-蚀刻繁彩"
-            msg = "假定满层 (与莫宁组队), 谐度破坏增幅 +40 (上限)"
+            msg = "莫宁队, 谐度破坏增幅 +40"
             attr.add_tune_break_boost(40, title, msg)
 
             # 套装-剪心辑梦之影 (5pc): 添加震谐/集谐·偏移时, 队伍中角色谐度破坏增幅 +20。
@@ -1317,6 +1318,83 @@ class Char_1606(CharAbstract):
                 title = "洛可可-二链"
                 msg = "队伍中的角色湮灭伤害提升10%*4"
                 attr.add_dmg_bonus(0.1 * 4, title, msg)
+
+
+class Char_1410(CharAbstract):
+    id = 1410
+    name = "尤诺"
+    starLevel = 5
+
+    def _do_buff(
+        self,
+        attr: DamageAttribute,
+        chain: int = 0,
+        resonLevel: int = 1,
+        isGroup: bool = True,
+    ):
+        # 延奏技能-晦渡为明: 下一个登场角色重击伤害加深50%
+        if attr.char_damage == hit_damage:
+            title = f"{self.name}-延奏技能-晦渡为明"
+            msg = "下一个登场角色重击伤害加深50%"
+            attr.add_dmg_deepen(0.5, title, msg)
+
+        # 满月领域-苍白死光的祝颂: 领域中登场角色获得护盾时叠1层(每0.5秒一次),
+        # 每层全伤害加深4%, 上限10层; 层数取主体短时间产盾次数 trigger_shield
+        if attr.trigger_shield:
+            layers = min(attr.trigger_shield, 10)
+            title = f"{self.name}-满月领域-苍白死光的祝颂"
+            msg = f"{layers}层祝颂, 全伤害加深{layers * 4}%"
+            attr.add_dmg_deepen(0.04 * layers, title, msg)
+
+            # 二链: 队伍中的角色的祝颂叠加至10层时, 额外获得40%全伤害加深
+            if chain >= 2 and layers >= 10:
+                title = f"{self.name}-二链"
+                msg = "祝颂叠至10层, 额外全伤害加深40%"
+                attr.add_dmg_deepen(0.4, title, msg)
+
+
+class Char_1212(CharAbstract):
+    id = 1212
+    name = "景燃"
+    starLevel = 5
+
+    def _do_buff(
+        self,
+        attr: DamageAttribute,
+        chain: int = 0,
+        resonLevel: int = 1,
+        isGroup: bool = True,
+    ):
+        # 四链: 队伍中的角色获得护盾时(画地常驻自产盾), 队伍中角色全属性伤害加成提升20%
+        if chain >= 4:
+            title = f"{self.name}-四链"
+            msg = "队伍中角色获得护盾后, 全属性伤害加成提升20%"
+            attr.add_dmg_bonus(0.2, title, msg)
+
+
+class Char_1413(CharAbstract):
+    id = 1413
+    name = "清宵"
+    starLevel = 5
+
+    def _do_buff(
+        self,
+        attr: DamageAttribute,
+        chain: int = 0,
+        resonLevel: int = 1,
+        isGroup: bool = True,
+    ):
+        # 引剑破万法: 清宵技能造成伤害后附加【集谐·偏移】, 编队即持续激活
+        attr.set_env_tune_strain()
+
+        # 引剑破万法: 清宵在编队中时, 目标的【集谐·干涉】层数上限+1
+        attr.increment_tune_strain_interfered(1)
+
+        # 四链: 队伍中的角色附加【集谐·偏移】后, 该角色攻击提升20%
+        if chain >= 4 and check_char_id(attr, Tune_Strain_Role_Ids):
+            title = f"{self.name}-四链"
+            msg = "附加【集谐·偏移】后, 攻击提升20%"
+            attr.add_atk_percent(0.2, title, msg)
 
 
 def register_char():

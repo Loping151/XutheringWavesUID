@@ -5,6 +5,7 @@ from .utils import (
     CHAR_ATTR_SINKING,
     CHAR_ATTR_FREEZING,
     CHAR_ATTR_CELESTIAL,
+    Tune_Strain_Role_Ids,
     temp_atk,
     hit_damage,
     skill_damage,
@@ -1652,6 +1653,19 @@ class Echo_6000218(EchoAbstract):
     def do_equipment_first(self, role_id: int):
         """首位装备"""
         return {"湮灭伤害加成": "12%", "重击伤害加成": "12%"}
+
+
+class Echo_6000221(EchoAbstract):
+    id = 6000221
+    name = "天傀劫煞"
+    cost = 4
+
+    # 在首位装配该声骸技能时，自身气动伤害加成提升10.00%；为目标附加【集谐·偏移】时，自身气动伤害加成额外提升10.00%。
+    def do_equipment_first(self, role_id: int):
+        """首位装备"""
+        if role_id in Tune_Strain_Role_Ids:
+            return {"气动伤害加成": "20%"}
+        return {"气动伤害加成": "10%"}
 
 
 def register_echo():

@@ -98,7 +98,7 @@ async def auto_download_resource():
     logger.info("[鸣潮·资源] 定时任务: 开始下载全部资源...")
     await download_all_resource()
 
-    if check_file_hash(BUILD_TEMP) or check_file_hash(MAP_BUILD_TEMP):    
+    if check_file_hash(BUILD_TEMP) or check_file_hash(MAP_BUILD_TEMP):
         await download_all_resource()
 
     build_updated, map_updated = copy_build_files(soft=True)

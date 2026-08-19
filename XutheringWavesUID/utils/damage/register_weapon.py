@@ -348,6 +348,38 @@ class Weapon_21010074(WeaponAbstract):
             return True
 
 
+class Weapon_21010076(WeaponAbstract):
+    id = 21010076
+    type = 1
+    name = "千般渡"
+
+    # 全属性伤害加成提升{0}。自身为登场角色施放变奏技能或获得护盾时，获得1层【承天】和1层【载物】，可叠加{1}层。
+    # 承天：暴击伤害提升{3}，最多提升{4}；达到{10}层时，重击伤害的暴击提升{11}。
+    # 载物：施放重击时，每消耗{6}层【载物】，重击伤害无视目标{7}防御，最多无视目标{8}防御。
+    def do_action(
+        self,
+        func_list: Union[List[str], str],
+        attr: DamageAttribute,
+        isGroup: bool = False,
+    ):
+        """满层【承天】【载物】"""
+        dmg = f"{self.param(4)}"
+        title = self.get_title()
+        msg = f"满层【承天】，暴击伤害提升{dmg}"
+        attr.add_crit_dmg(calc_percent_expression(dmg), title, msg)
+
+        if attr.char_damage == hit_damage:
+            dmg = f"{self.param(11)}"
+            title = self.get_title()
+            msg = f"满层【承天】，重击伤害的暴击提升{dmg}"
+            attr.add_crit_rate(calc_percent_expression(dmg), title, msg)
+
+            dmg = f"{self.param(8)}"
+            title = self.get_title()
+            msg = f"消耗【载物】，重击伤害无视目标{dmg}防御"
+            attr.add_defense_ignore(calc_percent_expression(dmg), title, msg)
+
+
 class Weapon_21010084(WeaponAbstract):
     id = 21010084
     type = 1
@@ -888,6 +920,37 @@ class Weapon_21020096(WeaponAbstract):
             title = self.get_title()
             msg = f"重击伤害无视目标{dmg}防御"
             attr.add_defense_ignore(calc_percent_expression(dmg), title, msg)
+
+
+class Weapon_21020106(WeaponAbstract):
+    id = 21020106
+    type = 2
+    name = "云琅"
+
+    # 攻击提升{0}。附加集谐偏移后，获得气动伤害加成提升{1}，最多叠加{3}层。
+    # 达到上限后，气动伤害无视目标{6}的防御。
+    def do_action(
+        self,
+        func_list: Union[List[str], str],
+        attr: DamageAttribute,
+        isGroup: bool = False,
+    ):
+        """附加集谐偏移后 (满层)"""
+        if not check_char_id(attr, Tune_Strain_Role_Ids):
+            return
+
+        if attr.char_attr != CHAR_ATTR_SIERRA:
+            return
+
+        dmg = f"{self.param(1)}*{self.param(3)}"
+        title = self.get_title()
+        msg = f"附加集谐偏移后，气动伤害加成提升{self.param(1)}*{self.param(3)}层"
+        attr.add_dmg_bonus(calc_percent_expression(dmg), title, msg)
+
+        dmg = f"{self.param(6)}"
+        title = self.get_title()
+        msg = f"满层时，气动伤害无视目标{dmg}的防御"
+        attr.add_defense_ignore(calc_percent_expression(dmg), title, msg)
 
 
 class Weapon_21030011(WeaponAbstract):
