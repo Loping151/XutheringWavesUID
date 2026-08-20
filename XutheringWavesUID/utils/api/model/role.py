@@ -1,4 +1,4 @@
-from typing import List, Union, Literal, Optional
+from typing import Dict, List, Union, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -163,14 +163,23 @@ class RoleDetailData(BaseModel):
         skill_type: Literal["常态攻击", "共鸣技能", "共鸣解放", "变奏技能", "共鸣回路", "谐度破坏"],
     ):
         skill_level = 1
-        _skill = next((skill for skill in self.skillList if skill.skill.type == skill_type), None)
+        _skill = self._dedup_skills().get(skill_type)
         if _skill:
             skill_level = _skill.level - 1
         return skill_level
 
+    def _dedup_skills(self) -> Dict[str, SkillData]:
+        """同类型技能只留等级最高的一条(清宵等角色接口会返回两条变奏技能)。"""
+        best: Dict[str, SkillData] = {}
+        for _skill in self.skillList:
+            cur = best.get(_skill.skill.type)
+            if cur is None or _skill.level > cur.level:
+                best[_skill.skill.type] = _skill
+        return best
+
     def get_skill_list(self):
         sort = ["常态攻击", "共鸣技能", "共鸣回路", "共鸣解放", "变奏技能", "延奏技能", "谐度破坏"]
-        return sorted(self.skillList, key=lambda x: sort.index(x.skill.type))
+        return sorted(self._dedup_skills().values(), key=lambda x: sort.index(x.skill.type))
 
     def get_skill_branch(self) -> str:
         if self.activeBranchId and self.skillBranchList:

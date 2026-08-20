@@ -58,6 +58,13 @@ def _concat_pk_images(im1, im2):
     return new_im
 
 
+def _has_phantom(role_detail) -> bool:
+    """面板是否有声骸数据(有则出伤害计算部分)。"""
+    pd = getattr(role_detail, "phantomData", None)
+    eq = pd.equipPhantomList if pd else None
+    return bool(eq) and any(p and p.phantomProp for p in eq)
+
+
 def _space_hint() -> str:
     return f"[鸣潮] 尝试去掉{PREFIX}后的空格重试"
 
@@ -541,6 +548,8 @@ async def send_one_char_detail_msg(bot: Bot, ev: Event):
     if refresh_behavior == "concat_diff":
         from ..utils.char_info_utils import get_char_detail_for_id
         old_detail = await get_char_detail_for_id(uid, char_id)
+        if old_detail is not None and not _has_phantom(old_detail):
+            old_detail = None
 
     buttons = []
     msg, num_updated, _top_improver = await draw_refresh_char_detail_img(bot, ev, user_id, uid, buttons, refresh_type)
