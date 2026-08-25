@@ -112,16 +112,18 @@ TOWER_CYCLE = CycleSpec(
 )
 
 # 矩阵非匀速排期: 第4期 2026-05-07 04:00 开启; 第5期 2026-06-14 04:00 开启;
-# 第6期实际 2026-07-17 04:00 开启 (比 42 天匀速的 07-26 提前 9 天)。
-# 第6期之后按 42 天外推。base 锚定到末边界(第6期)。
+# 第6期实际 2026-07-17 04:00 开启 (比 42 天匀速的 07-26 提前 9 天);
+# 第7期实际 2026-08-27 04:00 开启 (比 42 天匀速的 08-28 提前 1 天)。
+# 第7期之后按 42 天外推。base 锚定到末边界(第7期)。
 MATRIX_CYCLE = CycleSpec(
-    base_time=datetime(2026, 7, 17, 4, 0, 0, tzinfo=CHINA_TZ),
+    base_time=datetime(2026, 8, 27, 4, 0, 0, tzinfo=CHINA_TZ),
     refresh_seconds=42 * 24 * 60 * 60,
-    base_period=6,
+    base_period=7,
     anchors=(
         (4, datetime(2026, 5, 7, 4, 0, 0, tzinfo=CHINA_TZ)),
         (5, datetime(2026, 6, 14, 4, 0, 0, tzinfo=CHINA_TZ)),
         (6, datetime(2026, 7, 17, 4, 0, 0, tzinfo=CHINA_TZ)),
+        (7, datetime(2026, 8, 27, 4, 0, 0, tzinfo=CHINA_TZ)),
     ),
 )
 
