@@ -94,6 +94,7 @@ async def draw_char_list_img(
     is_peek: bool = False,
     user_waves_id: str = "",
     star_filter: Optional[str] = None,
+    col: Optional[int] = None,
 ) -> Union[str, bytes]:
     is_self_ck, ck = await waves_api.get_ck_result(user_waves_id, user_id, ev.bot_id)
     if not ck:
@@ -137,7 +138,7 @@ async def draw_char_list_img(
     if not display_rank:
         return "[鸣潮] 暂无对应星级的角色"
 
-    two_col = total_count > 60
+    two_col = col == 2 if col else total_count > 50
 
     # 头像 头像环
     avatar = await draw_pic_with_ring(ev, is_peek)
@@ -405,7 +406,7 @@ def _compose_char_list(
 
     if two_col:
         hint_draw = ImageDraw.Draw(card_img)
-        hint = f"可指定  {PREFIX}练度统计 五星/四星/全部"
+        hint = f"可指定  {PREFIX}练度统计 五星/四星/全部  1/2 单列/双列"
         hint_draw.text((width // 2, header_h + rows * bar_star_h + 35), hint, SPECIAL_GOLD, waves_font_24, "mm")
 
     card_img = add_footer(card_img)

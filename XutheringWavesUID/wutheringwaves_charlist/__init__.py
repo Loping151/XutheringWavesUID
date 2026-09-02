@@ -13,23 +13,25 @@ from ..utils.database.models import WavesBind
 
 sv_waves_char_list = SV("ww角色练度统计", priority=3)
 
+PARAM_RE = r"全部|all|五星|5星|四星|4星|五|四|5|4|1|2"
+
 
 @sv_waves_char_list.on_regex(
-    r"^(\d+)?(练度|ld|练度统计|角色列表|刷新练度|刷新练度统计|刷新角色列表|updld)(?:\s*(?:全部|all|五星|5星|四星|4星|五|四|5|4))?$",
+    rf"^(\d+)?(练度|ld|练度统计|角色列表|刷新练度|刷新练度统计|刷新角色列表|updld)(?:\s*(?:{PARAM_RE}))*$",
     block=True,
     to_ai="""查询账号下全部角色的练度统计图（按等级/共鸣链/武器谐振/声骸主词条评分排序）。
 
 当用户问「练度统计 / 我有哪些角色 / 角色列表」时调用。需绑定 cookie。
 text 也可以是「刷新练度统计」从库街区拉新后再统计（写操作）。
-可选 9 位 UID 前缀窥视别人。可附星级 五星/四星/全部 筛选（默认角色多于25时仅显示五星）。
+可选 9 位 UID 前缀窥视别人。可附星级 五星/四星/全部 筛选；可附 1/2 指定单列/双列排版（不传则按角色数量自动）。
 
 Args:
-    text: 例: "练度统计" / "练度" / "ld" (查自己) / "刷新练度统计" (强制刷新后统计) / "123456789练度统计" (窥视别人) / "练度统计 五星" (按星级筛选)。
+    text: 例: "练度统计" / "练度" / "ld" (查自己) / "刷新练度统计" (强制刷新后统计) / "123456789练度统计" (窥视别人) / "练度统计 五星" (按星级筛选) / "练度2" (双列) / "练度1 五星" (单列+五星)。
 """,
 )
 async def send_char_list_msg_new(bot: Bot, ev: Event):
     match = re.search(
-        r"(?P<waves_id>\d+)?(?P<query_type>练度|ld|练度统计|角色列表|刷新练度|刷新练度统计|刷新角色列表|updld)",
+        r"(?P<waves_id>\d+)?(?P<query_type>刷新练度统计|刷新角色列表|刷新练度|练度统计|角色列表|练度|updld|ld)",
         ev.raw_text,
     )
     if not match:
@@ -37,13 +39,14 @@ async def send_char_list_msg_new(bot: Bot, ev: Event):
     query_waves_id = match.group("waves_id")
     query_type = match.group("query_type")
 
-    star_match = re.search(r"(全部|all|五星|5星|四星|4星|五|四|5|4)$", ev.raw_text.strip())
     star_filter = None
-    if star_match:
-        star = star_match.group(1)
-        if star in ("全部", "all"):
+    col = None
+    for token in re.findall(PARAM_RE, ev.raw_text[match.end():]):
+        if token in ("1", "2"):
+            col = int(token)
+        elif token in ("全部", "all"):
             star_filter = "all"
-        elif star in ("四星", "4星", "四", "4"):
+        elif token in ("四星", "4星", "四", "4"):
             star_filter = "4"
         else:
             star_filter = "5"
@@ -81,6 +84,7 @@ async def send_char_list_msg_new(bot: Bot, ev: Event):
         is_peek,
         user_waves_id,
         star_filter,
+        col,
     )
     if isinstance(im, bytes) and (is_peek or is_refresh):
         return await bot.send(["[鸣潮] 数据已刷新", MessageSegment.image(im)])

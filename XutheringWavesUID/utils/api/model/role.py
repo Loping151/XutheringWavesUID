@@ -169,7 +169,7 @@ class RoleDetailData(BaseModel):
         return skill_level
 
     def _dedup_skills(self) -> Dict[str, SkillData]:
-        """同类型技能只留等级最高的一条(清宵等角色接口会返回两条变奏技能)。"""
+        """同类型技能只留等级最高的一条。"""
         best: Dict[str, SkillData] = {}
         for _skill in self.skillList:
             cur = best.get(_skill.skill.type)
