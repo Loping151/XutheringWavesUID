@@ -17,6 +17,7 @@ from gsuid_core.utils.image.convert import convert_img
 from gsuid_core.utils.download_resource.download_file import download
 
 from ..utils.image import compress_to_webp
+from ..utils.pile_offset import delete_rank_offset, move_rank_offset
 from ..wutheringwaves_config import WutheringWavesConfig
 from ..utils.name_convert import easy_id_to_name
 from ..utils.resource.RESOURCE_PATH import CUSTOM_CARD_PATH, CUSTOM_ORB_PATH
@@ -221,6 +222,7 @@ async def delete_custom_card(bot: Bot, ev: Event, char: str, hash_id: str, targe
             try:
                 target_file = files_map[single_hash_id]
                 target_file.unlink()
+                delete_rank_offset(target_file)
                 delete_orb_cache(target_file)
                 card_hash_index.remove(target_type, char_id, target_file)
                 deleted_ids.append(single_hash_id)
@@ -307,6 +309,7 @@ async def compress_all_custom_card(bot: Bot, ev: Event):
                 try:
                     delete_orb_cache(img_path)
                     img_path.rename(new_path)
+                    move_rank_offset(img_path, new_path)
                     if new_path.suffix.lower() == ".webp":
                         update_orb_cache(new_path)
                     rename_count += 1

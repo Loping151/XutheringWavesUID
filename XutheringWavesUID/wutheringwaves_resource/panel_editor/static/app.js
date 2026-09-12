@@ -505,8 +505,9 @@ function renderTile(img, isLandscape) {
       return i;
     })(),
     el("div", { class: "tile__menu" },
+      // --p3/--p2: 磁贴过窄时按重要性省略 (见 style.css @container), 编辑/删除常驻
       el("a", {
-        class: "tile-act tile-act--link",
+        class: "tile-act tile-act--link tile-act--p3",
         href: `${API}/image?type=${state.type}&char_id=${encodeURIComponent(state.selectedCharId)}&name=${encodeURIComponent(img.name)}&trim=1&v=${img.mtime ?? 0}-${img.size ?? 0}`,
         download: img.name,
         title: "下载原图",
@@ -514,7 +515,7 @@ function renderTile(img, isLandscape) {
         onClick: e => e.stopPropagation(),
       }, "⤓"),
       el("button", {
-        class: "tile-act",
+        class: "tile-act tile-act--p3",
         title: "复制原图到剪贴板",
         "aria-label": "复制原图到剪贴板",
         onClick: e => { e.stopPropagation(); copyImage(img); },
@@ -525,6 +526,12 @@ function renderTile(img, isLandscape) {
         "aria-label": "编辑裁切",
         onClick: e => { e.stopPropagation(); editExisting(img); },
       }, "✎"),
+      !isGuest() && state.type === "stamina" && el("button", {
+        class: "tile-act tile-act--p2" + (img.rank_offset ? " tile-act--set" : ""),
+        title: "排行位置偏移",
+        "aria-label": "排行位置偏移",
+        onClick: e => { e.stopPropagation(); openRankOffsetModal(img); },
+      }, "⌖"),
       !isGuest() && el("button", {
         class: "tile-act tile-act--danger",
         title: "删除",
@@ -534,6 +541,9 @@ function renderTile(img, isLandscape) {
     ),
     el("div", { class: "tile__hash" },
       el("span", { text: img.hash_id }),
+      img.rank_offset && el("span", { class: "tile__offset", title: "排行位置偏移",
+        text: `⌖${img.rank_offset.x},${img.rank_offset.y}`
+          + (img.rank_offset.scale && img.rank_offset.scale !== 1 ? ` ×${img.rank_offset.scale}` : "") }),
       el("span", { class: "meta", text: formatBytes(img.size) }),
     ),
   );
@@ -1433,6 +1443,7 @@ async function editExisting(img) {
       size: r.size,
       kind: "edit-existing",
       origin: { char_id: state.selectedCharId, name: img.name },
+      rankOffset: img.rank_offset || null,
     };
     state.editWarnDismissed = false;
     state.mode = "single-crop";
@@ -1625,6 +1636,10 @@ function renderPreview() {
     head.append(buildPreviewAutoToggle());
     head.append(el("button", { class: "btn btn--ghost", title: "刷新预览",
       onClick: () => triggerPreview(true, true) }, "刷新"));
+    if (state.type === "stamina" && state.renderer === "rank" && state.mode === "browse") {
+      head.append(el("button", { class: "btn btn--ghost", title: "调整立绘在排行 title 的位置",
+        onClick: () => openRankOffsetModal(state.selectedImage) }, "排行位置"));
+    }
   }
 
   if (!needPreview) {
@@ -1705,11 +1720,14 @@ function buildPreviewUrl() {
     return `${API}/preview?${p.toString()}`;
   }
   if (state.mode === "single-crop" && state.cropTmp && state.selectedCharId) {
+    // 编辑已有立绘时排行预览沿用其已保存的偏移
+    const off = state.renderer === "rank" ? state.cropTmp.rankOffset : null;
     const p = new URLSearchParams({
       type: state.type,
       char_id: state.selectedCharId,
       token: state.cropTmp.token,
       renderer: state.renderer,
+      ...(off ? { dx: String(off.x), dy: String(off.y), scale: String(off.scale ?? 1) } : {}),
       ...lq,
     });
     return `${API}/preview-tmp?${p.toString()}`;
@@ -2244,6 +2262,272 @@ function formatDate(sec) {
   if (!sec) return "";
   try { return new Date(sec * 1000).toLocaleString("zh-CN", { hour12: false }); }
   catch (_) { return ""; }
+}
+
+// ============================================================
+// 排行位置偏移 — 罗盘取点 + 方向键微调, 存为立绘同名 .json (仅 stamina)
+// ============================================================
+const RKO_RANGES = [200, 400, 800];
+const RKO_STEPS = [1, 5, 20];
+const RKO_LIMIT = 2000;
+const RKO_SCALE = { min: 0.2, max: 3, step: 0.05 };  // 对齐 pile_offset.SCALE_MIN/MAX
+// 排行 title 画布与立绘默认贴图位 (对齐 draw_rank_card.py / preview.py RANK_PILE_PASTE)
+const RANK_CANVAS = { w: 1050, h: 540, titleH: 500 };
+const RANK_PASTE = { x: 450, y: -120 };
+const RANK_LAYER_VER = 1;
+
+function openRankOffsetModal(img) {
+  if (!img || state.type !== "stamina" || !state.selectedCharId || isGuest()) return;
+  const charId = state.selectedCharId;
+  const cur = { x: img.rank_offset?.x || 0, y: img.rank_offset?.y || 0, s: img.rank_offset?.scale || 1 };
+  let range = 400, step = 5, dragging = false, saving = false, closed = false, raf = null;
+  let assets = null;  // {bg, base, mask, text, pile} 一次拉取, 之后全在 canvas 本地合成
+
+  const { body, actions } = openModal(`排行位置 · ${img.hash_id}`);
+
+  const canvas = el("canvas", { width: String(RANK_CANVAS.w), height: String(RANK_CANVAS.h) });
+  const layer = el("canvas", { width: String(RANK_CANVAS.w), height: String(RANK_CANVAS.titleH) });
+  const preview = el("div", { class: "rko__preview is-loading" },
+    canvas, el("div", { class: "rko__spin", text: "加载素材…" }));
+
+  const marker = el("div", { class: "compass__marker" });
+  const compass = el("div", { class: "compass", tabindex: "0", role: "slider", "aria-label": "排行位置偏移" },
+    el("div", { class: "compass__ring compass__ring--outer" }),
+    el("div", { class: "compass__ring" }),
+    el("span", { class: "compass__lbl compass__lbl--n", text: "上" }),
+    el("span", { class: "compass__lbl compass__lbl--s", text: "下" }),
+    el("span", { class: "compass__lbl compass__lbl--w", text: "左" }),
+    el("span", { class: "compass__lbl compass__lbl--e", text: "右" }),
+    marker,
+  );
+  const inX = el("input", { type: "number", class: "rko__num", inputmode: "numeric", step: "1", "aria-label": "X 偏移" });
+  const inY = el("input", { type: "number", class: "rko__num", inputmode: "numeric", step: "1", "aria-label": "Y 偏移" });
+  const rangeSeg = el("div", { class: "seg", role: "group", "aria-label": "罗盘量程" });
+  const stepSeg = el("div", { class: "seg", role: "group", "aria-label": "微调步长" });
+  const scaleRange = el("input", { type: "range", class: "rko__range", "aria-label": "缩放",
+    min: String(RKO_SCALE.min), max: String(RKO_SCALE.max), step: "0.01" });
+  const scaleOut = el("b", { class: "rko__scale-val" });
+
+  const clamp = v => Math.max(-RKO_LIMIT, Math.min(RKO_LIMIT, Math.round(v)));
+  const clampScale = s => Number.isFinite(s)
+    ? Math.max(RKO_SCALE.min, Math.min(RKO_SCALE.max, Math.round(s * 100) / 100)) : 1;
+
+  const render = () => {
+    const nx = Math.max(-1, Math.min(1, cur.x / range));
+    const ny = Math.max(-1, Math.min(1, cur.y / range));
+    marker.style.left = `${50 + nx * 50}%`;
+    marker.style.top = `${50 + ny * 50}%`;
+    compass.setAttribute("aria-valuetext", `x ${cur.x}, y ${cur.y}, ×${cur.s}`);
+    if (document.activeElement !== inX) inX.value = String(cur.x);
+    if (document.activeElement !== inY) inY.value = String(cur.y);
+    rangeSeg.querySelectorAll("button").forEach(b => b.classList.toggle("is-active", +b.dataset.v === range));
+    stepSeg.querySelectorAll("button").forEach(b => b.classList.toggle("is-active", +b.dataset.v === step));
+    scaleRange.value = String(cur.s);
+    const pw = assets?.pile?.naturalWidth, ph = assets?.pile?.naturalHeight;
+    scaleOut.textContent = `×${cur.s.toFixed(2)}` + (pw ? ` · ${Math.round(pw * cur.s)}×${Math.round(ph * cur.s)}` : "");
+  };
+
+  // 与后端 render_rank_preview 同序: base → pile → text, 整层按 char_mask 抠, 再盖到 bg 上
+  const draw = () => {
+    raf = null;
+    if (!assets || closed) return;
+    const lc = layer.getContext("2d");
+    lc.globalCompositeOperation = "source-over";
+    lc.clearRect(0, 0, layer.width, layer.height);
+    lc.drawImage(assets.base, 0, 0);
+    // 缩放以立绘中心为锚, 与后端 place_rank_pile 同算法 (floor 取整)
+    const w = assets.pile.naturalWidth, h = assets.pile.naturalHeight;
+    const nw = Math.max(1, Math.round(w * cur.s)), nh = Math.max(1, Math.round(h * cur.s));
+    lc.imageSmoothingQuality = "high";
+    lc.drawImage(assets.pile,
+      RANK_PASTE.x + cur.x + Math.floor((w - nw) / 2),
+      RANK_PASTE.y + cur.y + Math.floor((h - nh) / 2), nw, nh);
+    lc.drawImage(assets.text, 0, 0);
+    lc.globalCompositeOperation = "destination-in";
+    lc.drawImage(assets.mask, 0, 0);
+    const c = canvas.getContext("2d");
+    c.clearRect(0, 0, canvas.width, canvas.height);
+    c.drawImage(assets.bg, 0, 0);
+    c.drawImage(layer, 0, 0);
+  };
+  const requestDraw = () => { if (raf == null) raf = requestAnimationFrame(draw); };
+  const set = (x, y) => { cur.x = clamp(x); cur.y = clamp(y); render(); requestDraw(); };
+  const setScale = s => { cur.s = clampScale(s); render(); requestDraw(); };
+  const nudge = (dx, dy) => set(cur.x + dx * step, cur.y + dy * step);
+
+  const loadImg = src => new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error(new URL(src, location.href).searchParams.get("kind") || "layer"));
+    i.src = src;
+  });
+  const layerUrl = (kind, extra = {}) =>
+    `${API}/rank-layer?${new URLSearchParams({ kind, ...extra, v: String(RANK_LAYER_VER) })}`;
+  (async () => {
+    try {
+      const [bg, base, mask, text, pile] = await Promise.all([
+        loadImg(layerUrl("bg")),
+        loadImg(layerUrl("base")),
+        loadImg(layerUrl("mask")),
+        loadImg(layerUrl("text", { char_id: charId })),
+        loadImg(layerUrl("pile", { char_id: charId, name: img.name, m: `${img.mtime ?? 0}-${img.size ?? 0}` })),
+      ]);
+      if (closed) return;
+      assets = { bg, base, mask, text, pile };
+      preview.classList.remove("is-loading");
+      render();
+      requestDraw();
+    } catch (e) {
+      if (!closed) toast(`素材加载失败: ${e.message}`, "err");
+    }
+  })();
+
+  // 罗盘: 单指/鼠标 → 中心 = 默认位置, 点到哪偏到哪; 双指 → 捏合缩放 (第二指落下即停止取点, 松开一指不续拖)
+  const pts = new Map();  // pointerId → {x, y}
+  let pinch = null;       // {dist, s}
+  const pinchDist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  const stopDrag = () => { dragging = false; compass.classList.remove("is-dragging"); };
+  const fromPointer = e => {
+    const r = compass.getBoundingClientRect();
+    const nx = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1));
+    const ny = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1));
+    set(nx * range, ny * range);
+  };
+  compass.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { compass.setPointerCapture(e.pointerId); } catch (_) {}
+    compass.focus({ preventScroll: true });
+    if (pts.size >= 2) {
+      stopDrag();
+      pinch = { dist: pinchDist(), s: cur.s };
+      return;
+    }
+    dragging = true;
+    compass.classList.add("is-dragging");
+    fromPointer(e);
+  });
+  compass.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pts.size >= 2) {
+      const d = pinchDist();
+      if (pinch.dist > 0) setScale(pinch.s * d / pinch.dist);
+      return;
+    }
+    if (dragging) fromPointer(e);
+  });
+  const endPointer = e => {
+    if (!pts.delete(e.pointerId)) return;
+    try { compass.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (pts.size < 2) pinch = null;
+    if (pts.size === 0) stopDrag();
+  };
+  compass.addEventListener("pointerup", endPointer);
+  compass.addEventListener("pointercancel", endPointer);
+
+  // PC 滚轮 (含触控板 ctrl+wheel 捏合) 缩放, 罗盘与预览图上都生效
+  const onWheel = e => {
+    e.preventDefault();
+    setScale(cur.s * (e.deltaY < 0 ? 1.05 : 1 / 1.05));
+  };
+  compass.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("wheel", onWheel, { passive: false });
+
+  const onKey = e => {
+    if (e.target && e.target.tagName === "INPUT") return;
+    if (e.key === "+" || e.key === "=") { e.preventDefault(); return setScale(cur.s + RKO_SCALE.step); }
+    if (e.key === "-" || e.key === "_") { e.preventDefault(); return setScale(cur.s - RKO_SCALE.step); }
+    const m = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
+    if (!m) return;
+    e.preventDefault();
+    nudge(m[0], m[1]);
+  };
+  document.addEventListener("keydown", onKey);
+  scaleRange.addEventListener("input", () => setScale(parseFloat(scaleRange.value)));
+
+  const onNum = () => set(parseInt(inX.value, 10) || 0, parseInt(inY.value, 10) || 0);
+  for (const inp of [inX, inY]) {
+    inp.addEventListener("change", onNum);
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
+  }
+  for (const v of RKO_RANGES) {
+    rangeSeg.append(el("button", { type: "button", dataset: { v: String(v) },
+      onClick: () => { range = v; render(); } }, `±${v}`));
+  }
+  for (const v of RKO_STEPS) {
+    stepSeg.append(el("button", { type: "button", dataset: { v: String(v) },
+      onClick: () => { step = v; render(); } }, `${v}px`));
+  }
+  const dpad = el("div", { class: "dpad", role: "group", "aria-label": "方向微调" },
+    el("span"),
+    el("button", { type: "button", "aria-label": "上移", onClick: () => nudge(0, -1) }, "▲"),
+    el("span"),
+    el("button", { type: "button", "aria-label": "左移", onClick: () => nudge(-1, 0) }, "◀"),
+    el("button", { type: "button", class: "dpad__c", title: "重置为默认位置与缩放",
+      onClick: () => { cur.s = 1; set(0, 0); } }, "重置"),
+    el("button", { type: "button", "aria-label": "右移", onClick: () => nudge(1, 0) }, "▶"),
+    el("span"),
+    el("button", { type: "button", "aria-label": "下移", onClick: () => nudge(0, 1) }, "▼"),
+    el("span"),
+  );
+
+  const side = el("div", { class: "rko__side" },
+    el("p", { class: "modal__hint",
+      text: "罗盘中心 = 默认位置，点击或拖动取点；滚轮 / 双指捏合 / 滑杆缩放（以立绘中心为锚）。保存 0,0 ×1.00 即清除偏移文件。" }),
+    compass,
+    el("div", { class: "rko__row" }, el("span", { class: "k", text: "量程" }), rangeSeg),
+    el("div", { class: "rko__row" },
+      el("label", { class: "rko__field" }, el("span", { class: "k", text: "X" }), inX),
+      el("label", { class: "rko__field" }, el("span", { class: "k", text: "Y" }), inY),
+    ),
+    el("div", { class: "rko__row rko__row--scale" },
+      el("span", { class: "k", text: "缩放" }),
+      el("button", { type: "button", class: "rko__step", "aria-label": "缩小",
+        onClick: () => setScale(cur.s - RKO_SCALE.step) }, "−"),
+      scaleRange,
+      el("button", { type: "button", class: "rko__step", "aria-label": "放大",
+        onClick: () => setScale(cur.s + RKO_SCALE.step) }, "+"),
+      scaleOut,
+    ),
+    el("div", { class: "rko__row" }, el("span", { class: "k", text: "步长" }), stepSeg),
+    dpad,
+  );
+  body.append(el("div", { class: "rko" }, preview, side));
+
+  const save = async () => {
+    if (saving) return;
+    saving = true;
+    saveBtn.disabled = true;
+    try {
+      const r = await apiJson("/rank-offset", {
+        type: "stamina", char_id: charId, name: img.name, x: cur.x, y: cur.y, scale: cur.s,
+      });
+      for (const it of state.imagesByCharId[`stamina|${charId}`] || []) {
+        if (it.name === img.name) it.rank_offset = r.rank_offset;
+      }
+      if (state.selectedImage?.name === img.name) state.selectedImage.rank_offset = r.rank_offset;
+      img.rank_offset = r.rank_offset;
+      const o = r.rank_offset;
+      toast(o ? `已保存 ${o.x},${o.y} ×${o.scale}` : "已清除偏移", "ok");
+      closeModal();
+      renderCenterBody();
+      if (state.renderer === "rank") triggerPreview(true, true);
+    } catch (e) {
+      toast(`保存失败: ${e.message}`, "err");
+      saving = false;
+      saveBtn.disabled = false;
+    }
+  };
+  const saveBtn = el("button", { class: "btn btn--primary", onClick: save }, "保存");
+  actions.append(el("button", { class: "btn btn--ghost", onClick: closeModal }, "取消"), saveBtn);
+  _modalOnClose = () => {
+    closed = true;
+    if (raf != null) cancelAnimationFrame(raf);
+    document.removeEventListener("keydown", onKey);
+  };
+
+  render();
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -34,6 +34,7 @@ from ..utils.image import (
     get_role_pile_default,
     get_sonata_effect_image,
 )
+from ..utils.pile_offset import place_rank_pile, read_rank_offset
 from ..utils.api.wwapi import (
     GET_RANK_URL,
     GET_CARDS_RANK_URL,
@@ -442,8 +443,9 @@ async def draw_all_rank_card(bot: Bot, ev: Event, char: str, rank_type: str, pag
     img_temp = Image.new("RGBA", char_mask2.size)
     img_temp.alpha_composite(title, (-300, 0))
     # 人物bg
-    pile, _ = await get_role_pile_default(char_id, custom=True)
-    img_temp.alpha_composite(pile, (600, -120))
+    pile, pile_path = await get_role_pile_default(char_id, custom=True)
+    pile, pos = place_rank_pile(pile, (600, -120), read_rank_offset(pile_path))
+    img_temp.alpha_composite(pile, pos)
 
     img_temp2 = Image.new("RGBA", char_mask2.size)
     img_temp2.paste(img_temp, (0, 0), char_mask2.copy())

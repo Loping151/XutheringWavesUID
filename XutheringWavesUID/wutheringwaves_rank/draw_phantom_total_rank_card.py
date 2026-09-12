@@ -28,6 +28,7 @@ from ..utils.image import (
     get_attribute_effect,
     get_role_pile_default,
 )
+from ..utils.pile_offset import place_rank_pile, read_rank_offset
 from .draw_rank_card import find_role_detail
 from ..utils.api.wwapi import (
     GET_PHANTOM_TOTAL_RANK_URL,
@@ -422,8 +423,9 @@ async def compose_pile_header(
     mask = char_mask.resize((width, char_mask.size[1]))
     img_temp = Image.new("RGBA", mask.size)
     img_temp.alpha_composite(title, (-300, 0))
-    pile, _ = await get_role_pile_default(char_id, custom=True)
-    img_temp.alpha_composite(pile, (width - 700, -120))
+    pile, pile_path = await get_role_pile_default(char_id, custom=True)
+    pile, pos = place_rank_pile(pile, (width - 700, -120), read_rank_offset(pile_path))
+    img_temp.alpha_composite(pile, pos)
 
     img_temp2 = Image.new("RGBA", mask.size)
     img_temp2.paste(img_temp, (0, 0), mask.copy())

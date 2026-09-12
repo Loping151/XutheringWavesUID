@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from io import BytesIO
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, Tuple
 
 from PIL import Image
 
@@ -19,6 +19,7 @@ from gsuid_core.models import Event
 
 from ...utils.image import _force_pile_path
 from ...utils.name_convert import easy_id_to_name
+from ...utils.pile_offset import RankOffset, clamp_offset, place_rank_pile, read_rank_offset
 
 
 def _pil_to_jpeg_bytes(im: Image.Image, quality: int = 90) -> bytes:
@@ -142,27 +143,64 @@ async def render_panel_preview(char_id: str, image_path: Path) -> Optional[bytes
     return None
 
 
-async def render_rank_preview(char_id: str, image_path: Path) -> Optional[bytes]:
-    """渲染角色排行 title 区域的立绘合成预览 (1050x500)."""
+# 排行 title 画布与立绘默认贴图位, 与 draw_rank_card 一致; 前端 app.js RANK_CANVAS / RANK_PASTE 同值。
+RANK_CANVAS = (1050, 540)
+RANK_PILE_PASTE = (450, -120)
+
+
+def _rank_char_name(char_id: str) -> str:
+    from ...utils.resource.constant import SPECIAL_CHAR_NAME
+    return SPECIAL_CHAR_NAME.get(char_id) or easy_id_to_name(char_id, "漂泊者")
+
+
+def _rank_bg() -> Image.Image:
+    from ...utils.image import get_custom_waves_bg
+    return get_custom_waves_bg(*RANK_CANVAS, "bg3")
+
+
+def _rank_base() -> Image.Image:
+    from ...wutheringwaves_rank.draw_rank_card import TITLE_I, logo_img
+    title = TITLE_I.copy()
+    title.alpha_composite(logo_img.copy(), dest=(50, 65))
+    return title
+
+
+def _rank_mask() -> Image.Image:
+    from ...wutheringwaves_rank.draw_rank_card import char_mask
+    return char_mask
+
+
+def _draw_rank_text(title: Image.Image, char_name: str) -> None:
     from PIL import ImageDraw
-    from ...utils.image import (
-        SPECIAL_GOLD,
-        GREY,
-        get_custom_waves_bg,
-        get_role_pile_default,
-    )
+    from ...utils.image import GREY, SPECIAL_GOLD
     from ...utils.fonts.waves_fonts import (
         waves_font_16,
         waves_font_20,
         waves_font_30,
         waves_font_44,
     )
-    from ...wutheringwaves_rank.draw_rank_card import TITLE_I, char_mask, logo_img
-    from ...utils.resource.constant import SPECIAL_CHAR_NAME
 
-    char_name = easy_id_to_name(char_id, "漂泊者")
-    if char_id in SPECIAL_CHAR_NAME:
-        char_name = SPECIAL_CHAR_NAME[char_id]
+    d = ImageDraw.Draw(title)
+    d.text((200, 335), "12345", "white", waves_font_44, "mm")
+    d.text((200, 375), "平均声骸分数", SPECIAL_GOLD, waves_font_20, "mm")
+    d.text((390, 335), "678,910", "white", waves_font_44, "mm")
+    d.text((390, 375), "平均伤害", SPECIAL_GOLD, waves_font_20, "mm")
+    d.text((140, 265), f"{char_name}伤害群排行", "black", waves_font_30, "lm")
+    d.text((20, 420), "入榜条件", SPECIAL_GOLD, waves_font_16, "lm")
+    d.text((90, 420), "（预览, 实际数据按群内查询）", GREY, waves_font_16, "lm")
+
+
+def _png_bytes(im: Image.Image) -> bytes:
+    buf = BytesIO()
+    im.save(buf, "PNG", optimize=True)
+    return buf.getvalue()
+
+
+async def render_rank_preview(
+    char_id: str, image_path: Path, offset: Optional[RankOffset] = None,
+) -> Optional[bytes]:
+    """渲染角色排行 title 区域的立绘合成预览 (1050x500)。offset 缺省读图片同名 sidecar。"""
+    from ...utils.image import get_role_pile_default
 
     token = _force_pile_path.set(image_path)
     try:
@@ -170,24 +208,45 @@ async def render_rank_preview(char_id: str, image_path: Path) -> Optional[bytes]
     finally:
         _force_pile_path.reset(token)
 
-    card_img = get_custom_waves_bg(1050, 540, "bg3")
-    title = TITLE_I.copy()
-    title_draw = ImageDraw.Draw(title)
+    off = clamp_offset(*offset) if offset is not None else read_rank_offset(image_path)
+    card_img = _rank_bg()
+    title = _rank_base()
+    pile, pos = place_rank_pile(pile, RANK_PILE_PASTE, off)
+    title.paste(pile, pos, pile)
+    _draw_rank_text(title, _rank_char_name(char_id))
 
-    title.alpha_composite(logo_img.copy(), dest=(50, 65))
-    title.paste(pile, (450, -120), pile)
-    title_draw.text((200, 335), "12345", "white", waves_font_44, "mm")
-    title_draw.text((200, 375), "平均声骸分数", SPECIAL_GOLD, waves_font_20, "mm")
-    title_draw.text((390, 335), "678,910", "white", waves_font_44, "mm")
-    title_draw.text((390, 375), "平均伤害", SPECIAL_GOLD, waves_font_20, "mm")
-    title_draw.text((140, 265), f"{char_name}伤害群排行", "black", waves_font_30, "lm")
-    title_draw.text((20, 420), "入榜条件", SPECIAL_GOLD, waves_font_16, "lm")
-    title_draw.text((90, 420), "（预览, 实际数据按群内查询）", GREY, waves_font_16, "lm")
-
-    img_temp = Image.new("RGBA", char_mask.size)
-    img_temp.paste(title, (0, 0), char_mask.copy())
+    mask = _rank_mask()
+    img_temp = Image.new("RGBA", mask.size)
+    img_temp.paste(title, (0, 0), mask.copy())
     card_img.alpha_composite(img_temp, (0, 0))
     return _pil_to_jpeg_bytes(card_img)
+
+
+def rank_layer_bytes(kind: str, char_id: str = "", pile_path: Optional[Path] = None) -> Tuple[bytes, str]:
+    """前端 canvas 拼排行预览的分层素材 → (bytes, media_type)。
+    bg: 背景 jpg; base: title+logo png; mask: 仅 alpha 的 png (char_mask 的 A 通道, 供 destination-in);
+    text: 透明底文字 png; pile: 原尺寸带 alpha 的 webp。
+    """
+    if kind == "bg":
+        return _pil_to_jpeg_bytes(_rank_bg(), quality=85), "image/jpeg"
+    if kind == "base":
+        return _png_bytes(_rank_base()), "image/png"
+    if kind == "mask":
+        src = _rank_mask()
+        mask = Image.new("RGBA", src.size, (0, 0, 0, 0))
+        mask.putalpha(src.getchannel("A") if "A" in src.getbands() else src.convert("L"))
+        return _png_bytes(mask), "image/png"
+    if kind == "text":
+        text = Image.new("RGBA", _rank_mask().size, (0, 0, 0, 0))
+        _draw_rank_text(text, _rank_char_name(char_id))
+        return _png_bytes(text), "image/png"
+    if kind == "pile" and pile_path is not None:
+        with Image.open(pile_path) as im:
+            pile = im.convert("RGBA")
+        buf = BytesIO()
+        pile.save(buf, "WEBP", quality=85, method=4)
+        return buf.getvalue(), "image/webp"
+    raise ValueError(f"unknown layer {kind!r}")
 
 
 async def render_mr_preview(

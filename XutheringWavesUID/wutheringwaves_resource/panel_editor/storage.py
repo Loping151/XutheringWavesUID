@@ -16,6 +16,7 @@ from gsuid_core.logger import logger
 
 from ...utils import name_convert
 from ...utils.name_convert import easy_id_to_name
+from ...utils.pile_offset import has_rank_offset, offset_dict, read_rank_offset
 from ...utils.resource.RESOURCE_PATH import (
     BAKE_PATH,
     CUSTOM_DIRS as TYPE_PATHS,
@@ -162,6 +163,10 @@ def list_folders(t: str) -> List[dict]:
     return sorted(seen.values(), key=lambda x: x["char_id"])
 
 
+def rank_offset_of(p: Path) -> Optional[dict]:
+    return offset_dict(read_rank_offset(p)) if has_rank_offset(p) else None
+
+
 def list_images(t: str, char_id: str) -> List[dict]:
     folder = char_dir_for(t, char_id)
     items = []
@@ -173,6 +178,7 @@ def list_images(t: str, char_id: str) -> List[dict]:
                 "hash_id": hash_id_for(p.name),
                 "size": info.st_size,
                 "mtime": int(info.st_mtime),
+                "rank_offset": rank_offset_of(p) if t == "stamina" else None,
             }
         )
     return items

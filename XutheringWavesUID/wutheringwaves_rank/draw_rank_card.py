@@ -36,6 +36,7 @@ from ..utils.image import (
     get_sonata_effect_image,
 )
 from ..utils.api.model import WeaponData, RoleDetailData
+from ..utils.pile_offset import place_rank_pile, read_rank_offset
 from ..utils.calculate import (
     get_calc_map,
     calc_phantom_score,
@@ -510,8 +511,9 @@ async def draw_rank_img(
     title.alpha_composite(logo_img.copy(), dest=(50, 65))
 
     # 人物bg
-    pile, _ = await get_role_pile_default(char_id, custom=True)
-    title.paste(pile, (450, -120), pile)
+    pile, pile_path = await get_role_pile_default(char_id, custom=True)
+    pile, pos = place_rank_pile(pile, (450, -120), read_rank_offset(pile_path))
+    title.paste(pile, pos, pile)
     title_draw.text((200, 335), f"{avg_score}", "white", waves_font_44, "mm")
     title_draw.text((200, 375), "平均声骸分数", SPECIAL_GOLD, waves_font_20, "mm")
 

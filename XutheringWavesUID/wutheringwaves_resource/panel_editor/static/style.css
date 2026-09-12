@@ -1773,3 +1773,180 @@ input[type="search"] {
   border-radius: var(--r-2);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
+
+/* ---------- 磁贴按钮按重要性省略: 窄磁贴先藏下载/复制, 再藏排行位置; 编辑/删除常驻 ---------- */
+.tile { container-type: inline-size; }
+@container (max-width: 170px) { .tile-act--p3 { display: none; } }
+@container (max-width: 112px) { .tile-act--p2 { display: none; } }
+
+/* ---------- 排行位置偏移 (罗盘) ---------- */
+.tile-act--set { color: var(--type-stamina); border-color: rgba(251, 191, 36, 0.45); }
+.tile__offset { color: var(--type-stamina); }
+
+.rko {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+.rko__preview {
+  position: relative;
+  min-height: 120px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-2);
+  overflow: hidden;
+}
+.rko__preview canvas { display: block; width: 100%; height: auto; transition: opacity var(--t-base); }
+.rko__preview.is-loading canvas { opacity: 0.3; }
+.rko__spin {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--fg-2);
+}
+.rko__preview.is-loading .rko__spin { display: flex; }
+.rko__side { display: flex; flex-direction: column; gap: 12px; }
+.rko__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rko__row .k {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--fg-3);
+}
+.rko__field { display: inline-flex; align-items: center; gap: 6px; }
+.rko__num {
+  width: 84px;
+  padding: 7px 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  color: var(--fg-0);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.rko__num:focus { outline: none; border-color: var(--accent); }
+.rko__row--scale { flex-wrap: nowrap; }
+.rko__range { flex: 1; min-width: 60px; accent-color: var(--accent); cursor: pointer; }
+.rko__step {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  font-size: 16px;
+  touch-action: manipulation;
+}
+.rko__step:hover { background: var(--bg-3); color: var(--fg-0); }
+.rko__step:active { background: var(--accent-soft); color: var(--accent); }
+.rko__scale-val {
+  flex: none;
+  min-width: 112px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--fg-1);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.compass {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: radial-gradient(circle, var(--bg-3) 0, var(--bg-2) 62%, var(--bg-1) 100%);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+  outline: none;
+}
+.compass:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.compass::before, .compass::after {
+  content: "";
+  position: absolute;
+  background: var(--line-3);
+  pointer-events: none;
+}
+.compass::before { left: 50%; top: 5%; bottom: 5%; width: 1px; }
+.compass::after { top: 50%; left: 5%; right: 5%; height: 1px; }
+.compass__ring {
+  position: absolute;
+  inset: 25%;
+  border-radius: 50%;
+  border: 1px dashed var(--line-2);
+  pointer-events: none;
+}
+.compass__ring--outer { inset: 0; border-style: solid; }
+.compass__lbl {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--fg-3);
+  pointer-events: none;
+}
+.compass__lbl--n { top: 8px; left: 50%; transform: translateX(-50%); }
+.compass__lbl--s { bottom: 8px; left: 50%; transform: translateX(-50%); }
+.compass__lbl--w { left: 10px; top: 50%; transform: translateY(-50%); }
+.compass__lbl--e { right: 10px; top: 50%; transform: translateY(-50%); }
+.compass__marker {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft), 0 0 14px var(--accent-glow);
+  pointer-events: none;
+  transition: left 60ms linear, top 60ms linear;
+}
+.compass.is-dragging .compass__marker { transition: none; }
+
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(3, 44px);
+  gap: 4px;
+  justify-content: center;
+}
+.dpad button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  font-size: 14px;
+  touch-action: manipulation;
+}
+.dpad button:hover { background: var(--bg-3); color: var(--fg-0); }
+.dpad button:active { background: var(--accent-soft); color: var(--accent); }
+.dpad__c { font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); }
+
+@media (max-width: 720px) {
+  .rko { grid-template-columns: 1fr; }
+  .rko__side { align-items: stretch; }
+  .compass { max-width: min(78vw, 300px); }
+  .dpad { grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); }
+  .rko__step { width: 44px; height: 44px; }
+  .rko__range { height: 32px; }
+  .rko__scale-val { min-width: 0; }
+}

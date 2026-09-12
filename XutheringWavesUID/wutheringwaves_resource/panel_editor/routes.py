@@ -29,6 +29,13 @@ from .auth import (
     require_same_origin,
 )
 from . import storage as st
+from ...utils.pile_offset import (
+    SCALE_MAX,
+    SCALE_MIN,
+    delete_rank_offset,
+    offset_dict,
+    write_rank_offset,
+)
 
 
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -642,8 +649,58 @@ async def api_delete(payload: dict, _: None = Depends(require_auth)):
         raise HTTPException(404, "image not found")
     _try_delete_orb_cache(target)
     target.unlink()
+    delete_rank_offset(target)
     _index_remove(target_type, char_id, target)
     return {"ok": True}
+
+
+# ------------------------- 排行位置偏移 (stamina 立绘同名 .json) -------------------------
+
+
+@app.post("/waves/panel-edit/api/rank-offset")
+async def api_rank_offset(payload: dict, _: None = Depends(require_auth)):
+    """写入体力立绘在排行 title 的 xy 偏移 + 缩放; 全默认 (0,0,1.0) 即清除 sidecar。"""
+    if payload.get("type") != "stamina":
+        raise HTTPException(400, "rank offset only applies to stamina")
+    target = st.safe_target_image("stamina", payload.get("char_id") or "", payload.get("name") or "")
+    if target is None or not target.is_file():
+        raise HTTPException(404, "image not found")
+    try:
+        x, y = int(payload["x"]), int(payload["y"])
+        scale = float(payload.get("scale", 1.0))
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "x/y integer and scale number required")
+    if not (SCALE_MIN <= scale <= SCALE_MAX):
+        raise HTTPException(400, f"scale out of range ({SCALE_MIN} - {SCALE_MAX})")
+    return {"ok": True, "rank_offset": offset_dict(write_rank_offset(target, x, y, scale))}
+
+
+_RANK_LAYERS = {"bg", "base", "mask", "text", "pile"}
+
+
+@app.get("/waves/panel-edit/api/rank-layer")
+async def api_rank_layer(
+    kind: str, char_id: str = "", name: str = "", _: None = Depends(require_auth),
+):
+    """前端 canvas 拼排行预览的分层素材: bg/base/mask 全局静态, text 按角色, pile 按图 (带 alpha 的 webp)。
+    纯素材输出, 不走预览限速; 调偏移时全在浏览器本地合成。"""
+    if kind not in _RANK_LAYERS:
+        raise HTTPException(400, "invalid kind")
+    from .preview import rank_layer_bytes
+
+    pile: Optional[Path] = None
+    if kind == "pile":
+        pile = st.safe_target_image("stamina", char_id, name)
+        if pile is None or not pile.is_file():
+            raise HTTPException(404, "image not found")
+    elif kind == "text" and not st.is_safe_char_id(char_id):
+        raise HTTPException(400, "invalid char_id")
+    try:
+        data, media_type = await asyncio.to_thread(rank_layer_bytes, kind, char_id, pile)
+    except Exception as e:
+        logger.exception(f"[鸣潮·面板编辑] 排行素材生成失败 {kind}: {e}")
+        raise HTTPException(500, f"layer failed: {e}")
+    return Response(data, media_type=media_type, headers={"Cache-Control": "private, max-age=86400"})
 
 
 # ------------------------- 全库查重 -------------------------
@@ -767,6 +824,10 @@ async def api_pending_delete(payload: dict, _: None = Depends(require_auth)):
 # ------------------------- 预览 -------------------------
 
 
+def _offset_arg(dx: Optional[int], dy: Optional[int], scale: Optional[float]):
+    return (dx, dy, 1.0 if scale is None else scale) if dx is not None and dy is not None else None
+
+
 @app.get("/waves/panel-edit/api/preview")
 async def api_preview(
     request: Request,
@@ -775,9 +836,13 @@ async def api_preview(
     name: str,
     renderer: str = "html",
     lq: int = 0,
+    dx: Optional[int] = None,
+    dy: Optional[int] = None,
+    scale: Optional[float] = None,
     _: None = Depends(require_auth),
 ):
     """type=card -> 角色面板预览; type=bg/stamina -> MR 预览。
+    renderer=rank 时 dx/dy 同时给出则覆盖 sidecar 偏移 (scale 缺省 1.0)。
     访客不渲染 (走 require_auth), 避免占用 Playwright/CPU 资源。
     """
     check_preview_rate(request)
@@ -791,7 +856,7 @@ async def api_preview(
         if type == "card":
             data = await render_panel_preview(char_id, target)
         elif type == "stamina" and renderer == "rank":
-            data = await render_rank_preview(char_id, target)
+            data = await render_rank_preview(char_id, target, _offset_arg(dx, dy, scale))
         else:
             use_html = renderer != "pil"
             role_kind = "bg" if type == "bg" else "stamina"
@@ -816,9 +881,12 @@ async def api_preview_tmp(
     token: str,
     renderer: str = "html",
     lq: int = 0,
+    dx: Optional[int] = None,
+    dy: Optional[int] = None,
+    scale: Optional[float] = None,
     _: None = Depends(require_auth),
 ):
-    """裁剪/上传过程中, 用 tmp 图渲染预览。"""
+    """裁剪/上传过程中, 用 tmp 图渲染预览。tmp 无 sidecar, 排行偏移只认 dx/dy/scale。"""
     check_preview_rate(request)
     from .preview import render_panel_preview, render_mr_preview, render_rank_preview
 
@@ -835,7 +903,7 @@ async def api_preview_tmp(
         if type == "card":
             data = await render_panel_preview(char_id, current)
         elif type == "stamina" and renderer == "rank":
-            data = await render_rank_preview(char_id, current)
+            data = await render_rank_preview(char_id, current, _offset_arg(dx, dy, scale))
         else:
             use_html = renderer != "pil"
             role_kind = "bg" if type == "bg" else "stamina"
