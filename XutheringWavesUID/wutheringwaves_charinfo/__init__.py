@@ -319,7 +319,11 @@ async def _forward_upload_to_master(bot: Bot, ev: Event):
         get_image,
         _fetch_image_bytes,
     )
-    from .upload_card import check_image_dimensions, collect_blocked_duplicates
+    from .upload_card import (
+        check_image_dimensions,
+        collect_blocked_duplicates,
+        collect_pending_duplicates,
+    )
 
     images = await get_image(ev)
     if not images:
@@ -368,6 +372,11 @@ async def _forward_upload_to_master(bot: Bot, ev: Event):
             return await bot.send("[鸣潮] 上传图片下载失败，请稍后重试")
 
         block_msgs, blocked_paths = collect_blocked_duplicates(temp_dir, new_images)
+        pending_msgs, pending_blocked = collect_pending_duplicates(
+            target_type, char_id, new_images, skip=blocked_paths
+        )
+        block_msgs += pending_msgs
+        blocked_paths |= pending_blocked
         if blocked_paths:
             # 重复的清掉，不重复的继续转发
             for p in blocked_paths:
