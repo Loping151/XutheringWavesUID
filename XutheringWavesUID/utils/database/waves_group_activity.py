@@ -1,11 +1,13 @@
 from contextvars import ContextVar
-from typing import Any, Dict, Optional, Set, Type, TypeVar
+from typing import Any, Dict, List, Optional, Set, Type, TypeVar
 
 from sqlmodel import Field, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import and_
 
-from gsuid_core.utils.database.base_models import BaseBotIDModel, with_session
+from gsuid_core.utils.database.base_models import BaseBotIDModel
+
+from ._session import with_read_session, with_session
 
 # 公告推送期间置位, 群活跃 hook 据此跳过推送自身
 ANN_PUSH_GUARD: ContextVar[bool] = ContextVar("waves_ann_push_guard", default=False)
@@ -26,6 +28,26 @@ class WavesGroupActivity(BaseBotIDModel, table=True):
     @classmethod
     @with_session
     async def update_group_activity(
+        cls: Type[T_WavesGroupActivity],
+        session: AsyncSession,
+        group_id: str,
+        bot_id: str,
+        bot_self_id: str,
+    ) -> bool:
+        return await cls._touch(session, group_id, bot_id, bot_self_id)
+
+    @classmethod
+    @with_session
+    async def update_many(
+        cls: Type[T_WavesGroupActivity],
+        session: AsyncSession,
+        rows: List[tuple[str, str, str]],
+    ) -> None:
+        for group_id, bot_id, bot_self_id in rows:
+            await cls._touch(session, group_id, bot_id, bot_self_id)
+
+    @classmethod
+    async def _touch(
         cls: Type[T_WavesGroupActivity],
         session: AsyncSession,
         group_id: str,
@@ -62,7 +84,7 @@ class WavesGroupActivity(BaseBotIDModel, table=True):
         return True
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_active_group_ids(
         cls: Type[T_WavesGroupActivity],
         session: AsyncSession,

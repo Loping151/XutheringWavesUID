@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import and_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from gsuid_core.utils.database.base_models import BaseModel, with_session
+from gsuid_core.utils.database.base_models import BaseModel
 from gsuid_core.utils.database.models import Subscribe
+
+from ._session import with_read_session, with_session
 
 T_WavesSubscribe = TypeVar("T_WavesSubscribe", bound="WavesSubscribe")
 
@@ -27,10 +29,33 @@ class WavesSubscribe(BaseModel, table=True):
     updated_at: Optional[int] = Field(default=None, title="最后更新时间")
 
     @classmethod
-    @with_session
-    async def check_and_update_bot(
+    @with_read_session
+    async def _needs_update(
         cls: Type[T_WavesSubscribe],
         session: AsyncSession,
+        group_id: str,
+        bot_id: str,
+        bot_self_id: str,
+    ) -> bool:
+        sql = select(cls).where(cls.group_id == group_id)
+        record = (await session.execute(sql)).scalars().first()
+        if record is None or (record.bot_id, record.bot_self_id) != (bot_id, bot_self_id):
+            return True
+        stmt = (
+            select(Subscribe)
+            .where(
+                and_(
+                    col(Subscribe.group_id) == group_id,
+                    col(Subscribe.bot_self_id) != bot_self_id,
+                )
+            )
+            .limit(1)
+        )
+        return (await session.execute(stmt)).first() is not None
+
+    @classmethod
+    async def check_and_update_bot(
+        cls: Type[T_WavesSubscribe],
         group_id: str,
         bot_id: str,
         bot_self_id: str,
@@ -39,6 +64,19 @@ class WavesSubscribe(BaseModel, table=True):
 
         只要 Subscribe 表中该群的 bot_self_id 与当前不一致就更新
         """
+        if not await cls._needs_update(group_id, bot_id, bot_self_id):
+            return False
+        return await cls._apply_bot_change(group_id, bot_id, bot_self_id)
+
+    @classmethod
+    @with_session
+    async def _apply_bot_change(
+        cls: Type[T_WavesSubscribe],
+        session: AsyncSession,
+        group_id: str,
+        bot_id: str,
+        bot_self_id: str,
+    ) -> bool:
         import time
         from gsuid_core.logger import logger
 
@@ -84,7 +122,7 @@ class WavesSubscribe(BaseModel, table=True):
         return changed
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_group_bot(
         cls: Type[T_WavesSubscribe],
         session: AsyncSession,

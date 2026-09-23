@@ -1,11 +1,12 @@
-from typing import Any, Dict, Optional, Set, Type, TypeVar
+from typing import Any, Dict, List, Optional, Set, Type, TypeVar
 
 from sqlmodel import Field, select
-from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import and_, or_
 
-from gsuid_core.utils.database.base_models import BaseBotIDModel, with_session
+from gsuid_core.utils.database.base_models import BaseBotIDModel
+
+from ._session import with_read_session, with_session
 
 T_WavesUserActivity = TypeVar("T_WavesUserActivity", bound="WavesUserActivity")
 
@@ -27,6 +28,26 @@ class WavesUserActivity(BaseBotIDModel, table=True):
     @classmethod
     @with_session
     async def update_user_activity(
+        cls: Type[T_WavesUserActivity],
+        session: AsyncSession,
+        user_id: str,
+        bot_id: str,
+        bot_self_id: str,
+    ) -> bool:
+        return await cls._touch(session, user_id, bot_id, bot_self_id)
+
+    @classmethod
+    @with_session
+    async def update_many(
+        cls: Type[T_WavesUserActivity],
+        session: AsyncSession,
+        rows: List[tuple[str, str, str]],
+    ) -> None:
+        for user_id, bot_id, bot_self_id in rows:
+            await cls._touch(session, user_id, bot_id, bot_self_id)
+
+    @classmethod
+    async def _touch(
         cls: Type[T_WavesUserActivity],
         session: AsyncSession,
         user_id: str,
@@ -92,7 +113,7 @@ class WavesUserActivity(BaseBotIDModel, table=True):
         return True
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_user_last_active_time(
         cls: Type[T_WavesUserActivity],
         session: AsyncSession,
@@ -134,7 +155,7 @@ class WavesUserActivity(BaseBotIDModel, table=True):
         return legacy.last_active_time if legacy else None
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_active_user_count(
         cls: Type[T_WavesUserActivity],
         session: AsyncSession,
@@ -165,7 +186,7 @@ class WavesUserActivity(BaseBotIDModel, table=True):
         return len(data)
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_active_user_ids(
         cls: Type[T_WavesUserActivity],
         session: AsyncSession,
@@ -185,7 +206,7 @@ class WavesUserActivity(BaseBotIDModel, table=True):
         return {uid for uid in result.scalars().all() if uid}
 
     @classmethod
-    @with_session
+    @with_read_session
     async def is_user_active(
         cls: Type[T_WavesUserActivity],
         session: AsyncSession,

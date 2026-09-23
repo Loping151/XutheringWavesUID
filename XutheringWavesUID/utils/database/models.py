@@ -15,11 +15,9 @@ from gsuid_core.utils.database.base_models import (
     BaseModel,
     with_session,
 )
-from gsuid_core.utils.database.models import Subscribe
 
 from .waves_subscribe import WavesSubscribe
 from .waves_user_activity import WavesUserActivity
-from .waves_group_activity import WavesGroupActivity
 from .waves_user_sdk import WavesUserSdk
 from .waves_gacha_cloud import WavesGachaCloud
 
@@ -504,6 +502,26 @@ class WavesUser(User, table=True):
         )
         result = await session.execute(sql)
         return result.rowcount
+
+    @classmethod
+    @with_session
+    async def update_avatar_many(
+        cls: Type[T_WavesUser],
+        session: AsyncSession,
+        rows: List[tuple[str, str, str]],
+    ) -> None:
+        for user_id, bot_id, avatar_url in rows:
+            await session.execute(
+                update(cls)
+                .where(
+                    and_(
+                        col(cls.user_id) == user_id,
+                        col(cls.bot_id) == bot_id,
+                        or_(col(cls.avatar_url).is_(None), col(cls.avatar_url) != avatar_url),
+                    )
+                )
+                .values(avatar_url=avatar_url)
+            )
 
     @classmethod
     @with_session

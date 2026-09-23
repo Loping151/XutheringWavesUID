@@ -39,40 +39,52 @@ from .utils.database.waves_group_activity import WavesGroupActivity, ANN_PUSH_GU
 from .utils.database.waves_user_sdk import WavesUserSdk  # noqa: F401
 from .utils.plugin_checker import is_from_waves_plugin
 
-# ===== 活跃度批量写入缓冲 =====
-# 内存中暂存活跃度记录，定时批量写入，避免高并发写入损坏数据库
-# value: (user_id, bot_id, bot_self_id, sender_avatar)
-_activity_buffer: dict[str, tuple[str, str, str, str]] = {}
-# 群活跃度缓冲 value: (group_id, bot_id, bot_self_id)
+# ===== 活跃度 / 头像 / Bot 绑定批量写入缓冲 =====
+# 内存中暂存，定时批量写入，hook 本身不碰数据库
+_activity_buffer: dict[str, tuple[str, str, str]] = {}
+_avatar_buffer: dict[str, tuple[str, str, str]] = {}
 _group_activity_buffer: dict[str, tuple[str, str, str]] = {}
+_bot_buffer: dict[str, tuple[str, str]] = {}
+_bot_cache: dict[str, tuple[str, str]] = {}
 _FLUSH_INTERVAL = 60  # 秒
+_FLUSH_CHUNK = 200
+
+
+async def _flush_rows(buffer: dict, writer, label: str):
+    if not buffer:
+        return
+    items = list(buffer.items())
+    buffer.clear()
+    for start in range(0, len(items), _FLUSH_CHUNK):
+        chunk = items[start : start + _FLUSH_CHUNK]
+        try:
+            await writer([row for _, row in chunk])
+        except Exception as e:
+            for key, row in chunk:
+                buffer.setdefault(key, row)
+            logger.warning(f"[鸣潮·插件] {label}写入失败, 下轮重试: {e}")
+
+
+async def _flush_bot_buffer():
+    if not _bot_buffer:
+        return
+    items = list(_bot_buffer.items())
+    _bot_buffer.clear()
+    for group_id, (bot_id, bot_self_id) in items:
+        try:
+            await WavesSubscribe.check_and_update_bot(group_id, bot_id, bot_self_id)
+            _bot_cache[group_id] = (bot_id, bot_self_id)
+        except Exception as e:
+            _bot_buffer.setdefault(group_id, (bot_id, bot_self_id))
+            logger.warning(f"[鸣潮·插件] Bot检测失败, 下轮重试: {e}")
 
 
 async def _flush_activity_buffer():
-    """将缓冲区中的活跃度记录批量写入数据库"""
-    if _activity_buffer:
-        pending = dict(_activity_buffer)
-        _activity_buffer.clear()
-
-        for key, (user_id, bot_id, bot_self_id, sender_avatar) in pending.items():
-            try:
-                await WavesUserActivity.update_user_activity(user_id, bot_id, bot_self_id)
-            except Exception as e:
-                logger.warning(f"[鸣潮·插件] 批量活跃度写入失败: {e}")
-            if sender_avatar:
-                try:
-                    await WavesUser.update_avatar_url(user_id, bot_id, sender_avatar)
-                except Exception as e:
-                    logger.warning(f"[鸣潮·插件] 头像更新失败: {e}")
-
-    if _group_activity_buffer:
-        group_pending = dict(_group_activity_buffer)
-        _group_activity_buffer.clear()
-        for key, (group_id, bot_id, bot_self_id) in group_pending.items():
-            try:
-                await WavesGroupActivity.update_group_activity(group_id, bot_id, bot_self_id)
-            except Exception as e:
-                logger.warning(f"[鸣潮·插件] 批量群活跃度写入失败: {e}")
+    """将缓冲区中的记录批量写入数据库"""
+    await _flush_rows(_activity_buffer, WavesUserActivity.update_many, "活跃度")
+    await _flush_rows(_avatar_buffer, WavesUser.update_avatar_many, "头像")
+    await _flush_rows(_group_activity_buffer, WavesGroupActivity.update_many, "群活跃度")
+    await _flush_bot_buffer()
 
 
 _shutdown_event = asyncio.Event()
@@ -114,11 +126,13 @@ async def waves_bot_check_hook(group_id: str, bot_id: str, bot_self_id: str):
     """XutheringWavesUID 的 bot 检测 hook"""
     logger.debug(f"[鸣潮·Hook] bot_check_hook 被调用: group_id={group_id}, bot_id={bot_id}, bot_self_id={bot_self_id}")
 
-    if group_id:
-        try:
-            await WavesSubscribe.check_and_update_bot(group_id, bot_id, bot_self_id)
-        except Exception as e:
-            logger.warning(f"[鸣潮·插件] Bot检测失败: {e}")
+    if not group_id:
+        return
+    bot = (bot_id, bot_self_id)
+    if _bot_cache.get(group_id) == bot:
+        _bot_buffer.pop(group_id, None)
+    else:
+        _bot_buffer[group_id] = bot
 
 # 注册用户活跃度 hook
 async def waves_user_activity_hook(
@@ -140,13 +154,9 @@ async def waves_user_activity_hook(
     if not user_id:
         return
 
-    key = f"{user_id}:{bot_id}:{bot_self_id}"
-    # 同一刷写周期内空头像不应覆盖已缓存的非空值
-    if not sender_avatar:
-        existing = _activity_buffer.get(key)
-        if existing:
-            sender_avatar = existing[3]
-    _activity_buffer[key] = (user_id, bot_id, bot_self_id, sender_avatar)
+    _activity_buffer[f"{user_id}:{bot_id}:{bot_self_id}"] = (user_id, bot_id, bot_self_id)
+    if sender_avatar:
+        _avatar_buffer[f"{user_id}:{bot_id}"] = (user_id, bot_id, sender_avatar)
 
 # 注册群活跃度 hook
 async def waves_group_activity_hook(group_id: str, bot_id: str, bot_self_id: str):
