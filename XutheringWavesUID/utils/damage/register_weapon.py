@@ -5,6 +5,7 @@ from .utils import (
     CHAR_ATTR_SIERRA,
     CHAR_ATTR_CELESTIAL,
     CHAR_ATTR_FREEZING,
+    CHAR_ATTR_VOID,
     Spectro_Frazzle_Role_Ids,
     Glacio_Chafe_Role_Ids,
     Fusion_Burst_Role_Ids,
@@ -13,6 +14,8 @@ from .utils import (
     Hack_Shifting_Role_Ids,
     Havoc_Bane_Role_Ids,
     Abnormal_Role_Ids,
+    Electro_Flare_Role_Ids,
+    Unison_Role_Ids,
     temp_atk,
     temp_def,
     temp_life,
@@ -951,6 +954,44 @@ class Weapon_21020106(WeaponAbstract):
         title = self.get_title()
         msg = f"满层时，气动伤害无视目标{dmg}的防御"
         attr.add_defense_ignore(calc_percent_expression(dmg), title, msg)
+
+
+class Weapon_21020107(WeaponAbstract):
+    id = 21020107
+    type = 2
+    name = "沉冥"
+
+    # 攻击提升{0}。获得同奏时，导电伤害提升{1}，持续{3}秒。
+    # 获得同奏时，队伍中角色获得【羁念】效果并移除【怅念】，导电伤害加成提升{2}，持续{3}秒。同名效果之间不可叠加。
+    # 自身的协奏能量消耗时，获得【怅念】效果并移除队伍中角色的【羁念】，自身导电伤害额外提升{4}，持续{5}秒，
+    # 切换至其他角色时，该效果提前结束。
+    def cast_unison(self, attr: DamageAttribute, isGroup: bool = False):
+        """获得同奏 (持有者)"""
+        if attr.char_attr != CHAR_ATTR_VOID:
+            return
+        dmg = f"{self.param(1)}"
+        title = self.get_title()
+        msg = f"获得同奏时，导电伤害提升{dmg}"
+        attr.add_dmg_bonus(calc_percent_expression(dmg), title, msg)
+
+    def cast_concerto(self, attr: DamageAttribute, isGroup: bool = False):
+        """消耗协奏能量 (持有者)"""
+        if attr.char_attr == CHAR_ATTR_VOID:
+            dmg = f"{self.param(4)}"
+            title = self.get_title()
+            msg = f"协奏能量消耗时获得【怅念】，自身导电伤害额外提升{dmg}"
+            attr.add_dmg_bonus(calc_percent_expression(dmg), title, msg)
+        # 【怅念】移除【羁念】, 不再走 env_unison
+        return True
+
+    def env_unison(self, attr: DamageAttribute, isGroup: bool = False):
+        """队伍获得同奏: 【羁念】, 由锁暝 _do_buff 驱动到队友"""
+        if attr.char_attr != CHAR_ATTR_VOID:
+            return
+        dmg = f"{self.param(2)}"
+        title = self.get_title()
+        msg = f"获得同奏时，队伍中角色获得【羁念】，导电伤害加成提升{dmg}"
+        attr.add_dmg_bonus(calc_percent_expression(dmg), title, msg)
 
 
 class Weapon_21030011(WeaponAbstract):
@@ -2252,6 +2293,45 @@ class Weapon_21050104(WeaponAbstract):
             title = self.get_title()
             msg = f"施放共鸣技能时，攻击加成提升{dmg}"
             attr.add_atk_percent(calc_percent_expression(dmg), title, msg)
+
+
+class Weapon_21050116(WeaponAbstract):
+    id = 21050116
+    type = 5
+    name = "玉阙玄华"
+
+    # 全属性伤害加成提升{0}。附加电磁效应后或响应同奏时，共鸣技能伤害加深{1}，共鸣技能伤害无视目标{2}导电伤害抗性，
+    # 且自身为队伍中登场角色时，一定范围内的目标受到电磁效应伤害加深{3}，持续{4}秒，每{5}秒可触发{6}次。同名效果之间取最高值。
+    def do_action(
+        self,
+        func_list: Union[List[str], str],
+        attr: DamageAttribute,
+        isGroup: bool = False,
+    ):
+        # 附加电磁效应 (电磁) / 响应同奏 (同奏: 有同奏增益或队伍中有同奏角色)
+        electro = attr.env_electro_flare and check_char_id(attr, Electro_Flare_Role_Ids)
+        unison = (
+            attr.env_unison
+            and check_char_id(attr, Unison_Role_Ids)
+            and (attr.unison_boon > 0 or any(x in Unison_Role_Ids for x in attr.teammate_char_ids))
+        )
+        if electro or unison:
+            title = self.get_title()
+            if attr.char_damage == skill_damage:
+                dmg = f"{self.param(1)}"
+                msg = f"附加电磁效应后或响应同奏时，共鸣技能伤害加深{dmg}"
+                attr.add_dmg_deepen(calc_percent_expression(dmg), title, msg)
+
+                if attr.char_attr == CHAR_ATTR_VOID:
+                    dmg = f"{self.param(2)}"
+                    msg = f"共鸣技能伤害无视目标{dmg}导电伤害抗性"
+                    attr.add_enemy_resistance(-calc_percent_expression(dmg), title, msg)
+
+            dmg = f"{self.param(3)}"
+            msg = f"自身为登场角色时，目标受到电磁效应伤害加深{dmg}"
+            attr.add_effect_dmg_deepen(calc_percent_expression(dmg), title, msg)
+
+        super().do_action(func_list, attr, isGroup)
 
 
 def register_weapon():

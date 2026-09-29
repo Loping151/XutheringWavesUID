@@ -1,1 +1,1 @@
-XutheringWavesUID_version = "3.6.0b"
+XutheringWavesUID_version = "3.7.0b"

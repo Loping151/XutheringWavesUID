@@ -12,9 +12,9 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 from gsuid_core.pool import to_thread
 from gsuid_core.utils.image.convert import convert_img
-from gsuid_core.utils.image.image_tools import crop_center_img
 
 from ..utils.image import (
+    paste_masked_avatar,
     RED,
     GOLD,
     GREY,
@@ -939,8 +939,6 @@ async def draw_pic_with_ring(ev: Event):
 def _compose_pic_with_ring(pic: Image.Image) -> Image.Image:
     mask_pic = Image.open(TEXT_PATH / "avatar_mask.png")
     img = Image.new("RGBA", (200, 200))
-    mask = mask_pic.resize((160, 160))
-    resize_pic = crop_center_img(pic, 160, 160)
-    img.paste(resize_pic, (20, 20), mask)
+    paste_masked_avatar(img, pic, mask_pic, 160, (20, 20))
 
     return img

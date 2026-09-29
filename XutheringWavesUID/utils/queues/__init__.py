@@ -1,63 +1,41 @@
-from typing import Any
-
-import httpx
+from typing import Any, Awaitable, Callable
 
 from gsuid_core.logger import logger
 
 from .const import QUEUE_SCORE_RANK, QUEUE_ABYSS_RECORD, QUEUE_SLASH_RECORD, QUEUE_MATRIX_RECORD
 from .queues import event_handler, start_dispatcher
-from ..api.wwapi import (
-    UPLOAD_URL,
-    UPLOAD_ABYSS_RECORD_URL,
-    UPLOAD_SLASH_RECORD_URL,
-    UPLOAD_MATRIX_RECORD_URL,
-)
 
 
-# (queue_name, upload_url, log_label)
-_UPLOAD_JOBS = [
-    (QUEUE_SCORE_RANK, UPLOAD_URL, "面板"),
-    (QUEUE_ABYSS_RECORD, UPLOAD_ABYSS_RECORD_URL, "深渊"),
-    (QUEUE_SLASH_RECORD, UPLOAD_SLASH_RECORD_URL, "冥海"),
-    (QUEUE_MATRIX_RECORD, UPLOAD_MATRIX_RECORD_URL, "矩阵"),
-]
+# queue_name -> 构建模块内的上传入口
+_UPLOAD_JOBS = {
+    QUEUE_SCORE_RANK: ("upload_score", "面板"),
+    QUEUE_ABYSS_RECORD: ("upload_abyss", "深渊"),
+    QUEUE_SLASH_RECORD: ("upload_slash", "冥海"),
+    QUEUE_MATRIX_RECORD: ("upload_matrix", "矩阵"),
+}
 
 
-async def _post_upload(item: Any, url: str, label: str) -> None:
+async def _dispatch_upload(item: Any, entrypoint: str, label: str) -> None:
     if not item or not isinstance(item, dict):
         return
-
-    from ...wutheringwaves_config import WutheringWavesConfig
-    WavesToken = WutheringWavesConfig.get_config("WavesToken").data
-    if not WavesToken:
-        return
-
-    res = None
     try:
-        async with httpx.AsyncClient() as client:
-            res = await client.post(
-                url,
-                json=item,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {WavesToken}",
-                },
-                timeout=httpx.Timeout(10),
-            )
-        logger.info(f"[鸣潮·队列] 上传{label}结果: {res.status_code} - {res.text}")
+        from ..waves_build import upload_gateway
+
+        uploader: Callable[[Any], Awaitable[None]] = getattr(upload_gateway, entrypoint)
+        await uploader(item)
     except Exception as e:
-        logger.exception(f"[鸣潮·队列] 上传{label}失败: {res.text if res else ''} {e}")
+        logger.exception(f"[鸣潮·队列] 构建上传入口不可用，{label}上传跳过: {e}")
 
 
-def _make_handler(queue: str, url: str, label: str):
+def _make_handler(queue: str, entrypoint: str, label: str):
     async def _handler(item: Any):
-        await _post_upload(item, url, label)
+        await _dispatch_upload(item, entrypoint, label)
     _handler.__name__ = f"send_{queue.removeprefix('waves_')}"
     return _handler
 
 
-for _queue, _url, _label in _UPLOAD_JOBS:
-    event_handler(_queue)(_make_handler(_queue, _url, _label))
+for _queue, (_entrypoint, _label) in _UPLOAD_JOBS.items():
+    event_handler(_queue)(_make_handler(_queue, _entrypoint, _label))
 
 
 def init_queues():

@@ -6,6 +6,8 @@ from .utils import (
     CHAR_ATTR_FREEZING,
     CHAR_ATTR_CELESTIAL,
     Tune_Strain_Role_Ids,
+    Electro_Flare_Role_Ids,
+    Unison_Role_Ids,
     temp_atk,
     hit_damage,
     skill_damage,
@@ -1655,6 +1657,18 @@ class Echo_6000218(EchoAbstract):
         return {"湮灭伤害加成": "12%", "重击伤害加成": "12%"}
 
 
+class Echo_6000219(EchoAbstract):
+    id = 6000219
+    name = "玉冥蛇"
+    cost = 1
+
+
+class Echo_6000220(EchoAbstract):
+    id = 6000220
+    name = "巡霄枪卫"
+    cost = 3
+
+
 class Echo_6000221(EchoAbstract):
     id = 6000221
     name = "天傀劫煞"
@@ -1666,6 +1680,45 @@ class Echo_6000221(EchoAbstract):
         if role_id in Tune_Strain_Role_Ids:
             return {"气动伤害加成": "20%"}
         return {"气动伤害加成": "10%"}
+
+
+class Echo_6000222(EchoAbstract):
+    id = 6000222
+    name = "奇绽傀"
+    cost = 1
+
+
+class Echo_6000223(EchoAbstract):
+    id = 6000223
+    name = "解形煞"
+    cost = 3
+
+    # 在首位装配该声骸技能时，自身共鸣效率提升10.00%。
+    def do_equipment_first(self, role_id: int):
+        """首位装备"""
+        return {"共鸣效率": "10%"}
+
+
+class Echo_6000224(EchoAbstract):
+    id = 6000224
+    name = "绝息魄"
+    cost = 3
+
+    # 使用声骸技能后15秒内，若自身施放延奏技能，使下一个变奏技能登场的角色导电伤害加成提升12.00%。
+
+
+class Echo_6000225(EchoAbstract):
+    id = 6000225
+    name = "共鸣回响·天演溯心"
+    cost = 4
+
+    # 在首位装配该声骸技能时，自身导电伤害加成提升10.00%；
+    # 自身为目标附加【电磁效应】后，或自身获得同奏、响应同奏时，自身导电伤害加成额外提升10.00%。
+    def do_equipment_first(self, role_id: int):
+        """首位装备"""
+        if role_id in Electro_Flare_Role_Ids or role_id in Unison_Role_Ids:
+            return {"导电伤害加成": "20%"}
+        return {"导电伤害加成": "10%"}
 
 
 def register_echo():

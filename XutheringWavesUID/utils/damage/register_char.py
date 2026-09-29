@@ -7,6 +7,7 @@ from .utils import (
     CHAR_ATTR_CELESTIAL,
     Hack_Shifting_Role_Ids,
     Tune_Strain_Role_Ids,
+    Unison_Role_Ids,
     temp_atk,
     temp_def,
     hit_damage,
@@ -624,6 +625,41 @@ class Char_1305(CharAbstract):
     starLevel = 5
 
 
+class Char_1307(CharAbstract):
+    id = 1307
+    name = "卜灵"
+    starLevel = 4
+
+    def _do_buff(
+        self,
+        attr: DamageAttribute,
+        chain: int = 0,
+        resonLevel: int = 1,
+        isGroup: bool = True,
+    ):
+        # 固有技能-我名地上仙 / 五雷荡煞阵: 为目标附加【电磁效应】, 编队即持续附加
+        attr.set_env_electro_flare()
+
+        # 共鸣回路-雷法·三才合一: 五雷荡煞阵期间队伍角色施放两次变奏后, 登场角色共鸣技能伤害加成提升25%
+        if attr.char_damage == skill_damage:
+            title = f"{self.name}-共鸣回路-雷法·三才合一"
+            if chain >= 6:
+                msg = "六链: 登场角色共鸣技能伤害加成提升至50%"
+                attr.add_dmg_bonus(0.5, title, msg)
+            else:
+                msg = "登场角色共鸣技能伤害加成提升25%"
+                attr.add_dmg_bonus(0.25, title, msg)
+
+        if attr.char_template == temp_atk:
+            title = f"{self.name}-合鸣效果-隐世回光"
+            msg = "全队共鸣者攻击提升15%"
+            attr.add_atk_percent(0.15, title, msg)
+
+        title = f"{self.name}-延奏技能"
+        msg = "附近队伍中所有角色全伤害加深15%"
+        attr.add_dmg_deepen(0.15, title, msg)
+
+
 class Char_1402(CharAbstract):
     id = 1402
     name = "秧秧"
@@ -719,6 +755,9 @@ class Char_1309(CharAbstract):
         resonLevel: int = 1,
         isGroup: bool = True,
     ):
+        # 固有技能-解明: 超负荷对目标附加【电磁效应】, 编队即持续附加
+        attr.set_env_electro_flare()
+
         # 共鸣回路-超负荷(短按): 清空【电涌】, 队伍中的角色攻击提升10%
         if attr.char_template == temp_atk:
             title = "雷主-共鸣回路-超负荷"
@@ -730,6 +769,12 @@ class Char_1309(CharAbstract):
             title = "雷主-延奏技能-电髓"
             msg = "持有电髓的角色附加【异常效应】后，全伤害加深25%"
             attr.add_dmg_deepen(0.25, title, msg)
+
+        # 合鸣效果-镜影流电之瞬: 附加【电磁效应】期间施放延奏, 下一个变奏登场角色导电伤害提升25%
+        if attr.char_attr == CHAR_ATTR_VOID:
+            title = "雷主-合鸣效果-镜影流电之瞬"
+            msg = "下一个变奏技能登场的角色导电伤害提升25%"
+            attr.add_dmg_bonus(0.25, title, msg)
 
 
 class Char_1310(Char_1309):
@@ -797,6 +842,102 @@ class Char_1308(CharAbstract):
             w.do_action(["buff"], attr, isGroup)
 
 
+class Char_1311(CharAbstract):
+    id = 1311
+    name = "心"
+    starLevel = 5
+
+    def _do_buff(
+        self,
+        attr: DamageAttribute,
+        chain: int = 0,
+        resonLevel: int = 1,
+        isGroup: bool = True,
+    ):
+        if attr.env_unison:
+            # 延奏技能-身作千灯(同奏): 队伍中除心之外获得同奏的角色获得灯同辉, 心施放延奏后全伤害加深20%
+            if check_char_id(attr, Unison_Role_Ids):
+                title = f"{self.name}-延奏技能"
+                msg = "拥有灯同辉的角色全伤害加深20%"
+                attr.add_dmg_deepen(0.2, title, msg)
+        elif attr.env_electro_flare:
+            # 固有技能-循流引兴替(电磁): 漂泊者·导电施放变奏技能时, 心和漂泊者·导电的导电伤害加成提升20%
+            if check_char_id(attr, [1309, 1310]) and attr.char_attr == CHAR_ATTR_VOID:
+                title = f"{self.name}-固有技能-循流引兴替"
+                msg = "漂泊者·导电施放变奏技能时导电伤害加成提升20%"
+                attr.add_dmg_bonus(0.2, title, msg)
+
+            # 延奏技能-身作千灯(电磁): 队伍中除心之外的角色导电伤害加深20%
+            if attr.char_attr == CHAR_ATTR_VOID:
+                title = f"{self.name}-延奏技能"
+                msg = "队伍中除心之外的角色导电伤害加深20%"
+                attr.add_dmg_deepen(0.2, title, msg)
+
+        # 四链: 附加【电磁效应】/【电磁爆发】或获得、响应同奏时, 队伍中所有角色全属性伤害加成提升20%
+        if chain >= 4:
+            title = f"{self.name}-四链"
+            msg = "队伍中所有角色全属性伤害加成提升20%"
+            attr.add_dmg_bonus(0.2, title, msg)
+
+
+class Char_1312(CharAbstract):
+    id = 1312
+    name = "锁暝"
+    starLevel = 5
+
+    def _do_buff(
+        self,
+        attr: DamageAttribute,
+        chain: int = 0,
+        resonLevel: int = 1,
+        isGroup: bool = True,
+    ):
+        # 共鸣解放-暝伞形·重锁狱瘴: 施放共鸣解放时获得同奏, 编队即可提供同奏
+        attr.set_env_unison()
+
+        # 六链: 队伍中的角色每层【同奏增益】的效果提升50%，最多对4层【同奏增益】生效
+        if chain >= 6:
+            attr.set_unison_boon_ratio(1.5)
+
+        # 延奏技能-伞机鸣动: 下一位登场角色导电伤害加深20%, 拥有【同奏增益】时共鸣技能伤害加深25%
+        if attr.char_attr == CHAR_ATTR_VOID:
+            title = f"{self.name}-延奏技能"
+            msg = "下一位登场角色导电伤害加深20%"
+            attr.add_dmg_deepen(0.2, title, msg)
+        if attr.unison_boon and attr.char_damage == skill_damage:
+            title = f"{self.name}-延奏技能"
+            msg = "拥有【同奏增益】时，共鸣技能伤害加深25%"
+            attr.add_dmg_deepen(0.25, title, msg)
+
+        # 固有技能-沉契凝锁: 拥有同奏切换角色获得协契, 共鸣解放后8秒内施放延奏,
+        # 下一个登场的角色导电伤害加成提升30%, 每层【同奏增益】额外提升20%, 最多额外提升40%
+        if attr.char_attr == CHAR_ATTR_VOID:
+            extra = min(0.2 * attr.unison_boon, 0.4)
+            title = f"{self.name}-固有技能-沉契凝锁"
+            msg = f"协契: 下一个登场角色导电伤害加成提升{(0.3 + extra) * 100:.0f}%({attr.unison_boon}层同奏增益)"
+            attr.add_dmg_bonus(0.3 + extra, title, msg)
+
+        # 声骸技能-绝息魄: 施放延奏技能, 下一个变奏登场角色导电伤害加成提升12%
+        if attr.char_attr == CHAR_ATTR_VOID:
+            title = f"{self.name}-声骸技能-绝息魄"
+            msg = "施放延奏技能，下一个变奏技能登场的角色导电伤害加成提升12%"
+            attr.add_dmg_bonus(0.12, title, msg)
+
+        # 二链: 施放延奏技能时, 下一位登场角色暴击伤害提升10%, 每层【同奏增益】额外提升6%, 最多额外提升24%
+        if chain >= 2:
+            extra = min(0.06 * attr.unison_boon, 0.24)
+            title = f"{self.name}-二链"
+            msg = f"下一位登场角色暴击伤害提升{(0.1 + extra) * 100:.0f}%({attr.unison_boon}层同奏增益)"
+            attr.add_crit_dmg(0.1 + extra, title, msg)
+
+        # 角色武器-沉冥 (21020107): 队伍获得同奏, 【羁念】作用到队友
+        weapon_id = 21020107
+        weapon_clz = WavesWeaponRegister.find_class(weapon_id)
+        if weapon_clz:
+            w = weapon_clz(weapon_id, 90, 6, resonLevel)
+            w.do_action("env_unison", attr, isGroup)
+
+
 class Char_1501(CharAbstract):
     id = 1501
     name = "漂泊者·衍射"
@@ -857,16 +998,26 @@ class Char_1503(CharAbstract):
         if chain >= 4 and attr.char_attr == CHAR_ATTR_CELESTIAL:
             title = "维里奈-四链"
             msg = "队伍中的角色衍射伤害加成提升15%"
-            attr.add_dmg_bonus(0.4, title, msg)
+            attr.add_dmg_bonus(0.15, title, msg)
 
-        if attr.char_template == temp_atk:
-            title = "维里奈-合鸣效果-隐世回光"
-            msg = "全队共鸣者攻击提升15%"
-            attr.add_atk_percent(0.15, title, msg)
+        # 同奏队装配茜染怀想之花, 否则隐世回光
+        if attr.env_unison:
+            if attr.char_template == temp_atk:
+                title = "维里奈-合鸣效果-茜染怀想之花"
+                msg = "提供治疗时，队伍中角色攻击提升10%"
+                attr.add_atk_percent(0.1, title, msg)
+                if check_char_id(attr, Unison_Role_Ids):
+                    msg = "获得同奏、响应同奏时，攻击额外提升15%"
+                    attr.add_atk_percent(0.15, title, msg)
+        else:
+            if attr.char_template == temp_atk:
+                title = "维里奈-合鸣效果-隐世回光"
+                msg = "全队共鸣者攻击提升15%"
+                attr.add_atk_percent(0.15, title, msg)
 
-        title = "维里奈-声骸技能-鸣钟之龟"
-        msg = "全队角色10.00%的伤害提升"
-        attr.add_dmg_bonus(0.1, title, msg)
+            title = "维里奈-声骸技能-鸣钟之龟"
+            msg = "全队角色10.00%的伤害提升"
+            attr.add_dmg_bonus(0.1, title, msg)
 
         title = "维里奈-延奏技能"
         msg = "队伍中的角色全伤害加深15%"
@@ -975,20 +1126,28 @@ class Char_1505(CharAbstract):
                 msg = "队伍中的角色攻击提升40%"
                 attr.add_atk_percent(0.4, title, msg)
 
-            title = "守岸人-合鸣效果-隐世回光"
-            msg = "全队共鸣者攻击提升15%"
-            attr.add_atk_percent(0.15, title, msg)
+            # 同奏队装配茜染怀想之花, 否则隐世回光
+            if attr.env_unison:
+                title = "守岸人-合鸣效果-茜染怀想之花"
+                msg = "提供治疗时，队伍中角色攻击提升10%"
+                attr.add_atk_percent(0.1, title, msg)
+                if check_char_id(attr, Unison_Role_Ids):
+                    msg = "获得同奏、响应同奏时，攻击额外提升15%"
+                    attr.add_atk_percent(0.15, title, msg)
+            else:
+                title = "守岸人-合鸣效果-隐世回光"
+                msg = "全队共鸣者攻击提升15%"
+                attr.add_atk_percent(0.15, title, msg)
+
+                title = "守岸人-声骸技能-无归的谬误"
+                msg = "全队角色攻击提升10%"
+                attr.add_atk_percent(0.1, title, msg)
 
         # 星序协响
         weapon_clz = WavesWeaponRegister.find_class(21050036)
         if weapon_clz:
             w = weapon_clz(21050036, 90, 6, resonLevel)
             w.do_action("skill_create_healing", attr, isGroup)
-
-        if attr.char_template == temp_atk:
-            title = "守岸人-声骸技能-无归的谬误"
-            msg = "全队角色攻击提升10%"
-            attr.add_atk_percent(0.1, title, msg)
 
         title = "守岸人-共鸣解放"
         msg = "暴击提升12.5%+暴击伤害提升25%"

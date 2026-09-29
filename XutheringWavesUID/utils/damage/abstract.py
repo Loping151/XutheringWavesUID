@@ -120,6 +120,9 @@ class WeaponAbstract(object):
         if attr.env_tune_shifting():
             func_list.append("env_tune_shifting")
 
+        if attr.env_unison:
+            func_list.append("env_unison")
+
         if attr.trigger_shield:
             func_list.append("trigger_shield")
 
@@ -189,6 +192,18 @@ class WeaponAbstract(object):
 
     def skill_create_healing(self, attr: DamageAttribute, isGroup: bool = False):
         """共鸣技能造成治疗"""
+        pass
+
+    def cast_unison(self, attr: DamageAttribute, isGroup: bool = False):
+        """获得同奏"""
+        pass
+
+    def cast_concerto(self, attr: DamageAttribute, isGroup: bool = False):
+        """消耗协奏能量"""
+        pass
+
+    def env_unison(self, attr: DamageAttribute, isGroup: bool = False):
+        """同奏"""
         pass
 
     def env_spectro(self, attr: DamageAttribute, isGroup: bool = False):

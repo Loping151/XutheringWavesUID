@@ -37,6 +37,9 @@ SONATA_NIGHTMARE = "碎梦亡鬼之魇"
 SONATA_FEATHERFALL = "羽落空尘之歌"
 SONATA_EXORCISM = "清邪荡煞之心"
 SONATA_NIGHTLAMP = "冥途夜行之灯"
+SONATA_VIGIL = "衔梦照世之心"
+SONATA_REFLECTION = "镜影流电之瞬"
+SONATA_YEARNING = "茜染怀想之花"
 
 CHAR_ATTR_FREEZING = "冷凝"
 CHAR_ATTR_CELESTIAL = "衍射"
@@ -84,6 +87,10 @@ cast_variation = "cast_variation"
 cast_tunebreak = "cast_tunebreak"
 # 共鸣技能造成治疗
 skill_create_healing = "skill_create_healing"
+# 获得同奏
+cast_unison = "cast_unison"
+# 消耗协奏能量
+cast_concerto = "cast_concerto"
 # 造成治疗
 cast_healing = "cast_healing"
 # 释放谐度破坏
@@ -126,7 +133,7 @@ Glacio_Chafe_Role_Ids = [1108, 1109, 1110]
 Aero_Erosion_Role_Ids = [1406, 1407, 1408, 1409]
 
 # 电磁效应
-Electro_Flare_Role_Ids = [1309, 1310]
+Electro_Flare_Role_Ids = [1309, 1310, 1307, 1311]
 
 # 失序彼岸之梦 套装 (共鸣能量上限为0的角色: 弗洛洛 / 洛瑟菈)
 Ancient_Role_Ids = [1608, 1109]
@@ -142,6 +149,9 @@ Tune_Strain_Role_Ids = [1509, 1211, 1510, 1413]
 
 # 附加骇破·偏移 角色
 Hack_Shifting_Role_Ids = [1308, 1511]
+
+# 可获得同奏或响应同奏 角色 (Unison)
+Unison_Role_Ids = [1304, 1311, 1312]
 
 # 可施加任意【异常效应】的角色并集 (光噪/虚湮/聚爆/霜渐/风蚀/电磁)
 Abnormal_Role_Ids = sorted(

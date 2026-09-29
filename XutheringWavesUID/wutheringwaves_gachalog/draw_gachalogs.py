@@ -12,7 +12,6 @@ warnings.filterwarnings('ignore', category=Image.DecompressionBombWarning)
 from gsuid_core.pool import to_thread
 from gsuid_core.models import Event
 from gsuid_core.utils.image.convert import convert_img
-from gsuid_core.utils.image.image_tools import crop_center_img
 
 from ..utils import hint
 from ..utils.util import hide_uid, get_hide_uid_pref
@@ -23,6 +22,7 @@ from ..utils.player_store import (
 )
 from ..utils.imagetool import draw_base_info_bg
 from ..utils.image import (
+    paste_masked_avatar,
     GOLD,
     add_footer,
     get_waves_bg,
@@ -868,9 +868,7 @@ async def draw_pic_with_ring(ev: Event):
 
     mask_pic = Image.open(TEXT_PATH / "avatar_mask.png")
     img = Image.new("RGBA", (320, 320))
-    mask = mask_pic.resize((250, 250))
-    resize_pic = crop_center_img(pic, 250, 250)
-    img.paste(resize_pic, (20, 20), mask)
+    paste_masked_avatar(img, pic, mask_pic, 250, (20, 20))
     return img
 
 

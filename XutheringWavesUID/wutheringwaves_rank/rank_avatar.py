@@ -7,11 +7,10 @@ import httpx
 from PIL import Image
 
 from gsuid_core.logger import logger
-from gsuid_core.utils.image.image_tools import crop_center_img
 
 from ..utils.cache import TimedCache
 from ..utils.database.models import WavesUser
-from ..utils.image import get_qq_avatar, get_square_avatar, is_qq_default_avatar
+from ..utils.image import get_qq_avatar, get_square_avatar, is_qq_default_avatar, paste_masked_avatar
 from ..utils.resource.constant import randomize_special_char_id
 from ..wutheringwaves_config import WutheringWavesConfig
 
@@ -87,11 +86,8 @@ async def get_avatar(
                 pic_cache.set(qid, pic)
 
     if pic is not None:
-        pic_temp = crop_center_img(pic, 120, 120)
         img = Image.new("RGBA", (180, 180))
-        avatar_mask_temp = avatar_mask.copy()
-        mask_pic_temp = avatar_mask_temp.resize((120, 120))
-        img.paste(pic_temp, (0, -5), mask_pic_temp)
+        paste_masked_avatar(img, pic, avatar_mask, 120, (0, -5))
         return img
 
     fallback_char_id = randomize_special_char_id(int(char_id)) if char_id else default_avatar_char_id

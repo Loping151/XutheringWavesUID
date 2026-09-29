@@ -65,6 +65,22 @@ def _has_phantom(role_detail) -> bool:
     return bool(eq) and any(p and p.phantomProp for p in eq)
 
 
+def _has_full_phantom(role_detail) -> bool:
+    """面板是否装满 5 件声骸。"""
+    pd = getattr(role_detail, "phantomData", None)
+    eq = pd.equipPhantomList if pd else None
+    return bool(eq) and sum(1 for p in eq if p and p.phantomProp) >= 5
+
+
+def _is_phantom_change(change_list_regex) -> bool:
+    """替换指令是否含换声骸。"""
+    if not change_list_regex:
+        return False
+    from .role_info_change import ReplacePhantom
+
+    return any(f"换{p}" in change_list_regex for p in ReplacePhantom.PREFIX_RE)
+
+
 def _space_hint() -> str:
     return f"[鸣潮] 尝试去掉{PREFIX}后的空格重试"
 
@@ -818,7 +834,28 @@ async def send_char_detail_msg2(bot: Bot, ev: Event):
         if _ru is None:
             return
         uid, user_id = _ru
-        im = await draw_char_detail_img(ev, uid, char, user_id, waves_id, change_list_regex=change_list_regex)
+        # 换声骸且原面板 5 件齐全: 替换前后左右拼接对比 (同刷新 concat_diff)
+        old_im = None
+        if not waves_id and _is_phantom_change(change_list_regex):
+            from ..utils.char_info_utils import get_char_detail_for_id
+
+            char_id = char_name_to_char_id(matched)
+            old_detail = await get_char_detail_for_id(uid, char_id) if char_id else None
+            if old_detail is not None and _has_full_phantom(old_detail):
+                old_im = await draw_char_detail_img(
+                    ev, uid, char, user_id, None, need_convert_img=False, role_detail_override=old_detail
+                )
+        if isinstance(old_im, Image.Image):
+            new_im = await draw_char_detail_img(
+                ev, uid, char, user_id, waves_id, need_convert_img=False, change_list_regex=change_list_regex
+            )
+            if isinstance(new_im, Image.Image):
+                diff_im = await convert_img(await _concat_pk_images(old_im, new_im))
+                await bot.send(_append_advice(ev, res.wrap(diff_im, canonical_cmd)), False)
+                return
+            im = new_im
+        else:
+            im = await draw_char_detail_img(ev, uid, char, user_id, waves_id, change_list_regex=change_list_regex)
         at_sender = False
         if isinstance(im, str):
             await bot.send(_append_advice(ev, res.with_tip(im, canonical_cmd)), at_sender)

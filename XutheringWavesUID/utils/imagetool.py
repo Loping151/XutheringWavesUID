@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw
 from gsuid_core.models import Event
 from gsuid_core.utils.image.image_tools import crop_center_img
 
-from .image import GOLD, get_event_avatar, get_square_avatar
+from .image import GOLD, get_event_avatar, get_square_avatar, paste_masked_avatar
 from .fonts.waves_fonts import waves_font_25, waves_font_30
 
 TEXT_PATH = Path(__file__).parent / "texture2d"
@@ -34,9 +34,7 @@ async def draw_pic_with_ring(ev: Event):
 
     mask_pic = Image.open(TEXT_PATH / "avatar_mask.png")
     avatar = Image.new("RGBA", (180, 180))
-    mask = mask_pic.resize((160, 160))
-    resize_pic = crop_center_img(pic, 160, 160)
-    avatar.paste(resize_pic, (20, 20), mask)
+    paste_masked_avatar(avatar, pic, mask_pic, 160, (20, 20))
 
     avatar_ring = Image.open(TEXT_PATH / "avatar_ring.png")
     avatar_ring = avatar_ring.resize((180, 180))

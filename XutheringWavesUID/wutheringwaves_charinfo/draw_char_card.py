@@ -88,6 +88,7 @@ from ..utils.fonts.waves_fonts import (
     waves_font_50,
 )
 from ..utils.image import (
+    paste_masked_avatar,
     GOLD,
     GREY,
     SPECIAL_GOLD,
@@ -2314,9 +2315,7 @@ async def draw_char_with_ring(char_id):
 def _compose_avatar_ring(pic):
     mask_pic = Image.open(TEXT_PATH / "avatar_mask.png")
     img = Image.new("RGBA", (180, 180))
-    mask = mask_pic.resize((160, 160))
-    resize_pic = crop_center_img(pic, 160, 160)
-    img.paste(resize_pic, (20, 20), mask)
+    paste_masked_avatar(img, pic, mask_pic, 160, (20, 20))
 
     return img
 

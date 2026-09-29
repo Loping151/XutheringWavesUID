@@ -541,6 +541,14 @@ async def get_square_avatar(resource_id: Union[int, str]) -> Image.Image:
     return Image.open(get_square_avatar_path(resource_id)).convert("RGBA")
 
 
+def paste_masked_avatar(canvas: Image.Image, pic: Image.Image, mask_pic: Image.Image, size: int, pos: Tuple[int, int]):
+    """遮罩缩放到 size 贴在 pos, 头像按遮罩圆的实际包围盒自适应缩放后贴入 (完整显示方形头像)。"""
+    mask = mask_pic.resize((size, size))
+    box = mask.getchannel("A").getbbox() or (0, 0, size, size)
+    w, h = box[2] - box[0], box[3] - box[1]
+    canvas.paste(crop_center_img(pic, w, h), (pos[0] + box[0], pos[1] + box[1]), mask.crop(box))
+
+
 async def cropped_square_avatar(item_icon: Image.Image, size: int) -> Image.Image:
     # 目标尺寸
     target_width, target_height = size, size
