@@ -709,17 +709,20 @@ async def send_repeated_custom_cards(
 
 @to_thread
 def _crop_card_file(path: Path) -> Optional[Image.Image]:
+    crop = read_crop(path)
+    if crop is None:
+        return None
     try:
         with Image.open(path) as im:
             im.load()
-            return crop_image(im, read_crop(path))
+            return crop_image(im, crop)
     except Exception:
         return None
 
 
-async def _one_card_img(t: str, path: Path):
+async def _one_card_img(t: str, path: Path) -> str:
     cropped = await _crop_card_file(path)
-    return await convert_img(cropped if cropped is not None else path)
+    return await convert_img(cropped if cropped is not None else path, is_base64=True)
 
 
 async def _send_found_matches(bot: Bot, matches) -> None:
