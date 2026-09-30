@@ -728,13 +728,13 @@ async def _one_card_img(t: str, path: Path) -> str:
 async def _send_found_matches(bot: Bot, matches) -> None:
     """命中非空: 单张直接发; 多张走转发消息 (来源「xx角色的xx图」+ 图)。"""
     if len(matches) == 1:
-        t, _cid, path = matches[0]
-        return await bot.send(await _one_card_img(t, path))
+        _t, _cid, path = matches[0]
+        return await bot.send(await convert_img(path))
     imgs = []
     for t, other_char_id, path in matches:
         type_name = CUSTOM_PATH_NAME_MAP.get(t, t)
         imgs.append(f"{_listing_char_name(other_char_id)}的{type_name}图")
-        imgs.append(await _one_card_img(t, path))
+        imgs.append(await convert_img(path))
     await bot.send(MessageSegment.node(imgs))
 
 
@@ -753,7 +753,7 @@ async def send_custom_card_single(
     type_label = CUSTOM_PATH_NAME_MAP.get(target_type, target_type)
     target = card_hash_index.lookup_in(target_type, char_id, hash_id)
     if target is not None:
-        return await bot.send(await _one_card_img(target_type, target))
+        return await bot.send(await convert_img(target))
 
     matches = card_hash_index.find(hash_id)
     if matches:
