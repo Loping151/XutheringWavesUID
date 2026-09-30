@@ -268,26 +268,24 @@
 
     .cycle-section {
         width: 690px;
-        height: 258px;
         box-sizing: border-box;
         margin-top: 20px;
         margin-bottom: 30px;
         background-image: url('{{ cycle_bg }}');
         background-repeat: no-repeat;
         background-position: top center;
-        background-size: 690px 258px;
-        padding: 20px 0 20px;
+        background-size: 100% 100%;
+        padding: 24px 0 50px;
         display: flex;
         flex-direction: column;
         align-items: center;
     }
 
     .cycle-title {
-        margin-bottom: 14px;
         font-size: 26px;
         font-weight: bold;
         color: {{ cycle_titleColor }};
-        line-height: 1;
+        line-height: 30px;
         letter-spacing: 1px;
     }
 
@@ -295,7 +293,8 @@
         font-size: 18px;
         font-weight: bold;
         color: {{ cycle_timeTextColor }};
-        margin-bottom: 24px;
+        line-height: 22px;
+        margin-bottom: 34px;
         text-align: center;
         font-family: 'JetBrains Mono', 'Source Han Sans CN', sans-serif;
         letter-spacing: 0.5px;
