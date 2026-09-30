@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from PIL import Image, ImageChops
+from PIL import Image
 from gsuid_core.logger import logger
 from gsuid_core.pool import to_thread
 
@@ -707,56 +707,19 @@ async def send_repeated_custom_cards(
         await bot.send(batch)
 
 
-def _trim_white_border_pil(image: Image.Image, tol: int = 35) -> Image.Image:
-    # 与 numpy 路径同口径 (最小通道<255-tol→getbbox)
-    rgba = image.convert("RGBA")
-    bg = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
-    r, g, b = Image.alpha_composite(bg, rgba).convert("RGB").split()
-    min_ch = ImageChops.darker(ImageChops.darker(r, g), b)
-    content = min_ch.point(lambda p: 255 if p < 255 - tol else 0)
-    bbox = content.getbbox()
-    return image.crop(bbox) if bbox else image
-
-
-def _trim_white_border(image: Image.Image, tol: int = 35, ratio: float = 0.995) -> Image.Image:
-    """逐边剥离整行/整列近白(各通道≥255-tol)或全透明的边; ratio 容忍稀疏杂点。"""
-    if np is None:
-        return _trim_white_border_pil(image, tol)
-    arr = np.asarray(image.convert("RGBA"))
-    white = np.all(arr[:, :, :3].astype(np.int16) >= 255 - tol, axis=2) | (arr[:, :, 3] == 0)
-    H, W = white.shape
-    row_white = white.mean(axis=1) >= ratio
-    col_white = white.mean(axis=0) >= ratio
-    top = 0
-    while top < H and row_white[top]:
-        top += 1
-    bottom = H
-    while bottom > top and row_white[bottom - 1]:
-        bottom -= 1
-    left = 0
-    while left < W and col_white[left]:
-        left += 1
-    right = W
-    while right > left and col_white[right - 1]:
-        right -= 1
-    if right <= left or bottom <= top:
-        return image
-    return image.crop((left, top, right, bottom))
-
-
 @to_thread
-def _trim_card_file(path: Path) -> Optional[Image.Image]:
+def _crop_card_file(path: Path) -> Optional[Image.Image]:
     try:
         with Image.open(path) as im:
             im.load()
-            return _trim_white_border(crop_image(im, read_crop(path)))
+            return crop_image(im, read_crop(path))
     except Exception:
         return None
 
 
 async def _one_card_img(t: str, path: Path):
-    trimmed = await _trim_card_file(path) if t == "card" else None
-    return await convert_img(trimmed if trimmed is not None else path)
+    cropped = await _crop_card_file(path) if t == "card" else None
+    return await convert_img(cropped if cropped is not None else path)
 
 
 async def _send_found_matches(bot: Bot, matches) -> None:
