@@ -21,6 +21,7 @@ from ...utils.image_meta import (
     file_fingerprint,
     move_image_meta,
     read_crop,
+    update_image_meta,
 )
 from ...utils.name_convert import easy_id_to_name
 from ...utils.pile_offset import has_rank_offset, offset_dict, read_rank_offset
@@ -494,6 +495,10 @@ def stage_pending(t: str, char_id: str, name: str) -> Optional[dict]:
     src = safe_pending_image(t, char_id, name)
     if src is None or not src.is_file():
         return None
+    return stage_file(src)
+
+
+def stage_file(src: Path, crop: Optional[dict] = None) -> Optional[dict]:
     data = src.read_bytes()
     suffix = src.suffix.lower()
     if suffix not in IMAGE_EXTS:
@@ -504,5 +509,5 @@ def stage_pending(t: str, char_id: str, name: str) -> Optional[dict]:
     except Exception:
         return None
     token = new_tmp_token()
-    write_tmp_image(token, suffix, data)
-    return {"token": token, "suffix": suffix, "width": w, "height": h, "size": len(data)}
+    update_image_meta(write_tmp_image(token, suffix, data), "crop", crop)
+    return {"token": token, "suffix": suffix, "width": w, "height": h, "size": len(data), "crop": crop}

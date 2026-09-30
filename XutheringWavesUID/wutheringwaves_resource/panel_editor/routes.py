@@ -332,6 +332,21 @@ def _lq_webp(data: bytes) -> Optional[bytes]:
         return None
 
 
+@app.post("/waves/panel-edit/api/tmp/stage")
+async def api_tmp_stage(payload: dict, _: None = Depends(require_auth)):
+    """把已入库图连同框选复制进 tmp, 编辑在 tmp 上进行, 确认后才覆盖。"""
+    st.gc_tmp()
+    target = st.safe_target_image(
+        payload.get("type") or "", payload.get("char_id") or "", payload.get("name") or "",
+    )
+    if target is None or not target.is_file():
+        raise HTTPException(404, "image not found")
+    item = st.stage_file(target, read_crop(target))
+    if item is None:
+        raise HTTPException(400, "not an image")
+    return item
+
+
 @app.get("/waves/panel-edit/api/tmp/image")
 async def api_tmp_image(token: str, lq: int = 0, _: None = Depends(require_auth)):
     if not st.is_safe_token(token):

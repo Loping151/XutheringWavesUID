@@ -25,7 +25,7 @@ const state = {
   // 缩略图基准宽度 (px); null = 跟随 CSS 默认 (响应式)
   thumbSize: null,
   // single-crop tmp:
-  cropTmp: null,              // {token, suffix, current: {w,h}, crop?, kind: "upload" | "edit-existing", origin: {char_id,name}? }
+  cropTmp: null,              // {token, suffix, current: {w,h}, crop?, savedCrop?, kind: "upload" | "edit-existing", origin: {char_id,name}? }
   cropRect: null,             // {x,y,w,h} display coords (图像坐标系, 原点=图片左上角)
   cropImgEl: null,
   cropClient: null,           // {w,h} 上次记录的图片显示尺寸, 供窗口缩放校正
@@ -734,7 +734,6 @@ function renderCropper(body) {
   const bar = el("div", { class: "cropper__bar" },
     readout,
     el("div", { class: "cropper__actions" },
-      el("button", { class: "btn", onClick: applyCrop }, "应用框选"),
       el("button", { class: "btn", onClick: restoreCrop }, "还原框选"),
       el("button", { class: "btn", onClick: promptResize }, "缩放"),
       el("button", { id: "cropConfirmBtn", class: "btn btn--primary",
@@ -906,7 +905,7 @@ function onCropperResize() {
 window.addEventListener("resize", onCropperResize);
 
 function startDrag(ev, wrap, rect) {
-  if (isCropBusy()) { ev.preventDefault(); return; }
+  if (_cropInflight) { ev.preventDefault(); return; }
   ev.preventDefault();
 
   const target = ev.target;
@@ -966,7 +965,7 @@ function startDrag(ev, wrap, rect) {
 }
 
 function startVisDrag(ev, wrap, visEl) {
-  if (isCropBusy()) { ev.preventDefault(); return; }
+  if (_cropInflight) { ev.preventDefault(); return; }
   ev.preventDefault();
 
   const target = ev.target;
@@ -1086,7 +1085,7 @@ const _AUTO_CROP_IDLE_MS = 800;
 let _autoCropTimer = null;
 let _cropInflight = false;
 
-// 裁剪结果落库前禁用「确认」, 防止保存到旧 tmp 丢失最新一次裁剪。
+// 框选落库前禁用「确认」, 防止定时落库晚于确认。
 function isCropBusy() { return _autoCropTimer != null || _cropInflight; }
 function syncCropConfirm() {
   const busy = isCropBusy();
@@ -1111,7 +1110,7 @@ function scheduleAutoCrop() {
       syncCropConfirm();
       return;
     }
-    await applyCrop({ auto: true });
+    await commitCrop({ auto: true });
   }, _AUTO_CROP_IDLE_MS);
   syncCropConfirm();
 }
@@ -1150,14 +1149,9 @@ function updateRectReadout() {
   }
 }
 
-async function applyCrop({ auto = false, message = "已应用框选" } = {}) {
-  if (_cropInflight) return;
+async function commitCrop({ auto = false } = {}) {
   const tmp = state.cropTmp;
-  const src = state.cropRect && displayToSourceRect(state.cropRect);
-  if (!tmp || !src) return;
-  tmp.crop = cropOf(src);
-  syncBatchCropItem();
-  syncSizeReadouts();
+  if (_cropInflight || !tmp) return;
   if (state.type !== "card") {
     _cropInflight = true;
     syncCropConfirm();
@@ -1171,14 +1165,16 @@ async function applyCrop({ auto = false, message = "已应用框选" } = {}) {
     }
   }
   triggerPreview(true, !auto);
-  if (!auto) toast(message, "ok", 1800);
 }
 
 async function restoreCrop() {
   if (_cropInflight || !state.cropTmp) return;
-  state.cropTmp.crop = null;
+  clearTimeout(_autoCropTimer);
+  _autoCropTimer = null;
+  state.cropTmp.crop = state.cropTmp.savedCrop || null;
   initCropRect(state.cropImgEl, state.cropImgEl.parentElement);
-  await applyCrop({ message: "已还原框选" });
+  await commitCrop();
+  toast("已还原框选", "ok", 1800);
 }
 
 function syncSizeReadouts() {
@@ -1204,9 +1200,7 @@ function syncBatchCropItem() {
 }
 
 async function persistCrop(tmp) {
-  const crop = state.mode === "single-crop" && state.cropRect && tmp === state.cropTmp
-    ? cropOf(displayToSourceRect(state.cropRect)) : tmp.crop;
-  await apiJson("/tmp/crop", { token: tmp.token, crop: crop || null });
+  await apiJson("/tmp/crop", { token: tmp.token, crop: tmp.crop || null });
 }
 
 function cropImgUrl() {
@@ -1276,8 +1270,14 @@ async function doResize(scale, compress) {
   try {
     const r = await apiJson("/tmp/resize", {
       token: tmp.token, scale, compress,
-      crop: cropOf(displayToSourceRect(state.cropRect)),
+      crop: tmp.crop || null,
     });
+    const sx = r.width / tmp.current.w, sy = r.height / tmp.current.h;
+    const c = tmp.savedCrop;
+    if (c) tmp.savedCrop = {
+      x: Math.round(c.x * sx), y: Math.round(c.y * sy),
+      w: Math.round(c.w * sx), h: Math.round(c.h * sy),
+    };
     tmp.current = { w: r.width, h: r.height };
     tmp.size = r.size;
     if (r.suffix) tmp.suffix = r.suffix;
@@ -1389,11 +1389,9 @@ async function confirmReplace() {
 // ============================================================
 async function editExisting(img) {
   try {
-    const url = `${API}/image?type=${state.type}&char_id=${encodeURIComponent(state.selectedCharId)}&name=${encodeURIComponent(img.name)}&v=${img.ver ?? ""}`;
-    const blob = await (await fetch(url, { cache: "no-store" })).blob();
-    const fd = new FormData();
-    fd.append("file", new File([blob], img.name, { type: blob.type || "image/jpeg" }));
-    const r = await api("/tmp/upload", { method: "POST", body: fd });
+    const r = await apiJson("/tmp/stage", {
+      type: state.type, char_id: state.selectedCharId, name: img.name,
+    });
     state.cropTmp = {
       token: r.token,
       suffix: r.suffix,
@@ -1402,7 +1400,8 @@ async function editExisting(img) {
       kind: "edit-existing",
       origin: { char_id: state.selectedCharId, name: img.name },
       rankOffset: img.rank_offset || null,
-      crop: img.crop || null,
+      crop: r.crop,
+      savedCrop: r.crop,
     };
     state.editWarnDismissed = false;
     state.mode = "single-crop";
@@ -1502,6 +1501,7 @@ async function editBatchItem(it) {
     kind: "upload",
     fromBatch: true,
     crop: it.crop || null,
+    savedCrop: it.crop || null,
   };
   state.mode = "single-crop";
   closeMobileDrawers();
@@ -1809,8 +1809,8 @@ function drawLocalPanelPreview() {
   localPanelRaf = null;
   const assets = localPanelAssets;
   const raw = state.cropImgEl;
-  const crop = state.cropTmp?.crop;
-  if (!assets || assets.key !== localPanelKey() || !raw?.complete || !raw.naturalWidth || !crop) return;
+  if (!assets || assets.key !== localPanelKey() || !raw?.complete || !raw.naturalWidth) return;
+  const crop = state.cropTmp?.crop || { x: 0, y: 0, w: raw.naturalWidth, h: raw.naturalHeight };
   const layer = assets.layer;
   const ctx = layer.getContext("2d");
   ctx.globalCompositeOperation = "source-over";
