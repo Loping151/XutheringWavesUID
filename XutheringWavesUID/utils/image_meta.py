@@ -16,8 +16,9 @@ from typing import Optional
 
 from PIL import Image
 
-MAX_CROP_DIM = 8000
-MAX_CROP_PIXELS = 40_000_000
+# 框选画布尺寸上限
+MAX_CROP_DIM = 16384
+MAX_CROP_PIXELS = 160_000_000
 
 
 def meta_path(image: Path) -> Path:
@@ -63,7 +64,7 @@ def move_image_meta(src: Path, dst: Path) -> None:
 
 
 def normalize_crop(value: dict) -> dict:
-    """源图绝对像素坐标, 允许越界; 限制尺寸防 OOM。"""
+    """源图绝对像素坐标, 允许越界。"""
     try:
         crop = {key: int(round(float(value[key]))) for key in ("x", "y", "w", "h")}
     except (KeyError, TypeError, ValueError, OverflowError) as exc:

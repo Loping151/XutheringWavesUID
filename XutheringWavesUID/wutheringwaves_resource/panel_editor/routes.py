@@ -29,7 +29,14 @@ from .auth import (
     require_same_origin,
 )
 from . import storage as st
-from ...utils.image_meta import delete_image_meta, normalize_crop, read_crop, update_image_meta
+from ...utils.image_meta import (
+    MAX_CROP_DIM as _MAX_CROP_DIM,
+    MAX_CROP_PIXELS as _MAX_CROP_PIXELS,
+    delete_image_meta,
+    normalize_crop,
+    read_crop,
+    update_image_meta,
+)
 from ...utils.pile_offset import (
     SCALE_MAX,
     SCALE_MIN,
@@ -39,11 +46,6 @@ from ...utils.pile_offset import (
 
 
 _STATIC_DIR = Path(__file__).parent / "static"
-
-# 框选可超出原图(越界部分白色填充)后, 画布尺寸的安全上限, 防 OOM:
-# 单边 ≤ 原图各边 3 倍且 ≤ 8000px; 同时总像素 ≤ 40MP(单边限幅挡不住极端长宽比)。
-_MAX_CROP_DIM = 8000
-_MAX_CROP_PIXELS = 40_000_000
 
 # 禁止被他站 iframe 嵌套 (点击劫持: 管理员 Basic Auth 已缓存, 隐形 iframe 里的点击即操作)。
 _FRAME_DENY = {
