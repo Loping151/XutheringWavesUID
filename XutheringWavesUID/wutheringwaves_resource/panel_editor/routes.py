@@ -232,7 +232,7 @@ async def api_image(
     if target is None or not target.is_file():
         raise HTTPException(404, "image not found")
     headers = {"Cache-Control": "no-store"}
-    if trim and type == "card" and read_crop(target) is not None:
+    if trim and read_crop(target) is not None:
         from ...wutheringwaves_charinfo.card_utils import _crop_card_file
         img = await _crop_card_file(target)
         if img is not None:
@@ -276,7 +276,6 @@ async def _stage_upload(file: UploadFile) -> Optional[dict]:
         suffix = ".jpg"
     token = st.new_tmp_token()
     st.write_tmp_image(token, suffix, raw)
-    st.write_tmp_image(f"{token}.orig", suffix, raw)
     return {
         "token": token, "name": filename, "suffix": suffix,
         "width": w, "height": h, "size": len(raw),
@@ -337,7 +336,7 @@ def _lq_webp(data: bytes) -> Optional[bytes]:
 async def api_tmp_image(token: str, lq: int = 0, _: None = Depends(require_auth)):
     if not st.is_safe_token(token):
         raise HTTPException(400, "invalid token")
-    current, _orig = st.find_tmp_files(token)
+    current = st.find_tmp_file(token)
     if current is None:
         raise HTTPException(404, "tmp not found")
     if lq:
@@ -353,103 +352,26 @@ async def api_tmp_crop(
     payload: dict,
     _: None = Depends(require_auth),
 ):
-    """x,y,w,h 为原图绝对像素坐标, 允许越界。
-    card 只把框选记入 meta, 原图不动; 其它类型从 original 裁出(越界填白)写入 current,
-    故放大裁剪框能找回先前被裁掉的内容。
-    """
+    """框选只记入 meta, 原图不动。crop 为原图绝对像素坐标, 允许越界; null 清除。"""
     token = payload.get("token")
     if not st.is_safe_token(token):
         raise HTTPException(400, "invalid token")
-    try:
-        x = int(round(float(payload["x"])))
-        y = int(round(float(payload["y"])))
-        w = int(round(float(payload["w"])))
-        h = int(round(float(payload["h"])))
-    except (KeyError, TypeError, ValueError, OverflowError):
-        raise HTTPException(400, "x/y/w/h required and numeric")
-    if w <= 0 or h <= 0:
-        raise HTTPException(400, "invalid crop size")
-
-    current, original = st.find_tmp_files(token)
-    if current is None or original is None:
+    current = st.find_tmp_file(token)
+    if current is None:
         raise HTTPException(404, "tmp not found")
 
-    with Image.open(original) as im:
-        im.load()
-        ow, oh = im.size
-
-        # 允许框选超出原图: 越界部分白色填充, 不再 clamp 到原图范围。仍限制画布尺寸防 OOM。
-        if w > min(_MAX_CROP_DIM, ow * 3) or h > min(_MAX_CROP_DIM, oh * 3):
+    crop = payload.get("crop")
+    if crop is not None:
+        try:
+            crop = normalize_crop(crop)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        with Image.open(current) as im:
+            ow, oh = im.size
+        if crop["w"] > ow * 3 or crop["h"] > oh * 3:
             raise HTTPException(400, "crop size too large")
-        if w * h > _MAX_CROP_PIXELS:
-            raise HTTPException(400, "crop size too large")
-
-        if payload.get("type") == "card":
-            crop = {"x": x, "y": y, "w": w, "h": h}
-            update_image_meta(current, "crop", crop)
-            return {
-                "token": token,
-                "width": ow,
-                "height": oh,
-                "size": current.stat().st_size,
-                "crop": crop,
-            }
-
-        is_jpeg = current.suffix.lower() in (".jpg", ".jpeg")
-        keep_alpha = (not is_jpeg) and im.mode in ("RGBA", "LA", "P")
-        mode = "RGBA" if keep_alpha else "RGB"
-        fill = (255, 255, 255, 255) if keep_alpha else (255, 255, 255)
-        canvas = Image.new(mode, (w, h), fill)
-
-        # 原图与框选框的重叠区域(原图坐标系), 仅在有重叠时把对应内容贴回白底画布。
-        ix0, iy0 = max(0, x), max(0, y)
-        ix1, iy1 = min(ow, x + w), min(oh, y + h)
-        if ix1 > ix0 and iy1 > iy0:
-            region = im.crop((ix0, iy0, ix1, iy1))
-            if region.mode != mode:
-                region = region.convert(mode)
-            canvas.paste(region, (ix0 - x, iy0 - y))
-        cropped = canvas
-
-    suffix = current.suffix
-    out = BytesIO()
-    if suffix.lower() in (".jpg", ".jpeg"):
-        cropped.convert("RGB").save(out, "JPEG", quality=92)
-    elif suffix.lower() == ".webp":
-        cropped.save(out, "WEBP", quality=90)
-    else:
-        cropped.save(out, "PNG")
-    current.write_bytes(out.getvalue())
-
-    with Image.open(current) as im:
-        nw, nh = im.size
-    return {"token": token, "width": nw, "height": nh, "size": current.stat().st_size}
-
-
-@app.post("/waves/panel-edit/api/tmp/restore")
-async def api_tmp_restore(payload: dict, _: None = Depends(require_auth)):
-    token = payload.get("token")
-    if not st.is_safe_token(token):
-        raise HTTPException(400, "invalid token")
-    current, original = st.find_tmp_files(token)
-    if current is None or original is None:
-        raise HTTPException(404, "tmp not found")
-    # 连后缀一并回退: compress 可能把 current 改成了 .webp, 避免还原后扩展名与内容错配。
-    restored = current.with_suffix(original.suffix)
-    if restored != current:
-        current.unlink(missing_ok=True)
-    restored.write_bytes(original.read_bytes())
-    update_image_meta(restored, "crop", None)
-    with Image.open(restored) as im:
-        w, h = im.size
-    return {
-        "token": token,
-        "width": w,
-        "height": h,
-        "size": restored.stat().st_size,
-        "suffix": restored.suffix,
-        "crop": None,
-    }
+    update_image_meta(current, "crop", crop)
+    return {"token": token, "crop": crop}
 
 
 def _save_resized(p: Path, im: Image.Image) -> None:
@@ -466,9 +388,8 @@ def _save_resized(p: Path, im: Image.Image) -> None:
 
 @app.post("/waves/panel-edit/api/tmp/resize")
 async def api_tmp_resize(payload: dict, _: None = Depends(require_auth)):
-    """按 scale 倍率等比缩放 tmp 图; current 与 original 同步缩放。
-    compress=true 时额外把 current 转 webp(q80, 同「压缩面板图」), original 保留原格式供再裁剪。
-    card 的框选随图等比缩放。
+    """按 scale 倍率等比缩放 tmp 图, 框选 crop 随图等比缩放后写回 meta。
+    compress=true 时额外转 webp(q80, 同「压缩面板图」)。
     """
     token = payload.get("token")
     if not st.is_safe_token(token):
@@ -481,17 +402,17 @@ async def api_tmp_resize(payload: dict, _: None = Depends(require_auth)):
         raise HTTPException(400, "scale out of range (0.05 - 8.0)")
     compress = bool(payload.get("compress"))
 
-    current, original = st.find_tmp_files(token)
-    if current is None or original is None:
+    current = st.find_tmp_file(token)
+    if current is None:
         raise HTTPException(404, "tmp not found")
 
-    crop = read_crop(current)
-    if payload.get("type") == "card" and payload.get("crop") is not None:
+    crop = payload.get("crop")
+    if crop is not None:
         try:
-            crop = normalize_crop(payload["crop"])
+            crop = normalize_crop(crop)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
-    with Image.open(original) as im:
+    with Image.open(current) as im:
         source_w, source_h = im.size
     if crop is not None and abs(scale - 1.0) > 1e-6:
         sx = max(1, round(source_w * scale)) / source_w
@@ -508,25 +429,16 @@ async def api_tmp_resize(payload: dict, _: None = Depends(require_auth)):
         except ValueError as exc:
             raise HTTPException(400, str(exc))
 
-    def _scale(p: Path):
-        with Image.open(p) as im:
-            im.load()
-            nw = max(1, int(round(im.width * scale)))
-            nh = max(1, int(round(im.height * scale)))
-            if max(nw, nh) > _MAX_CROP_DIM or nw * nh > _MAX_CROP_PIXELS:
-                raise HTTPException(400, "resize result too large")
-            resized = im.resize((nw, nh), Image.Resampling.LANCZOS)
-        _save_resized(p, resized)
-        return nw, nh
-
+    cw, ch = source_w, source_h
     if abs(scale - 1.0) > 1e-6:
-        ow, oh = _scale(original)
-        cw, ch = _scale(current)
-    else:
-        with Image.open(original) as im:
-            ow, oh = im.size
+        cw = max(1, int(round(source_w * scale)))
+        ch = max(1, int(round(source_h * scale)))
+        if max(cw, ch) > _MAX_CROP_DIM or cw * ch > _MAX_CROP_PIXELS:
+            raise HTTPException(400, "resize result too large")
         with Image.open(current) as im:
-            cw, ch = im.size
+            im.load()
+            resized = im.resize((cw, ch), Image.Resampling.LANCZOS)
+        _save_resized(current, resized)
 
     if compress and current.suffix.lower() != ".webp":
         webp = current.with_suffix(".webp")
@@ -537,13 +449,11 @@ async def api_tmp_resize(payload: dict, _: None = Depends(require_auth)):
             current.unlink(missing_ok=True)
         current = webp
 
-    if crop is not None:
-        update_image_meta(current, "crop", crop)
+    update_image_meta(current, "crop", crop)
 
     return {
         "token": token,
         "width": cw, "height": ch,
-        "source_width": ow, "source_height": oh,
         "size": current.stat().st_size,
         "suffix": current.suffix,
         "crop": crop,
@@ -631,7 +541,7 @@ async def api_confirm(payload: dict, _: None = Depends(require_auth)):
     if not st.is_safe_char_id(char_id):
         raise HTTPException(400, "invalid char_id")
 
-    current, original = st.find_tmp_files(token)
+    current = st.find_tmp_file(token)
     if current is None:
         raise HTTPException(404, "tmp not found")
 
@@ -643,17 +553,12 @@ async def api_confirm(payload: dict, _: None = Depends(require_auth)):
     final = st.relocate_to_target(target_type, char_id, current, suffix_hint=current.suffix)
     _try_update_orb_cache(final)
     _index_add(target_type, char_id, final)
-    if original is not None:
-        try:
-            original.unlink()
-        except OSError:
-            pass
     return {"ok": True, "name": final.name, "hash_id": st.hash_id_for(final.name)}
 
 
 @app.post("/waves/panel-edit/api/replace-existing")
 async def api_replace_existing(payload: dict, _: None = Depends(require_auth)):
-    """用 tmp 覆盖已有图, card 同步框选 meta。删除旧图的 ORB 缓存, 重新生成。"""
+    """用 tmp 覆盖已有图并同步框选 meta。删除旧图的 ORB 缓存, 重新生成。"""
     token = payload.get("token")
     target_type = payload.get("type")
     char_id = payload.get("char_id")
@@ -667,7 +572,7 @@ async def api_replace_existing(payload: dict, _: None = Depends(require_auth)):
     if not st.is_safe_name(name):
         raise HTTPException(400, "invalid name")
 
-    current, _ = st.find_tmp_files(token)
+    current = st.find_tmp_file(token)
     if current is None:
         raise HTTPException(404, "tmp not found")
     target = st.safe_target_image(target_type, char_id, name)
@@ -676,8 +581,7 @@ async def api_replace_existing(payload: dict, _: None = Depends(require_auth)):
 
     _try_delete_orb_cache(target)
     target.write_bytes(current.read_bytes())
-    if target_type == "card":
-        update_image_meta(target, "crop", read_crop(current))
+    update_image_meta(target, "crop", read_crop(current))
     _try_update_orb_cache(target)
     _index_add(target_type, char_id, target)
 
@@ -888,7 +792,7 @@ async def api_panel_layers(
     check_preview_rate(request)
     if not st.is_safe_char_id(char_id) or not st.is_safe_token(token):
         raise HTTPException(400, "invalid char_id or token")
-    current, _ = st.find_tmp_files(token)
+    current = st.find_tmp_file(token)
     if current is None:
         raise HTTPException(404, "tmp not found")
     from .preview import render_panel_layers
@@ -966,7 +870,7 @@ async def api_preview_tmp(
         raise HTTPException(400, "invalid char_id")
     if not st.is_safe_token(token):
         raise HTTPException(400, "invalid token")
-    current, _orig = st.find_tmp_files(token)
+    current = st.find_tmp_file(token)
     if current is None:
         raise HTTPException(404, "tmp not found")
     try:

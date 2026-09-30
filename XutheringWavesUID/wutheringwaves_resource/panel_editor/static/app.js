@@ -25,7 +25,7 @@ const state = {
   // 缩略图基准宽度 (px); null = 跟随 CSS 默认 (响应式)
   thumbSize: null,
   // single-crop tmp:
-  cropTmp: null,              // {token, suffix, source: {w,h}, current: {w,h}, kind: "upload" | "edit-existing", origin: {char_id,name}? }
+  cropTmp: null,              // {token, suffix, current: {w,h}, crop?, kind: "upload" | "edit-existing", origin: {char_id,name}? }
   cropRect: null,             // {x,y,w,h} display coords (图像坐标系, 原点=图片左上角)
   cropImgEl: null,
   cropClient: null,           // {w,h} 上次记录的图片显示尺寸, 供窗口缩放校正
@@ -38,7 +38,6 @@ const state = {
   // preview auto-refresh:
   previewSeq: 0,
   previewAuto: (() => { try { return localStorage.getItem("ww.panelEdit.previewAuto") !== "0"; } catch (_) { return true; } })(),
-  autoCrop: (() => { try { return localStorage.getItem("ww.panelEdit.autoCrop") !== "0"; } catch (_) { return true; } })(),
   lqEdit: (() => { try { return localStorage.getItem("ww.panelEdit.lqEdit") === "1"; } catch (_) { return false; } })(),
 
   // edit-existing warning dismissed
@@ -674,7 +673,6 @@ async function uploadSingle(file) {
     state.cropTmp = {
       token: data.token,
       suffix: data.suffix,
-      source: { w: data.width, h: data.height },
       current: { w: data.width, h: data.height },
       size: data.size,
       kind: "upload",
@@ -693,9 +691,7 @@ function renderCropper(body) {
     body.append(el("div", { class: "warn-banner" },
       el("span", { class: "warn-banner__icon", text: "!" }),
       el("div", { class: "warn-banner__msg",
-        text: state.type === "card"
-          ? "框选会保留完整图片；缩放、压缩会修改图片文件。"
-          : "编辑会覆盖原图并重建索引，无法撤销，请谨慎。" }),
+        text: "框选会保留完整图片；缩放、压缩会修改图片文件。" }),
       el("button", { class: "btn btn--ghost",
         onClick: () => { state.editWarnDismissed = true; renderCenterBody(); } }, "知道了"),
     ));
@@ -704,30 +700,11 @@ function renderCropper(body) {
   const tmp = state.cropTmp;
   const readout = el("div", { class: "cropper__readout" },
     el("span", null, el("span", { class: "k", text: "源:" }),
-      el("b", { text: `${tmp.source.w}×${tmp.source.h}` })),
+      el("b", { text: `${tmp.current.w}×${tmp.current.h}` })),
     el("span", null, el("span", { class: "k", text: "当前:" }),
-      el("b", { id: "cropCurSize", text: `${tmp.current.w}×${tmp.current.h}` })),
+      el("b", { id: "cropCurSize", text: `${(tmp.crop || tmp.current).w}×${(tmp.crop || tmp.current).h}` })),
     el("span", null, el("span", { class: "k", text: "裁剪 (源像素):" }),
       el("b", { id: "cropRectReadout", text: "—" })),
-    state.type !== "card" && el("label", {
-      class: "crop-auto",
-      title: "关闭后, 拖动控制框不再自动裁剪/刷新预览; 需手动点「应用裁剪」",
-    },
-      el("input", {
-        type: "checkbox",
-        ...(state.autoCrop ? { checked: "checked" } : {}),
-        onChange: (e) => {
-          state.autoCrop = e.target.checked;
-          try { localStorage.setItem("ww.panelEdit.autoCrop", state.autoCrop ? "1" : "0"); } catch (_) {}
-          if (!state.autoCrop) {
-            clearTimeout(_autoCropTimer);
-            _autoCropTimer = null;
-            syncCropConfirm();
-          }
-        },
-      }),
-      el("span", { text: "实时裁剪" }),
-    ),
     el("label", {
       class: "crop-auto",
       title: "编辑时用同尺寸高压缩 WebP 传输节省流量; 后台裁剪与保存仍用原图",
@@ -757,14 +734,12 @@ function renderCropper(body) {
   const bar = el("div", { class: "cropper__bar" },
     readout,
     el("div", { class: "cropper__actions" },
-      el("button", { class: "btn", onClick: applyCrop }, state.type === "card" ? "应用框选" : "应用裁剪"),
-      el("button", { class: "btn", onClick: restoreCrop }, state.type === "card" ? "还原框选" : "还原"),
-      state.type === "card" && el("button", { class: "btn", onClick: trimExtra,
-        title: "外框收紧到内框大小, 切掉面板可见区外的 padding" }, "裁掉多余"),
+      el("button", { class: "btn", onClick: applyCrop }, "应用框选"),
+      el("button", { class: "btn", onClick: restoreCrop }, "还原框选"),
       el("button", { class: "btn", onClick: promptResize }, "缩放"),
       el("button", { id: "cropConfirmBtn", class: "btn btn--primary",
         onClick: tmp.kind === "edit-existing" ? confirmReplace : () => confirmUpload() },
-        tmp.kind === "edit-existing" ? (state.type === "card" ? "确认保存" : "确认覆盖") : "确认上传"),
+        tmp.kind === "edit-existing" ? "确认保存" : "确认上传"),
     ),
   );
 
@@ -836,7 +811,7 @@ function lockCropImgSize(img, wrap) {
 
 function initCropRect(img, wrap) {
   const { w, h } = lockCropImgSize(img, wrap);
-  const crop = state.type === "card" ? state.cropTmp?.crop : null;
+  const crop = state.cropTmp?.crop;
   state.cropRect = crop ? {
     x: crop.x * w / img.naturalWidth, y: crop.y * h / img.naturalHeight,
     w: crop.w * w / img.naturalWidth, h: crop.h * h / img.naturalHeight,
@@ -998,7 +973,7 @@ function startVisDrag(ev, wrap, visEl) {
   const isHandle = target.classList.contains("handle");
   const direction = target.dataset.h || "";
   const tmp = state.cropTmp;
-  if (!tmp || !tmp.source) return;
+  if (!tmp) return;
 
   const cur = panelVisibleRectInCrop(state.cropRect.w, state.cropRect.h);
   if (!cur) return;
@@ -1126,9 +1101,7 @@ function syncCropConfirm() {
 }
 
 function scheduleAutoCrop() {
-  // 面板框选始终留在前端, 不产生 tmp 裁图或后端预览请求。
   if (state.type === "card") return;
-  if (!state.autoCrop) return;
   clearTimeout(_autoCropTimer);
   _autoCropTimer = setTimeout(async () => {
     _autoCropTimer = null;
@@ -1138,7 +1111,7 @@ function scheduleAutoCrop() {
       syncCropConfirm();
       return;
     }
-    await applyCrop({ silent: true });
+    await applyCrop({ auto: true });
   }, _AUTO_CROP_IDLE_MS);
   syncCropConfirm();
 }
@@ -1157,95 +1130,62 @@ function displayToSourceRect(rect) {
   };
 }
 
+function cropOf(src) {
+  const img = state.cropImgEl;
+  const whole = src && img && src.x === 0 && src.y === 0
+    && src.w === img.naturalWidth && src.h === img.naturalHeight;
+  return whole ? null : src;
+}
+
 function updateRectReadout() {
   const node = document.getElementById("cropRectReadout");
   if (!node || !state.cropRect) return;
   const s = displayToSourceRect(state.cropRect);
   node.textContent = s ? `${s.x},${s.y} ${s.w}×${s.h}` : "—";
-  if (state.type === "card" && s && state.cropTmp) {
-    state.cropTmp.crop = s;
+  if (s && state.cropTmp) {
+    state.cropTmp.crop = cropOf(s);
     syncBatchCropItem();
     syncSizeReadouts();
     requestLocalPanelDraw();
   }
 }
 
-async function applyCrop(opts = {}) {
-  const { silent = false } = opts;
+async function applyCrop({ auto = false, message = "已应用框选" } = {}) {
   if (_cropInflight) return;
   const tmp = state.cropTmp;
-  if (!tmp) return;
-  const src = displayToSourceRect(state.cropRect);
-  if (!src) return;
-  if (state.type === "card") {
-    tmp.crop = src;
-    syncBatchCropItem();
-    syncSizeReadouts();
-    triggerPreview(true, true);
-    if (!silent) toast("已应用框选", "ok", 1800);
-    return;
-  }
-  // src 是相对 current 的坐标; 叠加 current 在原图内的 offset → 原图绝对坐标, 始终从原图裁
-  const off = tmp.offset || { x: 0, y: 0 };
-  const abs = { x: off.x + src.x, y: off.y + src.y, w: src.w, h: src.h };
-  _cropInflight = true;
-  syncCropConfirm();
-  try {
-    const r = await apiJson("/tmp/crop", { token: tmp.token, ...abs });
-    tmp.offset = { x: abs.x, y: abs.y };
-    tmp.current = { w: r.width, h: r.height };
-    tmp.size = r.size;
-    syncSizeReadouts();
-    refreshCropImg();
-    await waitCropImgLoad();
-    triggerPreview(true);
-    if (!silent) toast("已裁剪", "ok", 1800);
-  } catch (e) {
-    toast(`裁剪失败: ${e.message}`, "err");
-  } finally {
-    _cropInflight = false;
+  const src = state.cropRect && displayToSourceRect(state.cropRect);
+  if (!tmp || !src) return;
+  tmp.crop = cropOf(src);
+  syncBatchCropItem();
+  syncSizeReadouts();
+  if (state.type !== "card") {
+    _cropInflight = true;
     syncCropConfirm();
+    try {
+      await persistCrop(tmp);
+    } catch (e) {
+      return toast(`框选失败: ${e.message}`, "err");
+    } finally {
+      _cropInflight = false;
+      syncCropConfirm();
+    }
   }
+  triggerPreview(true, !auto);
+  if (!auto) toast(message, "ok", 1800);
 }
 
 async function restoreCrop() {
-  if (_cropInflight) return;
-  const tmp = state.cropTmp;
-  if (!tmp) return;
-  if (state.type === "card") {
-    tmp.crop = null;
-    initCropRect(state.cropImgEl, state.cropImgEl.parentElement);
-    syncBatchCropItem();
-    triggerPreview(true, true);
-    toast("已还原框选", "ok", 1800);
-    return;
-  }
-  _cropInflight = true;
-  syncCropConfirm();
-  try {
-    const r = await apiJson("/tmp/restore", { token: tmp.token });
-    tmp.offset = { x: 0, y: 0 };
-    tmp.current = { w: r.width, h: r.height };
-    tmp.size = r.size;
-    if (r.suffix) tmp.suffix = r.suffix;
-    syncSizeReadouts();
-    refreshCropImg();
-    await waitCropImgLoad();
-    triggerPreview();
-    toast("已还原", "ok", 1800);
-  } catch (e) {
-    toast(`还原失败: ${e.message}`, "err");
-  } finally {
-    _cropInflight = false;
-    syncCropConfirm();
-  }
+  if (_cropInflight || !state.cropTmp) return;
+  state.cropTmp.crop = null;
+  initCropRect(state.cropImgEl, state.cropImgEl.parentElement);
+  await applyCrop({ message: "已还原框选" });
 }
 
 function syncSizeReadouts() {
   const t = state.cropTmp;
   if (!t) return;
   const cur = document.getElementById("cropCurSize");
-  const selected = state.type === "card" && t.crop ? t.crop : t.current;
+  const selected = t.crop || t.current;
   if (cur) cur.textContent = `${selected.w}×${selected.h}`;
   const footSize = document.getElementById("previewFootSize");
   if (footSize) footSize.textContent = formatBytes(t.size);
@@ -1260,16 +1200,13 @@ function syncBatchCropItem() {
   if (item) Object.assign(item, {
     width: tmp.current.w, height: tmp.current.h, size: tmp.size,
     suffix: tmp.suffix, crop: tmp.crop,
-    sourceWidth: tmp.source.w, sourceHeight: tmp.source.h, offset: tmp.offset,
   });
 }
 
-async function persistPanelCrop(tmp) {
-  if (state.type !== "card") return;
+async function persistCrop(tmp) {
   const crop = state.mode === "single-crop" && state.cropRect && tmp === state.cropTmp
-    ? displayToSourceRect(state.cropRect) : tmp.crop;
-  if (!crop) return;
-  await apiJson("/tmp/crop", { token: tmp.token, type: "card", ...crop });
+    ? cropOf(displayToSourceRect(state.cropRect)) : tmp.crop;
+  await apiJson("/tmp/crop", { token: tmp.token, crop: crop || null });
 }
 
 function cropImgUrl() {
@@ -1296,34 +1233,6 @@ function waitCropImgLoad() {
     img.addEventListener("load", onLoad);
     img.addEventListener("error", onErr);
   });
-}
-
-async function trimExtra() {
-  if (isCropBusy()) return;
-  if (state.type !== "card") return;
-  const tmp = state.cropTmp;
-  if (!tmp || !state.cropRect) return;
-  const v = panelVisibleRectInCrop(state.cropRect.w, state.cropRect.h);
-  if (!v) return;
-  const vAbs = {
-    x: state.cropRect.x + v.x,
-    y: state.cropRect.y + v.y,
-    w: v.w,
-    h: v.h,
-  };
-  const f = (PANEL_VIS.b - PANEL_VIS.t) / vAbs.h;  // 805 / visbox.h
-  state.cropRect = {
-    x: vAbs.x - PANEL_VIS.l / f,
-    y: vAbs.y - PANEL_VIS.t / f,
-    w: PANEL_OUT.w / f,
-    h: PANEL_OUT.h / f,
-  };
-  const wrap = state.cropImgEl?.parentElement;
-  if (wrap) {
-    layoutCropper(wrap);
-    updateRectReadout();
-  }
-  await applyCrop();
 }
 
 function promptResize() {
@@ -1365,22 +1274,14 @@ async function doResize(scale, compress) {
   _cropInflight = true;
   syncCropConfirm();
   try {
-    const oldSourceW = tmp.source.w, oldSourceH = tmp.source.h;
-    const crop = state.type === "card" ? displayToSourceRect(state.cropRect) : null;
     const r = await apiJson("/tmp/resize", {
       token: tmp.token, scale, compress,
-      ...(crop ? { type: "card", crop } : {}),
+      crop: cropOf(displayToSourceRect(state.cropRect)),
     });
-    const sx = r.source_width / oldSourceW;
-    const sy = r.source_height / oldSourceH;
     tmp.current = { w: r.width, h: r.height };
-    tmp.source = { w: r.source_width, h: r.source_height };
     tmp.size = r.size;
     if (r.suffix) tmp.suffix = r.suffix;
-    if (state.type === "card") tmp.crop = r.crop || null;
-    if (tmp.offset) {
-      tmp.offset = { x: tmp.offset.x * sx, y: tmp.offset.y * sy };
-    }
+    tmp.crop = r.crop || null;
     syncBatchCropItem();
     renderCenterBody();
     syncSizeReadouts();
@@ -1428,7 +1329,7 @@ async function confirmUpload(force = false) {
   const fromBatch = tmp.fromBatch === true;
   const fromPending = tmp.fromPending || null;
   try {
-    await persistPanelCrop(tmp);
+    await persistCrop(tmp);
     const r = await apiJson("/confirm", {
       token: tmp.token, type: state.type, char_id: state.selectedCharId, force,
     });
@@ -1464,9 +1365,8 @@ async function confirmUpload(force = false) {
 async function confirmReplace() {
   const tmp = state.cropTmp;
   if (!tmp || tmp.kind !== "edit-existing") return;
-  if (state.type !== "card" && !confirm("确认用裁剪后的内容覆盖原图? 此操作不可撤销。")) return;
   try {
-    await persistPanelCrop(tmp);
+    await persistCrop(tmp);
     const r = await apiJson("/replace-existing", {
       token: tmp.token, type: state.type,
       char_id: state.selectedCharId,
@@ -1497,7 +1397,6 @@ async function editExisting(img) {
     state.cropTmp = {
       token: r.token,
       suffix: r.suffix,
-      source: { w: r.width, h: r.height },
       current: { w: r.width, h: r.height },
       size: r.size,
       kind: "edit-existing",
@@ -1598,13 +1497,11 @@ async function editBatchItem(it) {
   state.cropTmp = {
     token: it.token,
     suffix: it.suffix,
-    source: { w: it.sourceWidth || it.width, h: it.sourceHeight || it.height },
     current: { w: it.width, h: it.height },
     size: it.size,
     kind: "upload",
     fromBatch: true,
     crop: it.crop || null,
-    offset: it.offset,
   };
   state.mode = "single-crop";
   closeMobileDrawers();
@@ -1623,7 +1520,7 @@ async function confirmAllBatch() {
   let ok = 0, dup = 0, fail = 0;
   for (const it of state.batchItems.slice()) {
     try {
-      await persistPanelCrop(it);
+      await persistCrop(it);
       const r = await apiJson("/confirm", {
         token: it.token, type: state.type, char_id: state.selectedCharId,
       });
@@ -1723,8 +1620,8 @@ function renderPreview() {
     const t = state.cropTmp;
     foot.append(
       el("span", null, "size ", el("b", { id: "previewFootSize", text: formatBytes(t.size) })),
-      el("span", null, "src ", el("b", { text: `${t.source.w}×${t.source.h}` })),
-      el("span", null, "now ", el("b", { id: "previewFootNow", text: `${t.current.w}×${t.current.h}` })),
+      el("span", null, "src ", el("b", { text: `${t.current.w}×${t.current.h}` })),
+      el("span", null, "now ", el("b", { id: "previewFootNow", text: `${(t.crop || t.current).w}×${(t.crop || t.current).h}` })),
     );
   }
 
@@ -2434,7 +2331,6 @@ async function stageAndCrop(g, im) {
     await loadImages();
     state.cropTmp = {
       token: r.token, suffix: r.suffix,
-      source: { w: r.width, h: r.height },
       current: { w: r.width, h: r.height },
       size: r.size,
       kind: "upload",

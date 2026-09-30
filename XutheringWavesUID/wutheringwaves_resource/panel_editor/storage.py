@@ -187,7 +187,7 @@ def list_images(t: str, char_id: str) -> List[dict]:
                 "mtime": int(info.st_mtime),
                 "ver": file_fingerprint(p),
                 "rank_offset": rank_offset_of(p) if t == "stamina" else None,
-                "crop": read_crop(p) if t == "card" else None,
+                "crop": read_crop(p),
             }
         )
     return items
@@ -265,7 +265,7 @@ def get_or_make_thumb(target: Path, max_size: int = 360, t: Optional[str] = None
 
     try:
         with Image.open(target) as im:
-            if t == "card":
+            if t:
                 im = crop_image(im, read_crop(target))
             box = _display_crop_box(t, im.width, im.height)
             if box:
@@ -306,27 +306,20 @@ def write_tmp_image(token: str, suffix: str, data: bytes) -> Path:
     return target
 
 
-def find_tmp_files(token: str) -> Tuple[Optional[Path], Optional[Path]]:
-    """返回 (current_path, original_path) — 当前 (可能已裁剪的) 与原始备份。"""
+def find_tmp_file(token: str) -> Optional[Path]:
     if not is_safe_token(token):
-        return None, None
-    current: Optional[Path] = None
-    original: Optional[Path] = None
+        return None
     for p in PANEL_EDIT_TMP.iterdir():
-        if not p.is_file() or p.suffix.lower() not in IMAGE_EXTS:
-            continue
-        if p.stem == token:
-            current = p
-        elif p.stem == f"{token}.orig":
-            original = p
-    return current, original
+        if p.is_file() and p.stem == token and p.suffix.lower() in IMAGE_EXTS:
+            return p
+    return None
 
 
 def cleanup_tmp(token: str) -> None:
     if not is_safe_token(token):
         return
     for p in PANEL_EDIT_TMP.iterdir():
-        if p.is_file() and (p.stem == token or p.stem == f"{token}.orig"):
+        if p.is_file() and p.stem == token:
             try:
                 p.unlink()
             except OSError:
@@ -497,7 +490,7 @@ def delete_pending(t: str, char_id: str, name: str) -> bool:
 
 
 def stage_pending(t: str, char_id: str, name: str) -> Optional[dict]:
-    """把待审核图复制进一个 tmp token(current+orig), 之后复用裁剪/确认流程。"""
+    """把待审核图复制进一个 tmp token, 之后复用框选/确认流程。"""
     src = safe_pending_image(t, char_id, name)
     if src is None or not src.is_file():
         return None
@@ -512,5 +505,4 @@ def stage_pending(t: str, char_id: str, name: str) -> Optional[dict]:
         return None
     token = new_tmp_token()
     write_tmp_image(token, suffix, data)
-    write_tmp_image(f"{token}.orig", suffix, data)
     return {"token": token, "suffix": suffix, "width": w, "height": h, "size": len(data)}

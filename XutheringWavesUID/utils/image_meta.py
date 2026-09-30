@@ -100,7 +100,7 @@ def crop_image(image: Image.Image, crop: Optional[dict]) -> Image.Image:
     return canvas
 
 
-def open_panel_image(path: Path) -> Image.Image:
+def open_meta_image(path: Path) -> Image.Image:
     with Image.open(path) as image:
         image.load()
         return crop_image(image, read_crop(path)).convert("RGBA")

@@ -19,6 +19,7 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
 from ...utils.image import _force_pile_path
+from ...utils.image_meta import open_meta_image
 from ...utils.name_convert import easy_id_to_name
 from ...utils.pile_offset import RankOffset, clamp_offset, place_rank_pile, read_rank_offset
 
@@ -291,8 +292,7 @@ def rank_layer_bytes(kind: str, char_id: str = "", pile_path: Optional[Path] = N
         _draw_rank_text(text, _rank_char_name(char_id))
         return _png_bytes(text), "image/png"
     if kind == "pile" and pile_path is not None:
-        with Image.open(pile_path) as im:
-            pile = im.convert("RGBA")
+        pile = open_meta_image(pile_path)
         buf = BytesIO()
         pile.save(buf, "WEBP", quality=85, method=4)
         return buf.getvalue(), "image/webp"
@@ -330,7 +330,7 @@ async def render_mr_preview(
     account_info = AccountBaseInfo.model_validate(_build_sample_account_dict(role_id, char_name))
 
     try:
-        pile = Image.open(image_path).convert("RGBA")
+        pile = open_meta_image(image_path)
     except Exception as e:
         logger.warning(f"[鸣潮·面板编辑] 读取 MR 图失败 {image_path}: {e}")
         return None

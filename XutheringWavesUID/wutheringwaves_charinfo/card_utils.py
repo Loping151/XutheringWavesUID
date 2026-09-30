@@ -718,7 +718,7 @@ def _crop_card_file(path: Path) -> Optional[Image.Image]:
 
 
 async def _one_card_img(t: str, path: Path):
-    cropped = await _crop_card_file(path) if t == "card" else None
+    cropped = await _crop_card_file(path)
     return await convert_img(cropped if cropped is not None else path)
 
 
