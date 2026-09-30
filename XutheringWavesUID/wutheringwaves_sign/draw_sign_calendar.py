@@ -17,7 +17,7 @@ from ..utils.resource.RESOURCE_PATH import (
 )
 from ..utils.waves_api import waves_api
 from ..wutheringwaves_config.wutheringwaves_config import WutheringWavesConfig
-from .draw_sign_calendar_pil import _format_loop_range, render_sign_calendar_pil
+from .draw_sign_calendar_pil import _format_loop_range, _has_loop, render_sign_calendar_pil
 
 
 async def draw_sign_calendar(uid: str, ev: Event) -> Optional[bytes | str]:
@@ -118,7 +118,7 @@ async def draw_sign_calendar(uid: str, ev: Event) -> Optional[bytes | str]:
     cycle_process_grey = None
     cycle_process_light = None
     loop_items = []
-    if sign_data.signLoopGoodsList and sign_data.loopSignNum > 0:
+    if _has_loop(sign_data):
         cycle_bg = await get_image_b64_with_cache(
             img_info.get("cycle_bg", ""), SIGN_SURFACE_PATH
         )

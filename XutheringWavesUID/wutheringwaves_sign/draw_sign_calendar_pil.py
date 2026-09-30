@@ -54,6 +54,15 @@ def _format_loop_range(start: str, end: str) -> str:
     return f"{_strip_year(start)} ~ {_strip_year(end)}"
 
 
+def _has_loop(sign_data: SignInInitData) -> bool:
+    if not sign_data.signLoopGoodsList:
+        return False
+    if sign_data.loopSignNum > 0:
+        return True
+    now = sign_data.nowServerTimes
+    return bool(now) and sign_data.loopStartTimes <= now <= sign_data.loopEndTimes
+
+
 async def _load(url: str) -> Optional[Image.Image]:
     if not url:
         return None
@@ -208,7 +217,7 @@ async def render_sign_calendar_pil(
     uid_display: str,
     month: int,
 ) -> bytes:
-    has_loop = bool(sign_data.signLoopGoodsList and sign_data.loopSignNum > 0)
+    has_loop = _has_loop(sign_data)
 
     cover = await _load(img_info.get("main_coverBg", ""))
     box_top = await _load(img_info.get("common_boxTopBg", ""))
