@@ -311,20 +311,26 @@ def alias_to_weapon_name(weapon_name: str) -> str:
     chs = _i18n_to_chs(weapon_name, _weapon_i18n_reverse)
     if chs:
         weapon_name = chs
-    for i in weapon_alias_data:
-        if (weapon_name in i) or (weapon_name in weapon_alias_data[i]):
-            return i
+    hit = _match_weapon(weapon_name)
+    if hit:
+        return hit
 
     if "专武" in weapon_name:
         char_name = weapon_name.replace("专武", "")
         name = alias_to_char_name(char_name)
         weapon_name = f"{name}专武"
 
-    for i in weapon_alias_data:
-        if (weapon_name in i) or (weapon_name in weapon_alias_data[i]):
-            return i
+    return _match_weapon(weapon_name) or weapon_name
 
-    return weapon_name
+
+def _match_weapon(weapon_name: str) -> Optional[str]:
+    for i, aliases in weapon_alias_data.items():
+        if weapon_name == i or weapon_name in aliases:
+            return i
+    for i in weapon_alias_data:
+        if weapon_name in i:
+            return i
+    return None
 
 
 def weapon_name_to_weapon_id(weapon_name: str) -> Optional[str]:
@@ -344,6 +350,11 @@ def alias_to_sonata_name(sonata_name: str | None) -> str | None:
     # Remove "套" character to make it optional
     normalized_sonata_name = sonata_name.rstrip('套')
     for i in sonata_alias_data:
+        if normalized_sonata_name == i.rstrip('套') or any(
+            normalized_sonata_name == alias.rstrip('套') for alias in sonata_alias_data[i]
+        ):
+            return i
+    for i in sonata_alias_data:
         # Check if normalized input matches the key (with "套" stripped)
         normalized_key = i.rstrip('套')
         if normalized_sonata_name in normalized_key:
@@ -362,10 +373,9 @@ def alias_to_echo_name(echo_name: str) -> str:
     if chs:
         echo_name = chs
     for i, j in echo_alias_data.items():
-        if echo_name == i:
+        if echo_name == i or echo_name in j:
             return i
-        if echo_name in j:
-            return i
+    for i, j in echo_alias_data.items():
         for k in j:
             if k and echo_name in k:
                 return i

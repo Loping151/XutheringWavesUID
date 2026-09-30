@@ -11,13 +11,11 @@ from PIL import Image, ImageDraw, ImageEnhance
 from gsuid_core.utils.image.convert import convert_img
 from gsuid_core.utils.image.image_tools import crop_center_img
 
-from ..utils import hint
 from ..utils.util import hide_uid, get_hide_uid_pref
 from ..utils.localization import t
 from ..utils.database.models import WavesLangSettings
 from ..utils.waves_api import waves_api
 from ..wutheringwaves_config import PREFIX
-from ..utils.error_reply import WAVES_CODE_102
 from ..utils import panel_card_pref
 from .card_hash_index import compute_hash, lookup_in_pair as _hash_lookup_in_pair
 from .card_utils import resize_and_center_image
@@ -502,7 +500,17 @@ async def get_role_need(
 
 
 # TODO: PIL 卸到线程池 (await/PIL 深度交错)
-async def draw_fixed_img(img, avatar, account_info, role_detail, locale="", uid=None, char_name=None, user_pref=""):
+async def draw_fixed_img(
+    img,
+    avatar,
+    account_info,
+    role_detail,
+    locale="",
+    uid=None,
+    char_name=None,
+    user_pref="",
+    preview_layers: Optional[dict] = None,
+):
     # 头像部分
     avatar_ring = Image.open(TEXT_PATH / "avatar_ring.png")
 
@@ -552,7 +560,10 @@ async def draw_fixed_img(img, avatar, account_info, role_detail, locale="", uid=
         except Exception as _e:
             logger.debug(f"[鸣潮·角色面板渲染] 应用面板图绑定失败, 回退默认: {_e}")
     try:
-        is_custom, role_pile, role_pile_path = await get_role_pile_with_path(role_detail.role.roleId, True)
+        if preview_layers is None:
+            is_custom, role_pile, role_pile_path = await get_role_pile_with_path(role_detail.role.roleId, True)
+        else:
+            is_custom, role_pile_path = True, _force_pile_path.get()
     finally:
         if _pin_token is not None:
             _force_pile_path.reset(_pin_token)
@@ -581,21 +592,37 @@ async def draw_fixed_img(img, avatar, account_info, role_detail, locale="", uid=
         anchor="mm",
     )
 
-    role_pile_image = Image.new("RGBA", (560, 1000))
-
-    role_pile = resize_and_center_image(role_pile, is_custom=is_custom)
-    role_pile_image.paste(
-        role_pile,
-        ((560 - role_pile.size[0]) // 2, (1000 - role_pile.size[1]) // 2),
-        role_pile,
-    )
-    img.paste(role_pile_image, (25, 170), char_mask)
-    img.paste(char_fg, (25, 170), char_fg)
+    if preview_layers is not None:
+        # 固定背景、立绘遮罩、前景分层, 框选时由前端复用。
+        preview_layers["mask"] = char_mask.copy()
+        preview_layers["foreground"] = char_fg
+        preview_layers["position"] = (25, 170)
+    else:
+        role_pile_image = Image.new("RGBA", (560, 1000))
+        role_pile = resize_and_center_image(role_pile, is_custom=is_custom)
+        role_pile_image.paste(
+            role_pile,
+            ((560 - role_pile.size[0]) // 2, (1000 - role_pile.size[1]) // 2),
+            role_pile,
+        )
+        img.paste(role_pile_image, (25, 170), char_mask)
+        img.paste(char_fg, (25, 170), char_fg)
 
     if is_custom and role_pile_path is not None:
         hash_id = compute_hash(role_pile_path.name)
-        draw = ImageDraw.Draw(img)
-        draw_text_with_shadow(draw, hash_id, 525, 270, waves_font_12, offset=(1, 1), shadow_color="gray", anchor="rm")
+        hash_layer = char_fg if preview_layers is not None else img
+        draw = ImageDraw.Draw(hash_layer)
+        x, y = (500, 100) if preview_layers is not None else (525, 270)
+        draw_text_with_shadow(
+            draw,
+            hash_id,
+            x,
+            y,
+            waves_font_12,
+            offset=(1, 1),
+            shadow_color="gray",
+            anchor="rm",
+        )
 
 
 async def _rawdata_rover_canon(uid) -> Optional[str]:
@@ -621,6 +648,7 @@ async def draw_char_detail_img(
     show_score=True,
     fallback_to_generic=False,
     role_detail_override: Optional[RoleDetailData] = None,
+    preview_layers: Optional[dict] = None,
 ):
     locale = await WavesLangSettings.get_lang(ev.user_id)
     # waves_id 时是查别人, 用 self uid 取本人偏好
@@ -635,7 +663,7 @@ async def draw_char_detail_img(
         if rover_canon:
             char_id = rover_canon
     if not char_id or len(char_id) != 4 or not char_id.isdigit():
-        return f"未找到指定角色, 请检查输入是否正确！"
+        return "未找到指定角色, 请检查输入是否正确！"
 
     damageDetail = DamageDetailRegister.find_class(char_id)
     if damageDetail and not WutheringWavesConfig.get_config("WavesToken").data:
@@ -888,7 +916,17 @@ async def draw_char_detail_img(
     # 创建背景
     img = await get_card_bg(1200, 1250 + echo_list + ph_sum_value + jineng_len + dd_len, "bg3")
     # 固定位置
-    await draw_fixed_img(img, avatar, account_info, role_detail, locale, uid=uid, char_name=char_name, user_pref=user_pref)
+    await draw_fixed_img(
+        img,
+        avatar,
+        account_info,
+        role_detail,
+        locale,
+        uid=uid,
+        char_name=char_name,
+        user_pref=user_pref,
+        preview_layers=preview_layers,
+    )
 
     # 声骸
     img.paste(phantom_temp, (0, 1320 + jineng_len), phantom_temp)
@@ -1197,7 +1235,7 @@ async def draw_char_score_img(ev: Event, uid: str, char: str, user_id: str, wave
 
     char_id = char_name_to_char_id(char)
     if not char_id or len(char_id) != 4 or not char_id.isdigit():
-        return f"未找到指定角色, 请检查输入是否正确！"
+        return "未找到指定角色, 请检查输入是否正确！"
     char_name = alias_to_char_name(char)
 
     ck = ""
@@ -1600,9 +1638,6 @@ async def ph_card_draw_optimal(
         SPECIAL_GOLD, waves_font_30, "mm",
     )
     phantom_temp.alpha_composite(target_title, dest=((1200 - _tt_w) // 2, 85))
-
-    ph_0 = Image.open(TEXT_PATH / "ph_0.png")
-    ph_1 = Image.open(TEXT_PATH / "ph_1.png")
 
     async def _draw_best_card(i, slot):
         sh_temp = Image.new("RGBA", (350, 550))

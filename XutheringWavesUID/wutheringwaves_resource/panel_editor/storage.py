@@ -15,6 +15,13 @@ from PIL import Image
 from gsuid_core.logger import logger
 
 from ...utils import name_convert
+from ...utils.image_meta import (
+    CacheFingerprint,
+    crop_image,
+    file_fingerprint,
+    move_image_meta,
+    read_crop,
+)
 from ...utils.name_convert import easy_id_to_name
 from ...utils.pile_offset import has_rank_offset, offset_dict, read_rank_offset
 from ...utils.resource.RESOURCE_PATH import (
@@ -178,14 +185,13 @@ def list_images(t: str, char_id: str) -> List[dict]:
                 "hash_id": hash_id_for(p.name),
                 "size": info.st_size,
                 "mtime": int(info.st_mtime),
+                "ver": file_fingerprint(p),
                 "rank_offset": rank_offset_of(p) if t == "stamina" else None,
+                "crop": read_crop(p) if t == "card" else None,
             }
         )
     return items
 
-
-# 缩略图按"角色卡实际显示区"裁剪的版本号; 改裁剪逻辑时 +1 使旧缓存失效。
-_THUMB_VERSION = 4
 
 # card 自定义图经 contain 缩放居中进 PANEL_OUT, 仅 PANEL_VIS 窗口在角色卡可见
 # (与 card_utils._PANEL_VISIBLE_BOX_LOCAL / 前端 app.js panelVisibleRectInCrop 对齐)。
@@ -233,12 +239,15 @@ def _display_crop_box(t: Optional[str], w: int, h: int) -> Optional[Tuple[int, i
     return None
 
 
+def _thumb_prefix(target: Path, max_size: int, t: Optional[str]) -> str:
+    """同一 pending 图既要整图又要按类型裁剪两种缓存, 故 t 纳入 key。"""
+    digest = hashlib.md5(f"{target.resolve()}|{t or ''}".encode()).hexdigest()[:12]
+    return f"{digest}_{max_size}_"
+
+
 def thumb_path_for(target: Path, max_size: int, t: Optional[str] = None) -> Path:
-    """缩略图缓存路径, 基于源图绝对路径 + 裁剪类型 hash 防冲突
-    (同一 pending 图既要整图又要按类型裁剪两种缓存, 故 t 纳入 key)。"""
-    abs_str = f"{target.resolve()}|{t or ''}"
-    digest = hashlib.md5(abs_str.encode()).hexdigest()[:12]
-    return PANEL_EDIT_THUMBS / f"{digest}_{max_size}_v{_THUMB_VERSION}.webp"
+    digest = hashlib.md5(thumb_fingerprint(target).encode()).hexdigest()[:12]
+    return PANEL_EDIT_THUMBS / f"{_thumb_prefix(target, max_size, t)}{digest}.webp"
 
 
 def get_or_make_thumb(target: Path, max_size: int = 360, t: Optional[str] = None) -> Optional[Path]:
@@ -249,14 +258,15 @@ def get_or_make_thumb(target: Path, max_size: int = 360, t: Optional[str] = None
     if not target.is_file():
         return None
     cache = thumb_path_for(target, max_size, t)
-    try:
-        if cache.exists() and cache.stat().st_mtime >= target.stat().st_mtime:
-            return cache
-    except OSError:
-        pass
+    if cache.exists():
+        return cache
+    for stale in PANEL_EDIT_THUMBS.glob(f"{_thumb_prefix(target, max_size, t)}*.webp"):
+        stale.unlink(missing_ok=True)
 
     try:
         with Image.open(target) as im:
+            if t == "card":
+                im = crop_image(im, read_crop(target))
             box = _display_crop_box(t, im.width, im.height)
             if box:
                 im = im.crop(box)
@@ -268,6 +278,18 @@ def get_or_make_thumb(target: Path, max_size: int = 360, t: Optional[str] = None
     except Exception as e:
         logger.warning(f"[鸣潮·面板编辑] 生成缩略图失败 {target}: {e}")
         return None
+
+
+thumb_fingerprint = CacheFingerprint(
+    get_or_make_thumb,
+    _display_crop_box,
+    _panel_visible_box,
+    _cover_box,
+    crop_image,
+    _PANEL_OUT,
+    _PANEL_VIS,
+    _BG_DISPLAY_RATIO,
+)
 
 
 def new_tmp_token() -> str:
@@ -291,7 +313,7 @@ def find_tmp_files(token: str) -> Tuple[Optional[Path], Optional[Path]]:
     current: Optional[Path] = None
     original: Optional[Path] = None
     for p in PANEL_EDIT_TMP.iterdir():
-        if not p.is_file():
+        if not p.is_file() or p.suffix.lower() not in IMAGE_EXTS:
             continue
         if p.stem == token:
             current = p
@@ -342,6 +364,7 @@ def relocate_to_target(t: str, char_id: str, src: Path, suffix_hint: Optional[st
             break
         counter += 1
     shutil.move(str(src), str(dst))
+    move_image_meta(src, dst)
     return dst
 
 

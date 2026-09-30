@@ -42,6 +42,7 @@ from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
 from gsuid_core.utils.image.convert import convert_img
 
+from ..utils.image_meta import CacheFingerprint, crop_image, read_crop
 from ..utils.name_convert import alias_to_char_name, char_name_to_char_id, easy_id_to_name
 from ..utils.resource.constant import SPECIAL_CHAR, SPECIAL_CHAR_ID
 from ..utils.resource.RESOURCE_PATH import (
@@ -78,7 +79,7 @@ def _listing_char_name(char_id) -> str:
 
 def get_char_id_and_name(char: str) -> tuple[Optional[str], str, str]:
     char_id = None
-    msg = f"[鸣潮] 角色名无法找到, 可能暂未适配, 请先检查输入是否正确！"
+    msg = "[鸣潮] 角色名无法找到, 可能暂未适配, 请先检查输入是否正确！"
     sex = ""
     if "男" in char:
         char = char.replace("男", "")
@@ -292,9 +293,6 @@ def _shorten_rel_path(path: Path) -> str:
     return rel
 
 
-# 改了 _compute_orb_features 的预处理流程就 +1, 旧 .npz 当 miss 重算。
-ORB_FEATURE_VERSION = 2
-
 # role_pile 在主面板上的偏移 (25, 170) 与 CROP_PORTRAIT (85, 265, 525, 1070)
 # 决定可见区在 role_pile 局部坐标 = (60, 95, 500, 900)。
 _PANEL_VISIBLE_BOX_LOCAL = (60, 95, 500, 900)
@@ -371,14 +369,8 @@ def _load_orb_cache(image_path: Path):
     if not cache_path or not cache_path.exists():
         return None
     try:
-        if cache_path.stat().st_mtime < image_path.stat().st_mtime:
-            return None
-    except FileNotFoundError:
-        return None
-    try:
         data = np.load(cache_path)
-        version = int(data["version"][0]) if "version" in data.files else 1
-        if version != ORB_FEATURE_VERSION:
+        if str(data["fingerprint"][0]) != _orb_fingerprint(image_path):
             return None
         pts = data["pts"]
         des = data["des"]
@@ -395,7 +387,10 @@ def _save_orb_cache(image_path: Path, pts, des) -> None:
         return
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
-        cache_path, pts=pts, des=des, version=np.array([ORB_FEATURE_VERSION])
+        cache_path,
+        pts=pts,
+        des=des,
+        fingerprint=np.array([_orb_fingerprint(image_path)]),
     )
 
 
@@ -417,7 +412,7 @@ def _compute_orb_features(image_path: Path, t: Optional[str] = None):
         try:
             with Image.open(image_path) as im:
                 im.load()
-                prepared = _prepare_card_image_for_orb(im)
+                prepared = _prepare_card_image_for_orb(crop_image(im, read_crop(image_path)))
         except Exception:
             return None
         rgb = np.array(prepared)
@@ -432,6 +427,17 @@ def _compute_orb_features(image_path: Path, t: Optional[str] = None):
         return None
     pts = np.float32([kp.pt for kp in keypoints])
     return pts, descriptors
+
+
+_orb_fingerprint = CacheFingerprint(
+    _compute_orb_features,
+    _prepare_card_image_for_orb,
+    resize_and_center_image,
+    crop_image,
+    _PANEL_VISIBLE_BOX_LOCAL,
+    ORB_FEATURES,
+    getattr(cv2, "__version__", None),
+)
 
 
 def get_orb_features(image_path: Path, t: Optional[str] = None):
@@ -743,7 +749,7 @@ def _trim_card_file(path: Path) -> Optional[Image.Image]:
     try:
         with Image.open(path) as im:
             im.load()
-            return _trim_white_border(im)
+            return _trim_white_border(crop_image(im, read_crop(path)))
     except Exception:
         return None
 

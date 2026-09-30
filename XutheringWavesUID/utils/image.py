@@ -25,6 +25,7 @@ from gsuid_core.models import Event
 from gsuid_core.utils.image.utils import sget
 from gsuid_core.utils.image.image_tools import crop_center_img
 
+from .image_meta import open_panel_image
 from .resource.RESOURCE_PATH import (
     AVATAR_PATH,
     CACHE_PATH,
@@ -479,7 +480,7 @@ async def get_role_pile(resource_id: Union[int, str], custom: bool = False) -> t
         if os.path.isdir(custom_dir) and len(os.listdir(custom_dir)) > 0:
             path = _random_image_from_dir(custom_dir)
             if path:
-                return True, Image.open(f"{custom_dir}/{path}").convert("RGBA")
+                return True, open_panel_image(Path(custom_dir) / path)
 
     name = f"role_pile_{resource_id}.png"
     path = ROLE_PILE_PATH / name
@@ -493,14 +494,14 @@ async def get_role_pile_with_path(
 ) -> tuple[bool, Image.Image, Optional[Path]]:
     forced = _force_pile_path.get()
     if forced is not None and forced.exists():
-        return True, Image.open(forced).convert("RGBA"), forced
+        return True, open_panel_image(forced), forced
     if custom:
         custom_dir = f"{CUSTOM_CARD_PATH}/{resource_id}"
         if os.path.isdir(custom_dir) and len(os.listdir(custom_dir)) > 0:
             name = _random_image_from_dir(custom_dir)
             if name:
                 path = Path(custom_dir) / name
-                return True, Image.open(path).convert("RGBA"), path
+                return True, open_panel_image(path), path
 
     name = f"role_pile_{resource_id}.png"
     path = ROLE_PILE_PATH / name
