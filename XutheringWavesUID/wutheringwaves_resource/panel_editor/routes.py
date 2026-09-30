@@ -232,14 +232,10 @@ async def api_image(
     if target is None or not target.is_file():
         raise HTTPException(404, "image not found")
     headers = {"Cache-Control": "no-store"}
-    if trim and type == "card":
-        from ...wutheringwaves_charinfo.card_utils import _trim_card_file
-        img = await _trim_card_file(target)
-        with Image.open(target) as orig:
-            orig_size = orig.size
-        if img is not None and (
-            read_crop(target) is not None or img.size != orig_size
-        ):
+    if trim and type == "card" and read_crop(target) is not None:
+        from ...wutheringwaves_charinfo.card_utils import _crop_card_file
+        img = await _crop_card_file(target)
+        if img is not None:
             buf = BytesIO()
             ext = target.suffix.lower()
             if ext in (".jpg", ".jpeg"):
