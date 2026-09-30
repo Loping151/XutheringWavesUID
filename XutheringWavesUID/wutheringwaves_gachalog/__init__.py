@@ -436,7 +436,7 @@ async def update_gacha_log_by_cloud(bot: Bot, ev: Event):
     ("抽卡记录", "查看抽卡记录", "gacha", "ckjl"),
     to_ai="""查询用户已导入的鸣潮抽卡记录统计图（各卡池总抽数、距离保底、出货历史、欧非指数等）。
 
-当用户问「我的抽卡 / 抽卡记录 / 出货怎样 / 多少保底了」时调用。需绑定 cookie + 已导入抽卡记录。
+当用户问「我的抽卡 / 抽卡记录 / 出货怎样 / 多少保底了」时调用。需绑定 UID + 已导入抽卡记录。
 若没有抽卡数据，AI 应告知用户先 `抽卡帮助` 看如何导入。
 
 Args:
@@ -448,9 +448,11 @@ async def send_gacha_log_card_info(bot: Bot, ev: Event):
     uid = await WavesBind.get_uid_by_game(ev.user_id, ev.bot_id)
     if not uid:
         return await bot.send(ERROR_CODE[WAVES_CODE_103])
-    _, ck = await waves_api.get_ck_result(uid, ev.user_id, ev.bot_id)
-    if not ck:
-        return await bot.send(ERROR_CODE[WAVES_CODE_102])
+    # 国际服只读取本地抽卡记录，不依赖库街区 CK。
+    if not waves_api.is_net(uid):
+        _, ck = await waves_api.get_ck_result(uid, ev.user_id, ev.bot_id)
+        if not ck:
+            return await bot.send(ERROR_CODE[WAVES_CODE_102])
 
     im = await draw_card(uid, ev)
     await bot.send(im)
@@ -505,9 +507,11 @@ async def send_export_gacha_info(bot: Bot, ev: Event):
     uid = await WavesBind.get_uid_by_game(ev.user_id, ev.bot_id)
     if not uid:
         return await bot.send(ERROR_CODE[WAVES_CODE_103])
-    _, ck = await waves_api.get_ck_result(uid, ev.user_id, ev.bot_id)
-    if not ck:
-        return await bot.send(ERROR_CODE[WAVES_CODE_102])
+    # 国际服只读取本地抽卡记录，不依赖库街区 CK。
+    if not waves_api.is_net(uid):
+        _, ck = await waves_api.get_ck_result(uid, ev.user_id, ev.bot_id)
+        if not ck:
+            return await bot.send(ERROR_CODE[WAVES_CODE_102])
 
     # await bot.send("🔜即将为你导出XutheringWavesUID抽卡记录文件，请耐心等待...")
     export = await export_gachalogs(uid)
