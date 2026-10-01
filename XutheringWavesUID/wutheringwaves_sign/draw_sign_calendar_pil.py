@@ -195,7 +195,15 @@ def _render_loop_cell(
     )
 
     if item["is_gained"] and had_sign_in_bg is not None:
-        overlay = _fit(had_sign_in_bg, (LOOP_CELL_SIZE, LOOP_CELL_SIZE))
+        w, h = had_sign_in_bg.size
+        icon_h = h * CELL_H_MONTH // (CELL_H_MONTH + CELL_DAY_H_MONTH)
+        side = min(w, icon_h)
+        top = (icon_h - side) // 2
+        left = (w - side) // 2
+        overlay = _fit(
+            had_sign_in_bg.crop((left, top, left + side, top + side)),
+            (LOOP_CELL_SIZE, LOOP_CELL_SIZE),
+        )
         _paste(cell, overlay, (card_x, 0))
 
     mark = process_light if item["is_gained"] else process_grey
