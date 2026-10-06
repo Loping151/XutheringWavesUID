@@ -23,9 +23,61 @@ guide_map = {
     "吃我无痕": "WuHen",
     "巡游天国FM": "XFM",
     "猫眼石攻略组": "Chrysoberyl",
+    "拉格朗日变分主义": "Lagvar",
 }
 
 guide_author_map = {v: k for k, v in guide_map.items()}
+
+
+MATRIX_GUIDE_NAME = "矩阵"
+_MATRIX_FILE_RE = re.compile(rf"^{MATRIX_GUIDE_NAME}(\d+\.\d+)(?:-\d+)?\.[^.]+$")
+
+
+def _version_key(version: str):
+    return tuple(int(x) for x in version.split("."))
+
+
+def _get_guide_dirs(ev: Event, config) -> list[tuple[Path, str]]:
+    # 获取群组排除的攻略提供方
+    excluded_providers = []
+    if ev.group_id:
+        from ..wutheringwaves_config.guide_config import get_excluded_providers
+
+        excluded_providers = get_excluded_providers(ev.group_id)
+
+    if "all" in config:
+        paths = sorted(
+            GUIDE_PATH.iterdir(),
+            key=lambda p: (p.name != "KuroBBS", p.name),
+        )
+    else:
+        paths = [
+            GUIDE_PATH / guide_map.get(guide_name, guide_name)
+            for guide_name in config
+            if guide_name not in excluded_providers
+        ]
+
+    guide_dirs = []
+    for guide_path in paths:
+        # 检查是否被排除
+        author_name = guide_author_map.get(guide_path.name, guide_path.name)
+        if author_name in excluded_providers or any(excluded in author_name for excluded in excluded_providers):
+            continue
+        guide_dirs.append((guide_path, author_name))
+    return guide_dirs
+
+
+async def _send_guide_by_name(bot: Bot, config, guide_dirs: list[tuple[Path, str]], name: str):
+    imgs_result = []
+    pattern = re.compile(rf"^{re.escape(name)}(?:-\d+)?\.[^.]+$", re.IGNORECASE)
+    for guide_path, author_name in guide_dirs:
+        imgs_result.extend(await get_guide_pic(guide_path, pattern, author_name))
+
+    if len(imgs_result) == 0:
+        msg = f"[鸣潮]【{name}】暂无攻略！"
+        return await bot.send(msg)
+
+    await send_guide(config, imgs_result, bot)
 
 
 async def get_guide(bot: Bot, ev: Event, char_name: str):
@@ -39,63 +91,34 @@ async def get_guide(bot: Bot, ev: Event, char_name: str):
     logger.info(f"[鸣潮·百科攻略] 开始获取{char_name}图鉴")
 
     config = WutheringWavesConfig.get_config("WavesGuide").data
+    await _send_guide_by_name(bot, config, _get_guide_dirs(ev, config), char_name)
 
-    # 获取群组排除的攻略提供方
-    excluded_providers = []
-    if ev.group_id:
-        from ..wutheringwaves_config.guide_config import get_excluded_providers
 
-        excluded_providers = get_excluded_providers(ev.group_id)
+async def get_matrix_guide(bot: Bot, ev: Event, version: str = ""):
+    config = WutheringWavesConfig.get_config("WavesGuide").data
+    guide_dirs = _get_guide_dirs(ev, config)
 
-    imgs_result = []
-    pattern = re.compile(rf"^{re.escape(char_name)}(?:-\d+)?\.[^.]+$", re.IGNORECASE)
-    if "all" in config:
-        paths = sorted(
-            GUIDE_PATH.iterdir(),
-            key=lambda p: (p.name != "KuroBBS", p.name),
-        )
-        for guide_path in paths:
-            # 检查是否被排除
-            author_name = guide_author_map.get(guide_path.name, guide_path.name)
-            if author_name in excluded_providers or any(excluded in author_name for excluded in excluded_providers):
-                continue
+    versions = sorted(
+        {
+            m.group(1)
+            for guide_path, _ in guide_dirs
+            if guide_path.is_dir()
+            for f in guide_path.iterdir()
+            if (m := _MATRIX_FILE_RE.match(f.name))
+        },
+        key=_version_key,
+    )
+    if not versions:
+        return await bot.send(f"[鸣潮]【{MATRIX_GUIDE_NAME}】暂无攻略！")
 
-            imgs = await get_guide_pic(
-                guide_path,
-                pattern,
-                author_name,
-            )
-            if len(imgs) == 0:
-                continue
-            imgs_result.extend(imgs)
-    else:
-        for guide_name in config:
-            if guide_name in excluded_providers:
-                continue
-
-            if guide_name in guide_map:
-                guide_path = GUIDE_PATH / guide_map[guide_name]
-            else:
-                guide_path = GUIDE_PATH / guide_name
-
-            author_name = guide_author_map.get(guide_path.name, guide_path.name)
-            if author_name in excluded_providers or any(excluded in author_name for excluded in excluded_providers):
-                continue
-
-            imgs = await get_guide_pic(
-                guide_path,
-                pattern,
-                author_name,
-            )
-            if len(imgs) == 0:
-                continue
-            imgs_result.extend(imgs)
-
-    if len(imgs_result) == 0:
-        msg = f"[鸣潮]【{char_name}】暂无攻略！"
+    if not version:
+        version = versions[-1]
+    elif version not in versions:
+        msg = f"[鸣潮]【{MATRIX_GUIDE_NAME}{version}】暂无攻略！\n可查询版本: {'、'.join(versions)}"
         return await bot.send(msg)
 
-    await send_guide(config, imgs_result, bot)
+    logger.info(f"[鸣潮·百科攻略] 开始获取{MATRIX_GUIDE_NAME}{version}攻略")
+    await _send_guide_by_name(bot, config, guide_dirs, f"{MATRIX_GUIDE_NAME}{version}")
 
 
 def _guide_sort_key(p: Path):

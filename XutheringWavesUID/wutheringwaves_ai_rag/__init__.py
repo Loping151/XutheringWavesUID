@@ -48,6 +48,7 @@ GUIDE_AUTHORS = {
     "WuHen": "吃我无痕",
     "XFM": "巡游天国",
     "KuroBBS": "社区攻略",
+    "Lagvar": "拉格朗日变分主义",
 }
 
 
@@ -735,10 +736,14 @@ def _register_guides(char_meta: Dict[str, Dict]) -> int:
                     tags.append(str(v))
             if meta.get("star"):
                 tags.append(f"{meta['star']}星")
-            content = (
-                f"{char_name} 的「{author_zh}」攻略图。"
-                "通常包含推荐声骸 / 武器 / 共鸣链优先级 / 技能加点 / 伤害分析 / 配队思路等内容。"
-            )
+            if char_name.startswith("矩阵"):
+                tags.append("全息矩阵")
+                content = f"{char_name} 版本全息矩阵的「{author_zh}」攻略图，包含配队与打法思路。"
+            else:
+                content = (
+                    f"{char_name} 的「{author_zh}」攻略图。"
+                    "通常包含推荐声骸 / 武器 / 共鸣链优先级 / 技能加点 / 伤害分析 / 配队思路等内容。"
+                )
             ai_image(ImageEntity(
                 id=f"ww_guide_{author_dir.name}_{char_name}",
                 plugin=PLUGIN,
