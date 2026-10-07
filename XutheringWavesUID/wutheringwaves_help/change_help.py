@@ -11,6 +11,7 @@ from gsuid_core.help.draw_new_plugin_help import get_new_help
 from ..version import XutheringWavesUID_version
 from ..utils.image import get_footer
 from ..wutheringwaves_config import PREFIX, ShowConfig
+from .get_help import attach_icons
 
 ICON = Path(__file__).parent.parent.parent / "ICON.png"
 HELP_DATA = Path(__file__).parent / "change_help.json"
@@ -57,7 +58,7 @@ async def get_change_help(pm: int):
         plugin_name="XutheringWavesUID",
         plugin_info={f"v{XutheringWavesUID_version}": ""},
         plugin_icon=plugin_icon,
-        plugin_help=plugin_help,
+        plugin_help=attach_icons(plugin_help, ICON_PATH),
         plugin_prefix=PREFIX,
         help_mode="dark",
         banner_bg=banner_bg,

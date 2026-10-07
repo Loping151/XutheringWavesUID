@@ -1,5 +1,5 @@
 import json
-from typing import Dict
+from typing import Dict, Optional
 from pathlib import Path
 
 from PIL import Image
@@ -16,6 +16,31 @@ ICON = Path(__file__).parent.parent.parent / "ICON.png"
 HELP_DATA = Path(__file__).parent / "help.json"
 ICON_PATH = Path(__file__).parent / "icon_path"
 TEXT_PATH = Path(__file__).parent / "texture2d"
+
+
+def match_icon(name: str, icons: Dict[str, Path]) -> Optional[Path]:
+    """最长匹配优先, 同长取在名字里靠后的。"""
+    best = None
+    for stem, path in icons.items():
+        pos = name.rfind(stem)
+        if pos < 0:
+            continue
+        key = (len(stem), pos)
+        if best is None or key > best[0]:
+            best = (key, path)
+    return best[1] if best else None
+
+
+def attach_icons(help_data: Dict[str, PluginHelp], icon_dir: Path) -> Dict[str, PluginHelp]:
+    icons = {p.stem: p for p in icon_dir.glob("*.png")}
+    result = {}
+    for cag, cag_data in help_data.items():
+        items = []
+        for item in cag_data["data"]:
+            icon = match_icon(item["name"], icons)
+            items.append({**item, "icon": str(icon)} if icon else item)
+        result[cag] = {**cag_data, "data": items}
+    return result
 
 def get_help_data() -> Dict[str, PluginHelp]:
     # 读取文件内容
@@ -183,7 +208,7 @@ async def get_help(pm: int):
         plugin_name="XutheringWavesUID",
         plugin_info={f"v{XutheringWavesUID_version}": ""},
         plugin_icon=plugin_icon,
-        plugin_help=plugin_help,
+        plugin_help=attach_icons(plugin_help, ICON_PATH),
         plugin_prefix=PREFIX,
         help_mode="dark",
         banner_bg=banner_bg,
