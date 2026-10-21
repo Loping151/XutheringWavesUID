@@ -24,20 +24,21 @@
 
 在线使用：[识别计算 传送门](https://scoreecho.loping151.site/)
 
-安装：参考 https://github.com/Genshin-bots/gsuid_core 安装插件的一般方式
+自定义权重：[权重站](https://www.loping151.site/)，上传、订阅玩家自制的声骸评分权重，bot 内直接生效。
+
+安装：参考 [gsuid_core](https://github.com/Genshin-bots/gsuid_core) 安装插件的一般方式
 ```
 # 直接clone到插件目录：
 git clone https://github.com/Loping151/XutheringWavesUID.git
 ``` 
 
-群友的拓展教程：
-https://blog.ovoii.io/posts/notes/wwbot 
+群友的拓展教程：[wwbot 笔记](https://blog.ovoii.io/posts/notes/wwbot)（可能不及时更新）
 
 总排行申请、反馈（仅限主人）：群号 1104111054（由于不可抗力，可能经常更换）（入群问题不带文件拓展名）。如**完全**不使用QQ平台（如飞书、Discord等），可发邮件给客服小维 agent@loping151.com（记得写标题避免被小维当成垃圾邮件）申请计算token，要求附带具体使用平台、core信息截图和使用情况和规模说明，支持较少的请求量和用户量，但完全足以小范围使用，一般都欢迎入群。
 
 - 为什么需要申请总排行进行使用：
   
-    为了确保不被上传大量伪造数据影响持有率、排行等，以及 https://ngabbs.com/read.php?tid=45654606
+    为了确保不被上传大量伪造数据影响持有率、排行等，以及 [这个帖子](https://ngabbs.com/read.php?tid=45654606)
 
 - 总排行申请有无条件？
 
@@ -115,7 +116,7 @@ dsh 移植版：[dsh-plugin-waves](https://github.com/Loping151/dsh-plugin-waves
 
 + [GPL-3.0 License](https://github.com/Loping151/XutheringWavesUID/blob/main/LICENSE)
 
-本仓库仅允许正常、可沟通、具有良知的个体部署，原因：https://ngabbs.com/read.php?tid=45654606 以及：[link](./assets/0428.md)。
+本仓库仅允许正常、可沟通、具有良知的个体部署，原因：[NGA 帖子](https://ngabbs.com/read.php?tid=45654606) 以及 [这里](./assets/0428.md)。
 
 ## 支持设备列表：
 win_amd64: python3.10-3.14<br>
@@ -144,6 +145,5 @@ android_termux: python3.10-3.14<br>
   - [小羊早睡不遭罪](https://space.bilibili.com/37331716)
   - [吃我无痕](https://space.bilibili.com/347744)
   - [巡游天国FM](https://space.bilibili.com/444694026)
- 
-  
-<img src="https://prod-alicdn-community.kurobbs.com/forum/575e17ca95e74a77b37804b75d9d2c3d20260814.png" alt="footer" width="1000" />
+  - [猫眼石攻略组](https://space.bilibili.com/3546862856440377)
+  - 拉格朗日变分主义
