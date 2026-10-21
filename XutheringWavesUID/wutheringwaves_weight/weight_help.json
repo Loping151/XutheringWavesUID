@@ -1,0 +1,56 @@
+{
+  "指令里使用权重ID": {
+    "desc": "直接带上权重ID，本次查询按该权重评分（优先级最高）",
+    "data": [
+      {"name": "按权重查面板", "desc": "椿面板cw_xxx / cw_xxx椿面板 / 椿cw_xxx面板", "eg": "椿面板cw_k3m9q2x7", "need_ck": true, "need_sk": false, "need_admin": false},
+      {"name": "按权重查权重表", "desc": "极限面板也可以", "eg": "椿权重cw_k3m9q2x7", "need_ck": true, "need_sk": false, "need_admin": false},
+      {"name": "按权重群排行", "desc": "群评分排行改用该权重", "eg": "椿评分排行cw_ID", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "截图评分用权重", "desc": "ScoreEcho 截图评分", "eg": "评分椿cw_k3m9q2x7", "need_ck": false, "need_sk": false, "need_admin": false}
+    ]
+  },
+  "个人设置": {
+    "desc": "按绑定的特征码保存，不影响同特征码的其他人",
+    "data": [
+      {"name": "设置角色权重", "desc": "以后查询该角色都用这份权重", "eg": "设置椿权重cw_ID", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "恢复角色默认权重", "desc": "取消该角色的单独设置", "eg": "设置椿权重默认", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "订阅权重", "desc": "跟随订阅，作者更新后自动同步", "eg": "订阅权重ws_ab12cd34", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "导入权重文本", "desc": "粘贴网站复制的文本或清空时回显的文本", "eg": "导入权重+复制的文本", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "取消订阅权重", "desc": "已同步的角色权重保留", "eg": "取消订阅权重", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "查看权重设置", "desc": "查看当前生效的权重", "eg": "查看权重", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "清空全部权重", "desc": "清空设置与订阅，回显恢复文本", "eg": "清空权重", "need_ck": false, "need_sk": false, "need_admin": false}
+    ]
+  },
+  "群管理员": {
+    "desc": "群主或管理员设置，必须使用公开展示的订阅ID",
+    "data": [
+      {"name": "设置群权重", "desc": "群内面板与群排行默认使用", "eg": "设置群权重ws_ID", "need_ck": false, "need_sk": false, "need_admin": true},
+      {"name": "取消群权重", "desc": "恢复默认权重", "eg": "取消群权重", "need_ck": false, "need_sk": false, "need_admin": true}
+    ]
+  },
+  "生效优先级（从高到低）": {
+    "desc": "伤害计算、综合评分与总排行上传始终使用内置权重",
+    "data": [
+      {"name": "1.指令里的ID", "desc": "", "eg": "椿面板cw_k3m9q2x7", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "2.群权重", "desc": "仅在设置了群权重的群里，且群订阅包含该角色", "eg": "设置群权重ws_ID", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "3.个人设置与订阅", "desc": "", "eg": "设置椿权重cw_ID", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "4.内置权重", "desc": "", "eg": "椿权重", "need_ck": false, "need_sk": false, "need_admin": false}
+    ]
+  },
+  "订阅与覆盖": {
+    "desc": "订阅写入你的角色设置；刷新面板时检查订阅是否更新",
+    "data": [
+      {"name": "订阅时覆盖旧设置", "desc": "逐条提示 旧ID→订阅中的新ID", "eg": "订阅权重ws_ab12cd34", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "订阅更新即覆盖", "desc": "订阅内容变化时，订阅包含的角色全部覆盖", "eg": "刷新面板", "need_ck": true, "need_sk": false, "need_admin": false},
+      {"name": "单改会被改回", "desc": "订阅生效时单独改了订阅内的角色，下次订阅更新会被覆盖", "eg": "设置椿权重cw_ID", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "清空回显恢复文本", "desc": "", "eg": "清空权重", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "条件权重", "desc": "按角色共鸣链与专武谐振阶取订阅里的条件权重，其余用无条件权重", "eg": "1603[60,61]-cw_ID", "need_ck": false, "need_sk": false, "need_admin": false}
+    ]
+  },
+  "排行": {
+    "desc": "群排行：指令ID > 群权重 > 内置；总排行始终按内置权重",
+    "data": [
+      {"name": "群评分排行", "desc": "", "eg": "椿评分排行cw_ID", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "总排行(内置权重)", "desc": "", "eg": "椿评分总排行", "need_ck": false, "need_sk": false, "need_admin": false}
+    ]
+  }
+}

@@ -1,16 +1,63 @@
-from typing import List, Optional
+import asyncio
+import math
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from pydantic import BaseModel
 
 from gsuid_core.logger import logger
 
-from .calculate import get_calc_map, calc_phantom_entry, calc_phantom_score, get_total_score_bg
+from .calculate import get_calc_map, get_builtin_calc_map, calc_phantom_entry, calc_phantom_score, get_total_score_bg
 from .damage.utils import Hack_Shifting_Role_Ids, comma_separated_number
 from .char_info_utils import get_all_role_detail_info
 from .damage.abstract import DamageRankRegister, ScoreDetailRegister
 from .damage.modal import get_role_modal, get_modal_name
 from .api.model import RoleDetailData
 from .ascension.sonata import detect_combo_sonata
+from .score import ScoreReport
+
+if TYPE_CHECKING:
+    from .calc import WuWaCalc
+
+
+def is_custom_temp(calc_temp) -> bool:
+    return isinstance(calc_temp, dict) and bool(calc_temp.get("_cw_id"))
+
+
+@contextmanager
+def builtin_calc_temp(calc, role_detail: RoleDetailData):
+    """临时把 calc.calc_temp 换成内置权重。"""
+    saved = calc.calc_temp
+    if is_custom_temp(saved):
+        calc.calc_temp = get_builtin_calc_map(
+            calc.phantom_card, role_detail.role.roleName, role_detail.role.roleId, get_role_modal(role_detail)
+        )
+    try:
+        yield
+    finally:
+        calc.calc_temp = saved
+
+
+def phantom_total(role_detail: RoleDetailData, calc_temp) -> float:
+    """面板口径的声骸总分: 单件封顶 50, 总分封顶 250。"""
+    total = 0.0
+    pd = role_detail.phantomData
+    for _phantom in (pd.equipPhantomList if pd else None) or []:
+        if _phantom and _phantom.phantomProp:
+            _score, _ = calc_phantom_score(role_detail.role.roleId, _phantom.get_props(), _phantom.cost, calc_temp)
+            total += 50.0 if _score > 49.95 else _score
+    return round(min(total, 250.0), 2)
+
+
+def overall_report(calc, role_detail: RoleDetailData) -> Optional[ScoreReport]:
+    """综合评分 (始终按内置权重); calc 需已备好 phantom_card / calc_temp。未接入评分的角色返回 None。"""
+    scoreDetail = ScoreDetailRegister.find_class(str(role_detail.role.roleId))
+    if not scoreDetail:
+        return None
+    score_calc = scoreDetail[0] if isinstance(scoreDetail, list) else scoreDetail
+    setattr(calc, "_score_title", score_calc.get("title", f"综合评分-{role_detail.role.roleName}"))
+    with builtin_calc_temp(calc, role_detail):
+        return score_calc["func"](calc, role_detail)
 
 
 class WavesPhantomProp(BaseModel):
@@ -52,6 +99,7 @@ class WavesCharRank(BaseModel):
     modal: str = ""  # 模态 key (无模态角色为空)
     modal_name: str = ""
     phantoms: Optional[List[WavesPhantomRank]] = None  # 单声骸评分明细 (仅有效套装时上传)
+    weight_id: str = ""  # 自定义权重 ID (仅展示, 不上传)
 
     def to_rank_dict(self):
         data = {
@@ -108,6 +156,7 @@ def _compute_one_char_rank(role_detail, need_expected_damage=False, need_overall
             role_detail.role.roleName,
             role_detail.role.roleId,
             get_role_modal(role_detail),
+            role=role_detail,
         )
         for i, _phantom in enumerate(equipPhantomList):
             if not (_phantom and _phantom.phantomProp):
@@ -165,13 +214,9 @@ def _compute_one_char_rank(role_detail, need_expected_damage=False, need_overall
 
         if need_overall_score:
             try:
-                scoreDetail = ScoreDetailRegister.find_class(str(role_detail.role.roleId))
-                if scoreDetail:
-                    score_calc = scoreDetail[0] if isinstance(scoreDetail, list) else scoreDetail
-                    setattr(calc, "_score_title", score_calc.get("title", ""))
-                    score_report = score_calc["func"](calc, role_detail)
-                    if score_report is not None:
-                        overall_score = round(float(score_report.score), 2)
+                score_report = overall_report(calc, role_detail)
+                if score_report is not None:
+                    overall_score = round(float(score_report.score), 2)
             except Exception as e:
                 logger.debug(f"[鸣潮·评分] 综合评分计算失败 {role_detail.role.roleId}: {e}")
 
@@ -213,6 +258,7 @@ def _compute_one_char_rank(role_detail, need_expected_damage=False, need_overall
             "modal": modal,
             "modal_name": get_modal_name(role_detail.role.roleId, modal),
             "phantoms": phantom_ranks if sonataName else None,
+            "weight_id": (calc.calc_temp or {}).get("_cw_id", "") if isinstance(calc.calc_temp, dict) else "",
         }
     )
 
@@ -226,3 +272,89 @@ def _compute_char_rank(all_role_detail, need_expected_damage=False, need_overall
         _compute_one_char_rank(role_detail, need_expected_damage, need_overall_score)
         for role_detail in temp
     ]
+
+
+# ─── 刷新前后对比: 声骸评分涨而综合评分跌时, 按乘区变化指出溢出 / 被挤占的乘区 ───
+
+PHANTOM_MIN_GAIN = 1.0
+OVERALL_MIN_DROP = 1.0
+ZONE_MIN_SHIFT = 0.005
+CRIT_IMBALANCE = 1.5
+_NOTE_ZONES = (("暴击率", "双爆"), ("共鸣效率", "共效"))
+
+
+def _builtin_panel(role_detail: RoleDetailData) -> Tuple["WuWaCalc", float]:
+    from .calc import WuWaCalc
+
+    calc = WuWaCalc(role_detail)
+    calc.phantom_pre = calc.prepare_phantom()
+    calc.phantom_card = calc.enhance_summation_phantom_value(calc.phantom_pre)
+    calc.calc_temp = get_builtin_calc_map(
+        calc.phantom_card, role_detail.role.roleName, role_detail.role.roleId, get_role_modal(role_detail)
+    )
+    calc.role_card = calc.enhance_summation_card_value(calc.phantom_card)
+    return calc, phantom_total(role_detail, calc.calc_temp)
+
+
+def _crit_balance(report: ScoreReport) -> str:
+    cr, cd = report.partials.get("暴击"), report.partials.get("暴击伤害")
+    if cr is None or not cd:
+        return ""
+    if cr > cd * CRIT_IMBALANCE:
+        return "暴击偏低, 暴击伤害偏高"
+    if cr * CRIT_IMBALANCE < cd:
+        return "暴击偏高, 暴击伤害偏低"
+    return ""
+
+
+def _note_zone(note: str) -> str:
+    return next((z for prefix, z in _NOTE_ZONES if note.startswith(prefix)), "")
+
+
+def compose_drift_advice(char_name: str, phantom_gain: float, prev: ScoreReport, cur: ScoreReport) -> str:
+    shifts = {z: math.log(v / prev.zones[z]) for z, v in cur.zones.items() if prev.zones.get(z)}
+    moved = {z: s for z, s in shifts.items() if abs(s) >= ZONE_MIN_SHIFT}
+    gains = sorted((z for z in moved if moved[z] > 0), key=moved.__getitem__, reverse=True)
+    losses = sorted((z for z in moved if moved[z] < 0), key=moved.__getitem__)
+
+    reasons = []
+    if gains and losses:
+        # 上涨乘区的达成率高于所有下跌乘区 → 相对饱和
+        ceiling = max(cur.zones[z] for z in losses)
+        saturated = [z for z in gains if cur.zones[z] > ceiling]
+        if saturated:
+            reasons.append(f"{'、'.join(saturated)}区相对饱和")
+    crit_tag = _crit_balance(cur)
+    if "双爆" in moved and crit_tag:
+        reasons.append(crit_tag)
+
+    lines = [f"[鸣潮] {char_name} 声骸评分 +{phantom_gain:.1f}, 综合评分 {cur.score - prev.score:.1f}"]
+    if moved:
+        lines.append("乘区变化: " + ", ".join(f"{z} {math.expm1(moved[z]):+.1%}" for z in gains + losses))
+    if reasons:
+        lines.append("可能原因: " + "; ".join(reasons))
+    lines.extend(n for n in cur.notes if n not in prev.notes or _note_zone(n) in moved)
+    if cur.partial_max:
+        lines.append(f"建议提升词条方向: {cur.partial_max[0]}")
+    return "\n".join(lines)
+
+
+def _setup(d: RoleDetailData):
+    w = d.weaponData
+    return (d.get_chain_num(), w.weapon.weaponId if w and w.weapon else None, w.resonLevel if w else None)
+
+
+async def drift_advice(
+    char_name: str, prev_detail: RoleDetailData, cur_detail: RoleDetailData, phantom: float, report: ScoreReport
+) -> Optional[str]:
+    """phantom / report 为刷新后面板的内置权重声骸总分与综合评分; 声骸评分涨了才重算旧面板综合评分。
+    换了武器/谐振/共鸣链的跌分不是乘区问题, 不提示。"""
+    if _setup(prev_detail) != _setup(cur_detail):
+        return None
+    calc, prev_phantom = await asyncio.to_thread(_builtin_panel, prev_detail)
+    if phantom - prev_phantom < PHANTOM_MIN_GAIN:
+        return None
+    prev_report = await asyncio.to_thread(overall_report, calc, prev_detail)
+    if prev_report is None or prev_report.score - report.score < OVERALL_MIN_DROP:
+        return None
+    return compose_drift_advice(char_name, phantom - prev_phantom, prev_report, report)

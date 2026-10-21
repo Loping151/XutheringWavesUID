@@ -98,6 +98,7 @@ async def get_one_rank_info(user_id, uid, role_detail, rankDetail):
         calc.phantom_card,
         role_detail.role.roleName,
         role_detail.role.roleId,
+        role=role_detail,
     )
 
     # 评分
@@ -543,8 +544,8 @@ async def draw_rank_img(
     if rank_type == "伤害":
         temp_notes = "排行标准：以期望伤害（计算暴击率的伤害，不代表实际伤害) 为排序的排名"
     else:
-        temp_notes = "排行标准：以声骸分数（声骸评分高，不代表实际伤害高) 为排序的排名"
-    card_img_draw.text((450, 500), f"{temp_notes}", SPECIAL_GOLD, waves_font_16, "lm")
+        temp_notes = rank_standard(char_id, char_name, font=waves_font_16, max_w=980)
+    card_img_draw.text((998, 500), f"{temp_notes}", SPECIAL_GOLD, waves_font_16, "rm")  # 右端对齐下方条幅弧线顶点
 
     img_temp = Image.new("RGBA", char_mask.size)
     img_temp.paste(title, (0, 0), char_mask.copy())
@@ -554,6 +555,37 @@ async def draw_rank_img(
 
     logger.info(f"[鸣潮·练度排行] get_rank_info_for_user end: {time.time() - start_time}")
     return card_img
+
+
+def rank_standard(char_id, char_name: str = "", unit: str = "声骸分数", font=None, max_w: int = 0) -> str:
+    """排行标准文案; 给了字体与宽度时超长的权重名截断, 保留 ID。"""
+    label = rank_template_label(char_id, char_name)
+
+    def text(lb: str) -> str:
+        return f"排行标准：以权重 {lb} 的{unit}为排序的排名"
+
+    if font is None or font.getlength(text(label)) <= max_w:
+        return text(label)
+    head, sep, tail = label.rpartition("-")
+    while head and font.getlength(text(f"{head}…{sep}{tail}")) > max_w:
+        head = head[:-1]
+    return text(f"{head}…{sep}{tail}")
+
+
+def rank_template_label(char_id, char_name: str = "") -> str:
+    """排行图上标注的评分模板: 自定义权重 > 内置模板名; 有条件权重时注明共几个。"""
+    from ..utils.custom_weight import current_plan
+    from ..utils.calculate import get_builtin_calc_map
+
+    plan = current_plan()
+    label = plan.label_for(char_id) if plan else None
+    if not label:
+        try:
+            label = get_builtin_calc_map({}, char_name, str(char_id)).get("name") or "内置"
+        except Exception:
+            label = "内置"
+    n = plan.cond_count(char_id) if plan else 0
+    return f"{label} 等{n + 1}个权重" if n else label
 
 
 def get_weapon_icon_bg(star: int = 3) -> Image.Image:

@@ -307,4 +307,14 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
         "开启后，用户可发送【抽卡页面/抽卡网页/网页抽卡记录】打开网页查看抽卡详细记录。外置登录需外置登录部署时支持此功能",
         False,
     ),
+    "CustomWeightEnable": GsBoolConfig(
+        "启用自定义权重",
+        "允许用户通过 cw_/ws_ ID 使用 www.loping151.site 上的玩家权重（总排行上传始终使用内置权重）",
+        True,
+    ),
+    "CustomWeightApi": GsStrConfig(
+        "自定义权重站地址",
+        "自定义权重的下载与订阅同步地址，一般保留默认",
+        "https://www.loping151.site",
+    ),
 }

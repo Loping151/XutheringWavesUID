@@ -19,7 +19,21 @@ def calc_phantom_score(*args, **kwargs) -> Tuple[float, str]:
         return 0, "c"
 
 
-def get_calc_map(*args, **kwargs) -> Dict:
+def get_calc_map(*args, role=None, **kwargs) -> Dict:
+    """role: 该角色面板数据, 条件权重按其共鸣链/专武配置取。"""
+    char_id = args[2] if len(args) > 2 else kwargs.get("char_id")
+    try:
+        from .custom_weight import override_calc
+
+        custom = override_calc(char_id, role)
+        if custom is not None:
+            return custom
+    except Exception as e:
+        logger.warning(f"[鸣潮·自定义权重] 读取失败, 回退内置: {e}")
+    return get_builtin_calc_map(*args, **kwargs)
+
+
+def get_builtin_calc_map(*args, **kwargs) -> Dict:
     try:
         from .waves_build.calculate import get_calc_map as _func
         return _func(*args, **kwargs)

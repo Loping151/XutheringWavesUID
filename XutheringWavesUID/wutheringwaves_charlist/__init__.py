@@ -76,16 +76,20 @@ async def send_char_list_msg_new(bot: Bot, ev: Event):
         # 更新groupid
         await WavesBind.insert_waves_uid(user_id, ev.bot_id, query_waves_id, ev.group_id, lenth_limit=9)
 
-    im = await draw_char_list_img(
-        query_waves_id,
-        ev,
-        user_id,
-        is_refresh,
-        is_peek,
-        user_waves_id,
-        star_filter,
-        col,
-    )
+    from ..utils.custom_weight import prepare_plan, using
+
+    plan = await prepare_plan(bot, ev)
+    with using(plan):
+        im = await draw_char_list_img(
+            query_waves_id,
+            ev,
+            user_id,
+            is_refresh,
+            is_peek,
+            user_waves_id,
+            star_filter,
+            col,
+        )
     if isinstance(im, bytes) and (is_peek or is_refresh):
         return await bot.send(["[鸣潮] 数据已刷新", MessageSegment.image(im)])
     return await bot.send(im)

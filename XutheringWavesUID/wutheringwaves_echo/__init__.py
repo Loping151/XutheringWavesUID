@@ -43,5 +43,9 @@ async def send_echo_list_msg(bot: Bot, ev: Event):
     else:
         page_num = 1
 
-    im = await get_draw_list(ev, uid, user_id, page_num)
+    from ..utils.custom_weight import prepare_plan, using
+
+    plan = await prepare_plan(bot, ev)
+    with using(plan):
+        im = await get_draw_list(ev, uid, user_id, page_num)
     return await bot.send(im)

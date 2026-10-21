@@ -79,6 +79,7 @@ async def get_draw_list(ev: Event, uid: str, user_id: str, page: int = 1) -> Uni
             calc.phantom_card,
             role_detail.role.roleName,
             role_detail.role.roleId,
+            role=role_detail,
         )
 
         for i, _phantom in enumerate(equipPhantomList):  # type: ignore

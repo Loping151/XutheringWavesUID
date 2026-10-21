@@ -121,6 +121,7 @@ class ScoreReport:
     breakdown: List[str] = field(default_factory=list)
     best_card: Dict[str, Any] = field(default_factory=dict)
     best_loadout: List[OptimalSlot] = field(default_factory=list)
+    zones: Dict[str, float] = field(default_factory=dict)  # 各乘区 当前/最优 (攻击|生命|防御/双爆/加成/共效)
 
     def format(self, title: str = "综合评分") -> str:
         lines = [f"[鸣潮·评分] {title}"]
@@ -133,6 +134,8 @@ class ScoreReport:
             ranked = sorted(self.partials.items(), key=lambda kv: kv[1], reverse=True)
             detail = ", ".join(f"{k}=+{v:.3f}" for k, v in ranked)
             lines.append(f"  全梯度: {detail}")
+        if self.zones:
+            lines.append("  乘区达成: " + ", ".join(f"{k}={v:.1%}" for k, v in self.zones.items()))
         if self.main_advice:
             lines.append("  主词条建议:")
             for s in self.main_advice:

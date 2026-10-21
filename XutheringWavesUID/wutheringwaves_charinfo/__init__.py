@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+from typing import Optional
 
 from PIL import Image
 from gsuid_core.sv import SV
@@ -13,6 +14,7 @@ from gsuid_core.utils.image.convert import convert_img
 from ..utils.hint import error_reply
 from ..utils.char_state import pop_pending_advice
 from ..utils.char_info_utils import PATTERN
+from ..utils.api.model import RoleDetailData
 from ..utils.database.models import WavesBind
 from ..utils.error_reply import WAVES_CODE_103
 from ..utils.at_help import ruser_id, is_valid_at, is_intl_uid, intl_unavailable_msg
@@ -121,6 +123,38 @@ async def _resolve_self_uid(bot: Bot, ev: Event):
         await bot.send(intl_unavailable_msg(uid))
         return None
     return uid, user_id
+
+_CW = r"[cC][wW]_[0-9a-zA-Z]{8}"
+
+
+def _cw_from(ev: Event) -> Optional[str]:
+    from ..utils.custom_weight import find_cw, CW_RE
+
+    rd = ev.regex_dict or {}
+    for k in ("cw1", "cw2", "cw3", "cw4"):
+        if rd.get(k):
+            return find_cw(rd[k])
+    change = rd.get("change_list")
+    if change and find_cw(change):
+        rd["change_list"] = CW_RE.sub("", change).strip()
+        return find_cw(change)
+    return None
+
+
+async def _weight_plan(bot: Bot, ev: Event, char: Optional[str], cw: Optional[str] = None):
+    """本条指令的权重方案; ID 有误时已回复错误并返回 None。char=None 表示全部角色。"""
+    from ..utils.custom_weight import WeightPlan, prepare_plan
+
+    char_ids = None
+    if char is not None:
+        name = char.replace("极限", "").replace("limit", "")
+        res = resolve_char(name) if name else None
+        cid = char_name_to_char_id(res.matched) if res and res.ok else None
+        if not cid:
+            return WeightPlan()
+        char_ids = SPECIAL_CHAR.get(cid, [cid])
+    return await prepare_plan(bot, ev, char_ids, explicit=cw)
+
 
 waves_upload_char = SV("waves上传面板图", priority=3, pm=1)
 waves_char_card_single = SV("waves查看面板图", priority=3)
@@ -510,6 +544,16 @@ async def send_card_info(bot: Bot, ev: Event):
     _ru = await _resolve_self_uid(bot, ev)
     if _ru is None:
         return
+    plan = await _weight_plan(bot, ev, None)
+    if plan is None:
+        return
+    from ..utils.custom_weight import using
+
+    with using(plan):
+        return await _send_card_info(bot, ev, _ru)
+
+
+async def _send_card_info(bot: Bot, ev: Event, _ru):
     uid, user_id = _ru
 
     from .draw_refresh_char_card import display_char_name, draw_refresh_char_detail_img
@@ -531,7 +575,10 @@ async def send_card_info(bot: Bot, ev: Event):
         tip = (
             f"[鸣潮] 你可能想查询【{PREFIX}{char_name}面板】，已执行该指令"
         )
-        im = await draw_char_detail_img(ev, uid, char_name, user_id)
+        prev = top_improver["prev"]
+        im = await draw_char_detail_img(
+            ev, uid, char_name, user_id, prev_detail=RoleDetailData(**prev) if prev else None
+        )
         if isinstance(im, str):
             await bot.send(_append_advice(ev, f"{tip}\n{im}"))
         elif isinstance(im, bytes):
@@ -544,10 +591,20 @@ async def send_card_info(bot: Bot, ev: Event):
 
 
 @waves_new_get_one_char_info.on_regex(
-    rf"^(?P<lead_space>\s+)?(?P<is_refresh>刷新|更新|upd)(?P<mid_space>\s+)?(?P<char>{PATTERN})(?P<query_type>面板|面版|面包|🍞|mb)$",
+    rf"^(?P<lead_space>\s+)?(?P<is_refresh>刷新|更新|upd)(?P<mid_space>\s+)?(?P<char>{PATTERN})(?:\s*(?P<cw2>{_CW})\s*)?(?P<query_type>面板|面版|面包|🍞|mb)(?:\s*(?P<cw1>{_CW}))?\s*$",
     block=True,
 )
 async def send_one_char_detail_msg(bot: Bot, ev: Event):
+    plan = await _weight_plan(bot, ev, ev.regex_dict.get("char") or "", _cw_from(ev))
+    if plan is None:
+        return
+    from ..utils.custom_weight import using
+
+    with using(plan):
+        return await _send_one_char_detail(bot, ev)
+
+
+async def _send_one_char_detail(bot: Bot, ev: Event):
     logger.debug(f"[鸣潮·角色面板] RAW_TEXT: {ev.raw_text}")
     if ev.regex_dict.get("lead_space") or ev.regex_dict.get("mid_space"):
         return await bot.send(_space_hint())
@@ -570,7 +627,7 @@ async def send_one_char_detail_msg(bot: Bot, ev: Event):
 
     refresh_behavior = WutheringWavesConfig.get_config("RefreshSingleCharBehavior").data
     old_detail = None
-    if refresh_behavior == "concat_diff":
+    if refresh_behavior != "refresh_only":
         from ..utils.char_info_utils import get_char_detail_for_id
         old_detail = await get_char_detail_for_id(uid, char_id)
         if old_detail is not None and not _has_phantom(old_detail):
@@ -593,12 +650,14 @@ async def send_one_char_detail_msg(bot: Bot, ev: Event):
     if refresh_behavior == "refresh_and_send_separately":
         # 唯一拆条发送的模式: tip 跟刷新结果同条, 面板图单独再发
         await bot.send(_with_tip(refresh_seg, tip))
-        im = await draw_char_detail_img(ev, uid, char, user_id, None)
+        im = await draw_char_detail_img(ev, uid, char, user_id, None, prev_detail=old_detail)
         await bot.send(_append_advice(ev, im))
         return
 
     if refresh_behavior == "concat_diff":
-        new_im = await draw_char_detail_img(ev, uid, char, user_id, None, need_convert_img=False)
+        new_im = await draw_char_detail_img(
+            ev, uid, char, user_id, None, need_convert_img=False, prev_detail=old_detail
+        )
         old_im = None
         if old_detail is not None and isinstance(new_im, Image.Image):
             old_im = await draw_char_detail_img(
@@ -621,7 +680,9 @@ async def send_one_char_detail_msg(bot: Bot, ev: Event):
         return
 
     if refresh_behavior == "concatenate":
-        im = await draw_char_detail_img(ev, uid, char, user_id, None, need_convert_img=False)
+        im = await draw_char_detail_img(
+            ev, uid, char, user_id, None, need_convert_img=False, prev_detail=old_detail
+        )
         if isinstance(im, str):
             await bot.send(_append_advice(ev, _with_tip([refresh_seg, im], tip)))
             return
@@ -633,7 +694,7 @@ async def send_one_char_detail_msg(bot: Bot, ev: Event):
         return
 
     # refresh_and_send (default)
-    im = await draw_char_detail_img(ev, uid, char, user_id, None)
+    im = await draw_char_detail_img(ev, uid, char, user_id, None, prev_detail=old_detail)
     if isinstance(im, str):
         await bot.send(_append_advice(ev, _with_tip(im, tip)))
     else:
@@ -654,10 +715,21 @@ Args:
 """,
 )
 async def send_char_detail_msg(bot: Bot, ev: Event):
-    char = ev.text.strip(" ")
+    from ..utils.custom_weight import CW_RE, find_cw, using
+
+    cw = find_cw(ev.text)
+    char = CW_RE.sub("", ev.text).strip(" ")
     logger.debug(f"[鸣潮·角色面板] CHAR: {char}")
     if not char:
         return
+    plan = await _weight_plan(bot, ev, char, cw)
+    if plan is None:
+        return
+    with using(plan):
+        return await _send_char_detail(bot, ev, char)
+
+
+async def _send_char_detail(bot: Bot, ev: Event, char: str):
     _ru = await _resolve_self_uid(bot, ev)
     if _ru is None:
         return
@@ -685,6 +757,20 @@ async def send_char_detail_msg(bot: Bot, ev: Event):
     block=False,
 )
 async def send_char_detail_msg2_typo(bot: Bot, ev: Event):
+    char = ev.regex_dict.get("char") or ""
+    for kw in ("刷新", "更新", "upd"):
+        if char.startswith(kw) and len(char) > len(kw):
+            char = char[len(kw):]
+    plan = await _weight_plan(bot, ev, char)
+    if plan is None:
+        return
+    from ..utils.custom_weight import using
+
+    with using(plan):
+        return await _send_char_detail_typo(bot, ev)
+
+
+async def _send_char_detail_typo(bot: Bot, ev: Event):
     waves_id = ev.regex_dict.get("waves_id")
     char = ev.regex_dict.get("char")
     query_type = ev.regex_dict.get("query_type")
@@ -706,7 +792,7 @@ async def send_char_detail_msg2_typo(bot: Bot, ev: Event):
             ev.regex_dict["is_refresh"] = kw
             ev.regex_dict["char"] = char[len(kw):]
             ev.regex_dict["query_type"] = "面板"
-            return await send_one_char_detail_msg(bot, ev)
+            return await _send_one_char_detail(bot, ev)
 
     res = resolve_char(char)
     if not res.ok:
@@ -730,10 +816,22 @@ async def send_char_detail_msg2_typo(bot: Bot, ev: Event):
 
 
 @waves_new_char_detail.on_regex(
-    rf"^(?P<lead_space>\s+)?(?P<waves_id>\d{{9}})?(?P<char>{PATTERN})(?P<query_type>面板|面版|面包|🍞|mb|伤害(?P<damage>(\d+)?))(?P<is_pk>pk|对比|PK|比|比较)?(\s*)?(?P<change_list>((换[^换]*)*)?)\s*$",
+    rf"^(?P<lead_space>\s+)?(?:(?P<cw1>{_CW})\s*)?(?P<waves_id>\d{{9}})?(?P<char>{PATTERN})(?:\s*(?P<cw2>{_CW})\s*)?(?P<query_type>面板|面版|面包|🍞|mb|伤害(?P<damage>(\d+)?))(?:\s*(?P<cw3>{_CW}))?(?P<is_pk>pk|对比|PK|比|比较)?(\s*)?(?P<change_list>((换[^换]*)*)?)\s*(?P<cw4>{_CW})?\s*$",
     block=True,
 )
 async def send_char_detail_msg2(bot: Bot, ev: Event):
+    if ev.regex_dict.get("lead_space"):
+        return await bot.send(_space_hint())
+    plan = await _weight_plan(bot, ev, ev.regex_dict.get("char") or "", _cw_from(ev))
+    if plan is None:
+        return
+    from ..utils.custom_weight import using
+
+    with using(plan):
+        return await _send_char_detail2(bot, ev)
+
+
+async def _send_char_detail2(bot: Bot, ev: Event):
     if ev.regex_dict.get("lead_space"):
         return await bot.send(_space_hint())
     waves_id = ev.regex_dict.get("waves_id")
@@ -865,8 +963,21 @@ async def send_char_detail_msg2(bot: Bot, ev: Event):
             return
 
 
-@waves_new_char_detail.on_regex(rf"^(?P<waves_id>\d{{9}})?(?P<char>{PATTERN})(权重|qz)$", block=True)
+@waves_new_char_detail.on_regex(
+    rf"^(?:(?P<cw1>{_CW})\s*)?(?P<waves_id>\d{{9}})?(?P<char>{PATTERN})(?:\s*(?P<cw2>{_CW})\s*)?(权重|qz)(?:\s*(?P<cw3>{_CW}))?\s*$",
+    block=True,
+)
 async def send_char_detail_msg2_weight(bot: Bot, ev: Event):
+    plan = await _weight_plan(bot, ev, ev.regex_dict.get("char") or "", _cw_from(ev))
+    if plan is None:
+        return
+    from ..utils.custom_weight import using
+
+    with using(plan):
+        return await _send_char_weight(bot, ev)
+
+
+async def _send_char_weight(bot: Bot, ev: Event):
     waves_id = ev.regex_dict.get("waves_id")
     char = ev.regex_dict.get("char")
 
@@ -914,6 +1025,14 @@ async def send_char_detail_msg2_weight(bot: Bot, ev: Event):
         return await bot.send(res.wrap(im, canonical_cmd), at_sender)
 
 
+async def _overall_plan(bot: Bot, ev: Event, char: str):
+    """优化用的方案: 只取自定义权重的达标共效, 声骸评分仍用内置。出错时已回复并返回 None。"""
+    plan = await _weight_plan(bot, ev, char)
+    if plan is not None:
+        plan.echo = False
+    return plan
+
+
 @waves_new_char_detail.on_regex(rf"^(?P<waves_id>\d{{9}})?(?P<char>{PATTERN})(优化建议|优化|提升建议|提升|yh)(\s*)?(?P<change_list>((换[^换]*)*)?)$", block=True)
 async def send_char_optimize_msg(bot: Bot, ev: Event):
     waves_id = ev.regex_dict.get("waves_id")
@@ -937,8 +1056,15 @@ async def send_char_optimize_msg(bot: Bot, ev: Event):
     body = f"极限{char}" if is_limit_query else char
     canonical_cmd = f"{PREFIX}{body}优化{change_list_regex or ''}"
 
+    from ..utils.custom_weight import using
+
+    plan = await _overall_plan(bot, ev, char)
+    if plan is None:
+        return
+
     if is_limit_query:
-        im = await draw_char_optimize_img(ev, "1", char, ev.user_id, change_list_regex=change_list_regex, is_limit_query=True)
+        with using(plan):
+            im = await draw_char_optimize_img(ev, "1", char, ev.user_id, change_list_regex=change_list_regex, is_limit_query=True)
         at_sender = False
         if isinstance(im, str) and ev.group_id:
             at_sender = True
@@ -953,7 +1079,8 @@ async def send_char_optimize_msg(bot: Bot, ev: Event):
         return
     uid, user_id = _ru
 
-    im = await draw_char_optimize_img(ev, uid, char, user_id, waves_id, change_list_regex=change_list_regex)
+    with using(plan):
+        im = await draw_char_optimize_img(ev, uid, char, user_id, waves_id, change_list_regex=change_list_regex)
     at_sender = False
     if isinstance(im, str) and ev.group_id:
         at_sender = True

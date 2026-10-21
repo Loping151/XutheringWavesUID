@@ -24,7 +24,7 @@ sv_waves_phantom_total_rank = SV("ww声骸总排行", priority=0)
 
 
 @sv_waves_rank_list.on_regex(
-    rf"^(?P<char>{PATTERN})(?:排行|排行榜|排名|ph|pm)(?P<pages>\d+)?$",
+    rf"^(?P<char>{PATTERN})(?:排行|排行榜|排名|ph|pm)(?P<pages>\d+)?\s*(?P<cw>[cC][wW]_[0-9a-zA-Z]{{8}})?\s*$",
     block=True,
     to_ai="""查询本群某角色的排行（伤害或评分），仅群聊可用。
 
@@ -75,7 +75,17 @@ async def send_rank_card(bot: Bot, ev: Event):
         else:
             canonical_cmd = f"{PREFIX}{char}排行"
 
-    im = await draw_rank_img(bot, ev, char, rank_type, pages)
+    from ..utils.custom_weight import find_cw, prepare_plan, using
+    from ..utils.resource.constant import SPECIAL_CHAR
+
+    plan = None
+    cid = char_name_to_char_id(char) if char else None
+    if cid:
+        plan = await prepare_plan(bot, ev, SPECIAL_CHAR.get(cid, [cid]), explicit=find_cw(ev.regex_dict.get("cw") or ""), rank=True)
+        if plan is None:
+            return
+    with using(plan):
+        im = await draw_rank_img(bot, ev, char, rank_type, pages)
 
     if isinstance(im, str):
         at_sender = True if ev.group_id else False
@@ -115,7 +125,13 @@ async def send_phantom_rank_card(bot: Bot, ev: Event):
         from ..wutheringwaves_config import PREFIX
         canonical_cmd = f"{PREFIX}{char}声骸排行"
 
-    im = await draw_phantom_rank_img(bot, ev, char, pages)
+    from ..utils.custom_weight import prepare_plan, using
+    from ..utils.resource.constant import SPECIAL_CHAR
+
+    cid = char_name_to_char_id(char) if char else None
+    plan = await prepare_plan(bot, ev, SPECIAL_CHAR.get(cid, [cid]), rank=True) if cid else None
+    with using(plan):
+        im = await draw_phantom_rank_img(bot, ev, char, pages)
 
     if isinstance(im, str):
         at_sender = True if ev.group_id else False
@@ -253,5 +269,9 @@ async def send_rank_list_card(bot: Bot, ev: Event):
     if not ev.group_id:
         return await bot.send("请在群聊中使用")
 
-    im = await draw_rank_list(bot, ev)
+    from ..utils.custom_weight import prepare_plan, using
+
+    plan = await prepare_plan(bot, ev, rank=True)
+    with using(plan):
+        im = await draw_rank_list(bot, ev)
     await bot.send(im)

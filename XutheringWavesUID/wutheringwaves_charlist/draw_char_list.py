@@ -34,6 +34,7 @@ from ..wutheringwaves_config import PREFIX, WutheringWavesConfig
 from ..wutheringwaves_charinfo import base_info_cache
 from ..utils.ascension.weapon import get_breach
 from ..utils.fonts.waves_fonts import (
+    waves_font_14,
     waves_font_16,
     waves_font_18,
     waves_font_20,
@@ -221,10 +222,34 @@ async def draw_char_list_img(
     return await convert_img(card_img)
 
 
+_LINE_Y = 12
+_SCORE_X = 348
+
+
+def _mark_weight_id(bar_star: Image.Image, wid: str) -> None:
+    """分数上方的金线按文字宽度羽化出空隙, 顺着金线写权重 ID。"""
+    color = bar_star.getpixel((_SCORE_X, _LINE_Y))[:3]
+    text_w = int(waves_font_14.getlength(wid))
+    feather = 16
+    half = text_w // 2 + 6 + feather
+    x0, x1 = _SCORE_X - half, _SCORE_X + half
+    px = bar_star.load()
+    for x in range(max(0, x0), min(bar_star.width, x1)):
+        d = min(x - x0, x1 - 1 - x)
+        f = 0.0 if d >= feather else 1 - d / feather
+        f = f * f * (3 - 2 * f)
+        for y in range(_LINE_Y - 4, _LINE_Y + 5):
+            r, g, b, a = px[x, y]
+            px[x, y] = (r, g, b, int(a * f))
+    ImageDraw.Draw(bar_star).text((_SCORE_X, _LINE_Y), wid, color, waves_font_14, "mm")
+
+
 def _render_bar(asset) -> Image.Image:
     _rank: WavesCharRank = asset["rank"]
     role_detail: RoleDetailData = asset["role_detail"]
-    bar_star = Image.open(TEXT_PATH / f"bar_{_rank.starLevel}star.png")
+    bar_star = Image.open(TEXT_PATH / f"bar_{_rank.starLevel}star.png").convert("RGBA")
+    if _rank.weight_id:
+        _mark_weight_id(bar_star, _rank.weight_id)
     bar_star_draw = ImageDraw.Draw(bar_star)
     role_avatar = asset["role_avatar"]
 

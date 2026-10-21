@@ -16,7 +16,7 @@ from .pagination import (
     group_rank_empty_page_message,
     paginate_group_rank,
 )
-from .draw_rank_card import find_role_detail
+from .draw_rank_card import find_role_detail, rank_standard
 from ._permissions import get_rank_token_condition, filter_active_group_users
 from .draw_phantom_total_rank_card import (
     CY,
@@ -184,6 +184,7 @@ async def get_phantom_rank_for_user(
             calc.phantom_card,
             role_detail.role.roleName,
             role_detail.role.roleId,
+            role=role_detail,
         )
 
         for _phantom in role_detail.phantomData.equipPhantomList:
@@ -312,7 +313,7 @@ async def draw_phantom_rank_img(
 
     top_scores = [r.score for r in details[:page_item_count]]
     avg_val = sum(top_scores) / len(top_scores) if top_scores else 0
-    compose_cond_bar(card_img, "排行标准：以单声骸分数排序 (评分高不代表实际伤害高)", TITLE_H, text_bar_h, GROUP_WIDTH)
+    compose_cond_bar(card_img, rank_standard(char_id, char_name, "单声骸分数"), TITLE_H, text_bar_h, GROUP_WIDTH)
     await compose_pile_header(card_img, char_id, char_name, "声骸群排行", f"{avg_val:.1f}", GROUP_WIDTH)
 
     bar = draw_phantom_bar_bg(Image.open(TEXT_PATH / "bar1.png"), GROUP_WIDTH)

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>自定义权重</title>
+<style>
+@import url('{{ font_css_url }}');
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    background: #0f1115;
+    width: 760px;
+    font-family: 'Noto Sans SC', 'Source Han Sans CN', 'Noto Sans CJK JP', sans-serif;
+    color: #fff;
+}
+.container { position: relative; width: 760px; padding: 28px 28px 22px; overflow: hidden; }
+.bg { position: absolute; inset: 0; z-index: 0; }
+.bg img { width: 100%; height: 100%; object-fit: cover; filter: blur(3px) brightness(.55); transform: scale(1.04); }
+.page { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 16px; }
+.card {
+    background: rgba(22, 26, 33, .82);
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 16px;
+    padding: 18px 20px;
+    position: relative;
+}
+.card::before {
+    content: ""; position: absolute; top: 0; left: 24px; right: 24px; height: 2px;
+    background: linear-gradient(90deg, transparent, #d4b163, transparent); opacity: .7;
+}
+.head { display: flex; align-items: center; gap: 16px; }
+.avatar { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #d4b163; }
+.title { font-size: 28px; font-weight: 700; }
+.sub { margin-top: 4px; font-size: 15px; color: #b9c0c8; font-family: 'JetBrains Mono', monospace; }
+.label { font-size: 14px; color: #d4b163; letter-spacing: 2px; margin-bottom: 10px; font-weight: 700; }
+.line { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 16px; }
+.mono { font-family: 'JetBrains Mono', monospace; color: #e0ca92; }
+.muted { color: #8b939c; font-size: 14px; }
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.row {
+    display: grid; grid-template-columns: 46px 1fr auto auto; gap: 14px; align-items: center;
+    background: rgba(255, 255, 255, .04); border-radius: 12px; padding: 8px 12px;
+}
+.row.off { opacity: .45; }
+.row img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; background: #222; }
+.row .name { font-size: 17px; font-weight: 700; }
+.row .w { font-size: 14px; color: #b9c0c8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+.row .cond { margin-top: 3px; max-width: 300px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.5; color: #e0ca92; word-spacing: 2px; }
+.row .cond b { font-family: 'Noto Sans SC', sans-serif; font-weight: 400; color: #8b939c; margin-right: 6px; }
+.spec { display: flex; align-items: flex-end; gap: 3px; height: 34px; border-bottom: 1px solid rgba(255, 255, 255, .14); }
+.spec i { display: block; width: 6px; border-radius: 2px 2px 0 0; background: rgba(255, 255, 255, .18); }
+.row.off .spec i { filter: grayscale(1); }
+.row .right { text-align: right; }
+.tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 6px; margin-top: 4px; }
+.tag.personal { background: rgba(53, 152, 219, .22); color: #8ec8f0; }
+.tag.sub { background: rgba(185, 106, 217, .22); color: #d7a8ea; }
+.tag.group { background: rgba(234, 183, 4, .2); color: #f0d36a; }
+.tag.off { background: rgba(255, 255, 255, .08); color: #8b939c; }
+.rule { font-size: 14px; color: #b9c0c8; line-height: 1.8; }
+.rule b { color: #e0ca92; font-weight: 700; }
+.foot { display: flex; justify-content: center; margin-top: 4px; }
+.foot img { height: 30px; opacity: .85; }
+.empty { color: #8b939c; font-size: 15px; padding: 6px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="bg"><img src="{{ bg_url }}"></div>
+    <div class="page">
+        <div class="card">
+            <div class="head">
+                {% if avatar_url %}<img class="avatar" src="{{ avatar_url }}">{% endif %}
+                <div>
+                    <div class="title">自定义权重</div>
+                    <div class="sub">特征码 {{ uid }}</div>
+                </div>
+            </div>
+        </div>
+
+        {% if group %}
+        <div class="card">
+            <div class="label">本群权重</div>
+            <div class="line"><span>订阅 <span class="mono">{{ group.id }}</span> {{ group.name|e }}{% if group.author %}<span class="muted"> · {{ group.author|e }}</span>{% endif %}</span><span class="muted">{{ group.count }} 个角色</span></div>
+            {% if group_rows %}
+            <div class="rows" style="margin-top:12px">
+                {% for r in group_rows %}
+                <div class="row">
+                    <img src="{{ r.avatar }}">
+                    <div><div class="name">{{ r.char }}</div><div class="w">{{ r.weight|e }}</div>{% if r.conf %}<div class="cond">{{ r.conf }}</div>{% elif r.cond %}<div class="cond"><b>条件</b>{{ r.cond }}</div>{% endif %}</div>
+                    <div class="spec">{% for b in r.bars %}<i style="height:{{ b.h }}%{% if b.c %};background:{{ b.c }}{% endif %}"></i>{% endfor %}</div>
+                    <div class="right"><div class="mono">{{ r.wid }}</div><span class="tag group">群权重</span></div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="label">个人设置</div>
+            {% if sub %}
+            <div class="line" style="margin-bottom:12px"><span>跟随订阅 <span class="mono">{{ sub.id }}</span> {{ sub.name|e }}{% if sub.author %}<span class="muted"> · {{ sub.author|e }}</span>{% endif %}</span><span class="muted">{{ sub.count }} 个角色</span></div>
+            {% endif %}
+            {% if rows %}
+            <div class="rows">
+                {% for r in rows %}
+                <div class="row {{ 'off' if r.off }}">
+                    <img src="{{ r.avatar }}">
+                    <div><div class="name">{{ r.char }}</div><div class="w">{{ r.weight|e }}</div>{% if r.conf %}<div class="cond">{{ r.conf }}</div>{% elif r.cond %}<div class="cond"><b>条件</b>{{ r.cond }}</div>{% endif %}</div>
+                    <div class="spec">{% for b in r.bars %}<i style="height:{{ b.h }}%{% if b.c %};background:{{ b.c }}{% endif %}"></i>{% endfor %}</div>
+                    <div class="right"><div class="mono">{{ r.wid }}</div><span class="tag {{ r.cls }}">{{ r.source }}</span></div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">{{ empty }}</div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="label">生效顺序</div>
+            <div class="rule">
+                <b>指令里的 cw_ID</b> ＞ <b>群权重</b> ＞ <b>个人设置 / 订阅</b> ＞ <b>内置权重</b><br>
+                权重站 {{ site }} · 【{{ prefix }}权重帮助】
+            </div>
+        </div>
+        {% if footer_b64 %}<div class="foot"><img src="{{ footer_b64 }}"></div>{% endif %}
+    </div>
+</div>
+</body>
+</html>

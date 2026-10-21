@@ -35,6 +35,7 @@ from ..utils.calculate import (
     get_calc_map,
     calc_phantom_score,
 )
+from ..utils.custom_weight import current_plan
 from ..utils.char_info_utils import get_all_role_detail_info_list
 from ..utils.database.models import WavesBind, WavesUser
 from ..utils.database.waves_user_activity import WavesUserActivity
@@ -72,6 +73,7 @@ def calculate_role_phantom_score(role_detail: RoleDetailData) -> float:
         calc.phantom_card,
         role_detail.role.roleName,
         role_detail.role.roleId,
+        role=role_detail,
     )
 
     phantom_score = 0.0
@@ -128,8 +130,20 @@ async def _build_practice_rank_for_uid(
 ) -> Optional[PracticeRankInfo]:
     """单 UID 的练度信息计算，供并发调度。"""
     from ..utils.resource.constant import SPECIAL_CHAR_RANK_MAP
+    from ..utils.custom_weight import builtin_only, canon_char, current_plan
+
+    plan = current_plan()
+    custom_ids = set(plan.choices) if plan and plan.choices else set()
 
     char_list_data = await load_char_list_data(uid)
+
+    if char_list_data and custom_ids:
+        role_details_list = await get_all_role_detail_info_list(uid)
+        char_list_data = dict(char_list_data)
+        for r in role_details_list or []:
+            mapped_id = SPECIAL_CHAR_RANK_MAP.get(str(r.role.roleId), str(r.role.roleId))
+            if canon_char(mapped_id) in custom_ids:
+                char_list_data[mapped_id] = calculate_role_phantom_score(r)
 
     if char_list_data:
         total_score = 0.0
@@ -167,10 +181,13 @@ async def _build_practice_rank_for_uid(
     valid_role_details = []
     char_list_data = {}
     for role_detail in role_details:
-        phantom_score = calculate_role_phantom_score(role_detail)
         role_id_str = str(role_detail.role.roleId)
         mapped_id = SPECIAL_CHAR_RANK_MAP.get(role_id_str, role_id_str)
-        char_list_data[mapped_id] = phantom_score
+        with builtin_only():
+            char_list_data[mapped_id] = calculate_role_phantom_score(role_detail)
+        phantom_score = char_list_data[mapped_id]
+        if canon_char(mapped_id) in custom_ids:
+            phantom_score = calculate_role_phantom_score(role_detail)
         if phantom_score >= threshold:
             total_score += phantom_score
             valid_role_details.append(role_detail)
@@ -364,6 +381,7 @@ async def draw_rank_list(bot: Bot, ev: Event, threshold: int = 175) -> Union[str
     card_img = await _compose_rank_list(
         card_img, bar, rankInfoList_display, display_rank_ids, results, char_avatar_map,
         self_uid, threshold_label, header_height, item_spacing, width, _mask_uid,
+        plan=current_plan(),
     )
     card_img = await convert_img(card_img)
 
@@ -371,8 +389,15 @@ async def draw_rank_list(bot: Bot, ev: Event, threshold: int = 175) -> Union[str
 
 
 @to_thread
-def _compose_rank_list(card_img, bar, rankInfoList_display, display_rank_ids, results, char_avatar_map,
-                      self_uid, threshold_label, header_height, item_spacing, width, mask_uid=None):
+def _compose_rank_list(*args, plan=None, **kwargs):
+    from ..utils.custom_weight import using
+
+    with using(plan):
+        return _compose_rank_list_impl(*args, **kwargs)
+
+
+def _compose_rank_list_impl(card_img, bar, rankInfoList_display, display_rank_ids, results, char_avatar_map,
+                            self_uid, threshold_label, header_height, item_spacing, width, mask_uid=None):
     from ..utils.calc import WuWaCalc
     for rank_temp_index, temp in enumerate(zip(rankInfoList_display, results)):
         rankInfo = temp[0]
@@ -406,6 +431,7 @@ def _compose_rank_list(card_img, bar, rankInfoList_display, display_rank_ids, re
                     calc.phantom_card,
                     role.role.roleName,
                     role.role.roleId,
+                    role=role,
                 )
                 phantom_score = 0.0
                 for _phantom in role.phantomData.equipPhantomList:

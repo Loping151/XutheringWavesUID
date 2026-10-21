@@ -20,6 +20,7 @@ from .waves_subscribe import WavesSubscribe
 from .waves_user_activity import WavesUserActivity
 from .waves_user_sdk import WavesUserSdk
 from .waves_gacha_cloud import WavesGachaCloud
+from .waves_custom_weight import WavesCustomWeight, WavesGroupWeight, ensure_tables as _ensure_custom_weight_tables
 
 from gsuid_core.server import on_core_start
 from .auto_migrate import auto_add_missing_columns
@@ -828,4 +829,8 @@ class WavesGachaCloudAdmin(GsAdminModel):
 
 @on_core_start
 async def _waves_auto_migrate():
+    try:
+        await _ensure_custom_weight_tables()
+    except Exception as e:
+        logger.warning(f"[鸣潮·补列] 自定义权重表创建失败: {e}")
     await auto_add_missing_columns(__name__, log_prefix="[鸣潮·补列]")

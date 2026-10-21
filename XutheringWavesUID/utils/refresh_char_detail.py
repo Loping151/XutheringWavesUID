@@ -206,6 +206,9 @@ async def send_card(
 
     # 全量刷新不算综合评分, 仅单角色刷新时算; 后台上传不阻塞出图
     async def _upload_rank():
+        from .custom_weight import activate
+
+        activate(None)
         try:
             if len(waves_data) == 1:
                 results = await asyncio.gather(
@@ -258,6 +261,7 @@ async def save_card_info(
     #
     refresh_update = {}
     refresh_unchanged = {}
+    refresh_prev = {}
     for item in waves_data:
         role_id = item["role"]["roleId"]
 
@@ -274,6 +278,7 @@ async def save_card_info(
         cleaned_item = remove_urls_from_data(item)
         if old != cleaned_item:
             refresh_update[role_id] = item
+            refresh_prev[role_id] = old
         else:
             refresh_unchanged[role_id] = item
 
@@ -315,7 +320,10 @@ async def save_card_info(
                 logger.exception("[鸣潮·角色状态] save rover.json failed:", e)
 
     # 保存charListData.json（角色评分缓存）—— 只算本次变更的角色, 未变更角色 score 不变
-    waves_char_rank = await get_waves_char_rank(uid, list(refresh_update.values()), True)
+    from .custom_weight import builtin_only
+
+    with builtin_only():
+        waves_char_rank = await get_waves_char_rank(uid, list(refresh_update.values()), True)
 
     # 候选门槛: 不在漂泊者列表、本次确有变更、有旧分、旧分>140、
     #   跨档 / 单角色刷新 delta∈(0,50) ; 否则 delta∈(3,50)
@@ -354,6 +362,7 @@ async def save_card_info(
                 "old": old,
                 "new": new,
                 "delta": delta,
+                "prev": refresh_prev.get(cr.roleId),
             })
 
         def _priority(c):

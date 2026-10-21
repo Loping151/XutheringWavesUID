@@ -29,7 +29,7 @@ from ..utils.image import (
     get_role_pile_default,
 )
 from ..utils.pile_offset import place_rank_pile, read_rank_offset
-from .draw_rank_card import find_role_detail
+from .draw_rank_card import find_role_detail, rank_standard
 from ..utils.api.wwapi import (
     GET_PHANTOM_TOTAL_RANK_URL,
     PhantomRankProp,
@@ -538,7 +538,7 @@ async def draw_phantom_total_rank(bot: Bot, ev: Event, char: str, pages: int) ->
     total_height = TITLE_H + text_bar_h + ITEM_H * len(details) + 60
     card_img = get_custom_waves_bg(WIDTH, total_height, "bg3")
 
-    compose_cond_bar(card_img, "排行标准：以单声骸分数排序 (评分高不代表实际伤害高)", TITLE_H, text_bar_h)
+    compose_cond_bar(card_img, rank_standard(char_id, char, "单声骸分数"), TITLE_H, text_bar_h)
 
     avg_val = sum(d.score for d in ranking) / len(ranking) if ranking else 0
     await compose_pile_header(card_img, char_id, char, "声骸总排行", f"{avg_val:.1f}")

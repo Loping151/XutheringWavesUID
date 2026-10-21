@@ -30,6 +30,13 @@ from ..utils.name_convert import alias_to_char_name, char_name_to_char_id
 from ..utils.api.wwapi import ONE_RANK_URL, OneRankRequest, OneRankResponse
 from ..utils.damage.abstract import DamageRankRegister, DamageDetailRegister, ScoreDetailRegister
 from ..utils.score import get_panel_score_grade
+from ..utils.expression_ctx import (
+    builtin_calc_temp,
+    drift_advice,
+    is_custom_temp,
+    overall_report,
+    phantom_total,
+)
 from ..utils.char_state import record_view, record_advice_sent, queue_pending_advice
 from ..wutheringwaves_config.wutheringwaves_config import (
     ShowConfig,
@@ -60,6 +67,8 @@ from ..utils.resource.constant import (
     WEAPON_TYPE_ID_MAP,
     get_short_name,
 )
+from ..utils.custom_weight import current_plan, custom_energy
+from ..utils.weight_spectrum import SPEC_COLOR, spectrum
 from ..utils.calculate import (
     get_calc_map,
     get_max_score,
@@ -70,6 +79,8 @@ from ..utils.calculate import (
 )
 from ..utils.fonts.waves_fonts import (
     draw_text_with_fallback,
+    text_width_with_emoji_fallback,
+    waves_font_origin,
     waves_font_12,
     waves_font_16,
     waves_font_18,
@@ -191,6 +202,62 @@ weight_list = [
 damage_bar1 = Image.open(TEXT_PATH / "damage_bar1.png")
 damage_bar2 = Image.open(TEXT_PATH / "damage_bar2.png")
 
+def _builtin_phantom_score(calc, role_detail, phantom_score: float) -> float:
+    """排名查询用内置权重下的声骸总分。"""
+    if not is_custom_temp(calc.calc_temp):
+        return phantom_score
+    with builtin_calc_temp(calc, role_detail):
+        return phantom_total(role_detail, calc.calc_temp)
+
+
+_TEMPLATE_RIGHT = 40 + 2 * 370 + 400
+_SH_RIGHT = 30 + 2 * 385 + 350
+_TEMPLATE_PAD = 46
+_COL_STEP = 370
+_PH_SHIFT = 24
+
+
+def _template_name(calc_temp, locale: str) -> str:
+    if isinstance(calc_temp, dict) and calc_temp.get("_cw_label"):
+        return calc_temp["_cw_label"]
+    return t(calc_temp["name"], locale, partial=True)
+
+
+def _stretch_bar(bar: Image.Image, width: int, cap: int = 24) -> Image.Image:
+    """横向拉长底条: 左端边框原样保留, 只拉中段。"""
+    if width == bar.width:
+        return bar.copy()
+    out = Image.new("RGBA", (width, bar.height))
+    out.alpha_composite(bar.crop((0, 0, cap, bar.height)))
+    out.alpha_composite(bar.crop((cap, 0, bar.width, bar.height)).resize((width - cap, bar.height)), (cap, 0))
+    return out
+
+
+def _overall_template(calc, role_detail, locale: str) -> str:
+    hit = custom_energy(role_detail.role.roleId, role_detail)
+    if hit:
+        return f"{hit[1]}（达标共效 {hit[0]:g}%）"
+    return _template_name(calc.calc_temp, locale)
+
+
+def _template_tips(ph_1: Image.Image, calc_temp, locale: str, reserve_left: int = 0, right: int = _TEMPLATE_RIGHT):
+    """评分模板框: 宽度随文字向左伸长(至少一列, 至多三列且不压左侧换装文字), 仍放不下再缩字号。返回 (图, x)。"""
+    label = t("评分模板", locale)
+    name = _template_name(calc_temp, locale)
+    label_w = text_width_with_emoji_fallback(label, waves_font_24)
+    text_w = text_width_with_emoji_fallback(name, waves_font_24)
+    need = int(_TEMPLATE_PAD + label_w + 30 + text_w + 50)
+    room = max(400, min(right - reserve_left, 400 + 2 * _COL_STEP))
+    width = min(max(need, 400), room)
+    font = waves_font_24
+    if need > width and text_w > 0:
+        font = waves_font_origin(max(14, int(24 * (width - 100 - label_w) / text_w)))
+    tips = _stretch_bar(ph_1, width)
+    draw = ImageDraw.Draw(tips)
+    draw_text_with_fallback(draw, (_TEMPLATE_PAD, 50), label, "white", waves_font_24, "lm")
+    draw_text_with_fallback(draw, (width - 50, 50), name, (255, 255, 0), font, "rm")
+    return tips, right - width
+
 
 async def get_one_rank(item: OneRankRequest) -> Optional[OneRankResponse]:
     WavesToken = WutheringWavesConfig.get_config("WavesToken").data
@@ -264,6 +331,7 @@ async def ph_card_draw(
             role_detail.role.roleName,
             role_detail.role.roleId,
             get_role_modal(role_detail),
+            role=role_detail,
         )
 
         for i, _phantom in enumerate(equipPhantomList):
@@ -396,19 +464,15 @@ async def ph_card_draw(
                 draw_text_with_fallback(ph_bg_draw, (70, 50), f"{name[:12 if locale == 'en' else 6]}", name_color, waves_font_24, "lm")
                 draw_text_with_fallback(ph_bg_draw, (343, 50), f"{value}", name_color, waves_font_24, "rm")
 
-                phantom_temp.alpha_composite(ph_bg, (40 + mi * 370, 100 + ni * 50))
+                phantom_temp.alpha_composite(ph_bg, (40 + mi * 370, 100 + _PH_SHIFT + ni * 50))
 
-        ph_tips = ph_1.copy()
-        ph_tips_draw = ImageDraw.Draw(ph_tips)
-
-        draw_text_with_fallback(ph_tips_draw, (20, 50), t("评分模板", locale), "white", waves_font_24, "lm")
-        draw_text_with_fallback(ph_tips_draw, (350, 50), t(calc.calc_temp['name'], locale, partial=True), (255, 255, 0), waves_font_24, "rm")
-        # phantom_temp.alpha_composite(ph_tips, (40 + 2 * 370, 100 + 4 * 50))
-        phantom_temp.alpha_composite(ph_tips, (40 + 2 * 370, 45))
+        reserve = 74 + text_width_with_emoji_fallback(change_command, waves_font_18) if change_command else 0
+        ph_tips, tips_x = _template_tips(ph_1, calc.calc_temp, locale, reserve)
+        phantom_temp.alpha_composite(ph_tips, (tips_x, 45 + _PH_SHIFT))
 
         if change_command:
             phantom_temp_text = ImageDraw.Draw(phantom_temp)
-            draw_text_with_fallback(phantom_temp_text, (50, 90), f"{change_command}", SPECIAL_GOLD, waves_font_18, "lm")
+            draw_text_with_fallback(phantom_temp_text, (50, 90 + _PH_SHIFT), f"{change_command}", SPECIAL_GOLD, waves_font_18, "lm")
 
     # img.paste(phantom_temp, (0, 1320 + jineng_len), phantom_temp)
     return calc, phantom_temp, phantom_score
@@ -649,7 +713,9 @@ async def draw_char_detail_img(
     fallback_to_generic=False,
     role_detail_override: Optional[RoleDetailData] = None,
     preview_layers: Optional[dict] = None,
+    prev_detail: Optional[RoleDetailData] = None,
 ):
+    """prev_detail: 刷新前的面板, 传入时对比前后评分给出背离建议。"""
     locale = await WavesLangSettings.get_lang(ev.user_id)
     # waves_id 时是查别人, 用 self uid 取本人偏好
     user_pref = await get_hide_uid_pref(waves_id or uid, user_id, ev.bot_id)
@@ -669,7 +735,7 @@ async def draw_char_detail_img(
     if damageDetail and not WutheringWavesConfig.get_config("WavesToken").data:
         logger.info(f"[鸣潮·角色面板渲染] {char_name} 未接入总服务器, 跳过伤害绘制")
         damageDetail = None
-    ph_sum_value = 250
+    ph_sum_value = 250 + _PH_SHIFT
     jineng_len = 180
     dd_len = 0
     isDraw = False if damageId and damageDetail else True
@@ -847,41 +913,38 @@ async def draw_char_detail_img(
         dd_len += damage_calc_img.size[1]
 
     score_report = None
-    scoreDetail = ScoreDetailRegister.find_class(char_id)
-    if scoreDetail and show_score and not is_limit_query and role_detail.phantomData and role_detail.phantomData.equipPhantomList:
+    if show_score and not is_limit_query and role_detail.phantomData and role_detail.phantomData.equipPhantomList:
         try:
-            score_calc = scoreDetail[0] if isinstance(scoreDetail, list) else scoreDetail
-            score_title = score_calc.get("title", f"综合评分-{char_name}")
-            setattr(calc, "_score_title", score_title)
-            score_report = score_calc["func"](calc, role_detail)
+            score_report = overall_report(calc, role_detail)
             if score_report is not None:
                 logger.info(
-                    f"[鸣潮·评分] {score_title}: {score_report.score:.1f}/150 "
+                    f"[鸣潮·评分] {calc._score_title}: {score_report.score:.1f}/150 "
                     f"(raw={score_report.raw:,.1f} / max={score_report.max_raw:,.1f})"
                 )
         except Exception as e:
             logger.warning(f"[鸣潮·评分] {char_name} 计算失败: {e}")
 
-    # 仅本人查询写 state: 他人/特征码查询不动本人 view 计数、脏标记与建议
-    is_self = not waves_id and user_id == ev.user_id
+    # 仅本人查询写 state: 他人/特征码查询、对比图里的旧面板不动本人 view 计数、脏标记与建议
+    is_self = not waves_id and user_id == ev.user_id and role_detail_override is None
     if not is_limit_query and not change_list_regex and is_self:
         try:
             char_state = await record_view(uid, char_id)
-            if (
-                char_state is not None
-                and score_report is not None
-                and score_report.partial_max
-            ):
-                grade = get_panel_score_grade(score_report.score)
+            if char_state is not None and score_report is not None:
+                advice = None
+                if prev_detail is not None:
+                    advice = await drift_advice(
+                        char_name, prev_detail, role_detail, _builtin_phantom_score(calc, role_detail, phantom_score), score_report
+                    )
                 if (
-                    grade in ("b", "c")
+                    advice is None
+                    and score_report.partial_max
+                    and get_panel_score_grade(score_report.score) in ("b", "c")
                     and score_report.score > 40
                     and char_state.get("advice_dirty", True)
                 ):
-                    dirs = score_report.partial_max[0]
-                    advice = f"[鸣潮] {char_name} 建议提升词条方向: {dirs}"
-                    if await record_advice_sent(uid, char_id, advice):
-                        queue_pending_advice(ev, advice)
+                    advice = f"[鸣潮] {char_name} 建议提升词条方向: {score_report.partial_max[0]}"
+                if advice and await record_advice_sent(uid, char_id, advice):
+                    queue_pending_advice(ev, advice)
         except Exception as e:
             logger.warning(f"[鸣潮·角色状态] {char_name} 状态记录失败: {e}")
 
@@ -902,11 +965,12 @@ async def draw_char_detail_img(
                 logger.warning(f"[鸣潮·角色面板渲染] 获取排行伤害失败: {e}")
                 rank_expected_damage = None
 
+        rank_phantom_score = _builtin_phantom_score(calc, role_detail, phantom_score)
         oneRank = await get_one_rank(
             OneRankRequest(
                 char_id=int(char_id),
                 waves_id=uid,
-                phantom_score=phantom_score if phantom_score > 0 else None,
+                phantom_score=rank_phantom_score if rank_phantom_score > 0 else None,
                 expected_damage=rank_expected_damage,
             )
         )
@@ -1284,9 +1348,12 @@ async def draw_char_score_img(ev: Event, uid: str, char: str, user_id: str, wave
 
     from ..utils.damage.modal import get_modal_options, get_role_modal
     weight_modals = get_modal_options(int(role_detail.role.roleId))
+    _plan = current_plan()
+    if _plan and _plan.choice(role_detail.role.roleId, role_detail):
+        weight_modals = []
     active_modal = get_role_modal(role_detail)
-    weight_base_y = 2400
-    weight_block_h = 900
+    weight_base_y = 2400 + _PH_SHIFT
+    weight_block_h = 900 + _SPEC_H
 
     # 创建背景
     img = await get_card_bg(1200, weight_base_y + max(1, len(weight_modals)) * weight_block_h + 80, "bg3")
@@ -1297,7 +1364,7 @@ async def draw_char_score_img(ev: Event, uid: str, char: str, user_id: str, wave
     char_id = role_detail.role.roleId
     char_name = role_detail.role.roleName
 
-    phantom_temp = Image.new("RGBA", (1200, 1380))
+    phantom_temp = Image.new("RGBA", (1200, 1380 + _PH_SHIFT))
     right_image_temp = Image.new("RGBA", (600, 1100))
 
     from .role_info_change import ensure_default_modal
@@ -1318,6 +1385,7 @@ async def draw_char_score_img(ev: Event, uid: str, char: str, user_id: str, wave
             role_detail.role.roleName,
             role_detail.role.roleId,
             active_modal,
+            role=role_detail,
         )
         if is_limit_query:
             calc.role_card = calc.enhance_summation_card_value(calc.phantom_card)
@@ -1423,7 +1491,7 @@ async def draw_char_score_img(ev: Event, uid: str, char: str, user_id: str, wave
                     "rm",
                 )
 
-                phantom_temp.alpha_composite(sh_temp, dest=(30 + ((i + 1) % 3) * 385, 120 + ((i + 1) // 3) * 630))
+                phantom_temp.alpha_composite(sh_temp, dest=(30 + ((i + 1) % 3) * 385, 120 + _PH_SHIFT + ((i + 1) // 3) * 630))
 
         if phantom_score > 0:
             phantom_score = round(phantom_score, 2)
@@ -1448,7 +1516,7 @@ async def draw_char_score_img(ev: Event, uid: str, char: str, user_id: str, wave
             draw_text_with_fallback(score_temp_draw, (180, 130), t("暂无", locale), "white", waves_font_40, "mm")
             draw_text_with_fallback(score_temp_draw, (180, 380), f"- {t('分', locale)}", "white", waves_font_40, "mm")
 
-        phantom_temp.alpha_composite(score_temp, dest=(30, 120))
+        phantom_temp.alpha_composite(score_temp, dest=(30, 120 + _PH_SHIFT))
 
         shuxing = f"{role_detail.role.attributeName}伤害加成"
         panel_data = calc.role_card if is_limit_query and calc.role_card else calc.phantom_card
@@ -1475,16 +1543,16 @@ async def draw_char_score_img(ev: Event, uid: str, char: str, user_id: str, wave
 
                 right_image_temp.alpha_composite(ph_bg.resize((500, 125)), (0, (ni + mi * 4) * 70))
 
-        ph_tips = ph_1.copy()
-        ph_tips_draw = ImageDraw.Draw(ph_tips)
-        draw_text_with_fallback(ph_tips_draw, (20, 50), t("评分模板", locale), "white", waves_font_24, "lm")
-        draw_text_with_fallback(ph_tips_draw, (350, 50), t(calc.calc_temp['name'], locale, partial=True), (255, 255, 0), waves_font_24, "rm")
-        phantom_temp.alpha_composite(ph_tips, (40 + 2 * 370, 45))
+        ph_tips, tips_x = _template_tips(ph_1, calc.calc_temp, locale, right=_SH_RIGHT)
+        phantom_temp.alpha_composite(ph_tips, (tips_x, 45 + _PH_SHIFT))
 
-        if weight_modals:
+        custom_id = calc.calc_temp.get("_cw_id") if isinstance(calc.calc_temp, dict) else None
+        if custom_id:
+            weight_temps = [(calc.calc_temp, f"自定义 {custom_id}")]
+        elif weight_modals:
             weight_temps = [
                 (
-                    get_calc_map(calc.phantom_card, role_detail.role.roleName, role_detail.role.roleId, opt["key"]),
+                    get_calc_map(calc.phantom_card, role_detail.role.roleName, role_detail.role.roleId, opt["key"], role=role_detail),
                     opt["name"],
                 )
                 for opt in weight_modals
@@ -1494,7 +1562,7 @@ async def draw_char_score_img(ev: Event, uid: str, char: str, user_id: str, wave
 
         for ti, (ct, modal_name) in enumerate(weight_temps):
             weight_rows = _build_weight_rows(ct, shuxing)
-            weight_table = Image.new("RGBA", (1500, 880), (0, 0, 0, 0))
+            weight_table = Image.new("RGBA", (1500, 880 + _SPEC_H), (0, 0, 0, 0))
             weight_table = await draw_weight(weight_table, role_detail.role.roleName, weight_rows, ct, modal_name)
             img.alpha_composite(weight_table, (0, weight_base_y + ti * weight_block_h))
 
@@ -1899,7 +1967,7 @@ async def draw_char_optimize_img(ev: Event, uid: str, char: str, user_id: str, w
 
     # 仅本人查询展示建议方向, 他人/特征码查询隐藏
     is_self = not waves_id and user_id == ev.user_id
-    score_rows = []
+    score_rows = [(t("评分模板", locale), _overall_template(calc, role_detail, locale))]
     _pm = getattr(score_report, "partial_max", None)
     dirs = [_pm[0]] if _pm else []
     if dirs and is_self:
@@ -2270,15 +2338,64 @@ def _build_weight_rows(calc_temp, shuxing):
     return weight_list_temp
 
 
+_SPEC_H = 236
+_SPEC_LEGEND = [("s", "S ≥0.5"), ("a", "A ≥0.2"), ("b", "B >0")]
+
+
+def _spectrum_bar(w: int, h: int, color) -> Image.Image:
+    """圆顶渐变柱: 顶部提亮, 底部原色。"""
+    bar = Image.new("RGBA", (w, h))
+    top = tuple(min(255, int(c + (255 - c) * 0.35)) for c in color)
+    for y in range(h):
+        k = y / max(1, h - 1)
+        bar.paste((*(int(top[i] + (color[i] - top[i]) * k) for i in range(3)), 255), (0, y, w, y + 1))
+    mask = Image.new("L", (w, h + 8), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w - 1, h + 7], radius=min(8, w // 2), fill=255)
+    bar.putalpha(mask.crop((0, 0, w, h)))
+    return bar
+
+
+def _draw_spectrum(image: Image.Image, calc_temp, x0: int, y0: int, width: int):
+    """权重表上方一行频谱: 虚线为满档暴伤 1.00。"""
+    bands = spectrum(calc_temp)
+    peak = max([1.0] + [v for _, v, _ in bands])
+    layer = Image.new("RGBA", image.size)
+    draw = ImageDraw.Draw(layer)
+    draw.rounded_rectangle([x0, y0, x0 + width, y0 + _SPEC_H - 18], radius=14, fill=(255, 255, 255, 14))
+    for i, (lv, text) in enumerate(_SPEC_LEGEND):
+        lx = x0 + width - 20 - (len(_SPEC_LEGEND) - i) * 110
+        draw.rounded_rectangle([lx, y0 + 21, lx + 14, y0 + 35], radius=3, fill=(*SPEC_COLOR[lv], 255))
+        draw_text_with_fallback(draw, (lx + 22, y0 + 28), text, GREY, waves_font_18, "lm")
+    draw_text_with_fallback(draw, (x0 + 20, y0 + 28), "词条频谱", SPECIAL_GOLD, waves_font_22, "lm")
+
+    area, base = 96, y0 + _SPEC_H - 64
+    one = base - area / peak
+    for x in range(x0 + 20, x0 + width - 20, 14):
+        draw.line([(x, one), (x + 7, one)], fill=(255, 255, 255, 70), width=1)
+    draw.line([(x0 + 20, base), (x0 + width - 20, base)], fill=(255, 255, 255, 60), width=1)
+    col = (width - 40) / len(bands)
+    for i, (label, v, lv) in enumerate(bands):
+        cx = x0 + 20 + col * i + col / 2
+        if v > 0:
+            h = max(6, int(v / peak * area))
+            layer.alpha_composite(_spectrum_bar(34, h, SPEC_COLOR[lv]), (int(cx - 17), base - h))
+            draw_text_with_fallback(draw, (cx, base - h - 12), f"{v:.2f}", "white", waves_font_18, "mm")
+        else:
+            draw.rounded_rectangle([cx - 17, base - 3, cx + 17, base], radius=1, fill=(255, 255, 255, 45))
+        draw_text_with_fallback(draw, (cx, base + 22), label, "white" if v > 0 else GREY, waves_font_20, "mm")
+    image.alpha_composite(layer)
+
+
 @to_thread
 def draw_weight(image, role_name, weight_list_temp, calc_temp, modal_name=""):
     draw = ImageDraw.Draw(image)
-    draw.rectangle([10, 10, 1490, 870], fill=(0, 0, 0, int(0.7 * 255)))
+    draw.rectangle([10, 10, 1490, 870 + _SPEC_H], fill=(0, 0, 0, int(0.7 * 255)))
+    _draw_spectrum(image, calc_temp, 25, 80, 1150)
 
     # 设置表格参数
     cell_width = 230
     cell_height = 40
-    start_x, start_y = 25, 80
+    start_x, start_y = 25, 80 + _SPEC_H
 
     # 绘制表格
     for i, row in enumerate(weight_list_temp):
@@ -2320,12 +2437,12 @@ def draw_weight(image, role_name, weight_list_temp, calc_temp, modal_name=""):
 
     # 添加其他
     text = "词条得分：词条数值 * 当前词条权重 / 声骸未对齐最高分 * 对齐分数(50)"
-    draw_text_with_fallback(draw, (start_x, 750), text, font=waves_font_24, fill="white")
+    draw_text_with_fallback(draw, (start_x, 750 + _SPEC_H), text, font=waves_font_24, fill="white")
     s = calc_temp["total_grade"]
     text = f"声骸评分标准：SSS≥{s[-1] * 250:.2f}分/ SS≥{s[-2] * 250:.2f}分／S≥{s[-3] * 250:.2f}分 / A≥{s[-4] * 250:.2f}分 / B≥{s[-5] * 250:.2f}分 / C"
-    draw_text_with_fallback(draw, (start_x, 800), text, font=waves_font_24, fill="white")
+    draw_text_with_fallback(draw, (start_x, 800 + _SPEC_H), text, font=waves_font_24, fill="white")
     text = "当前角色评分标准仅供参考与娱乐，不代表任何官方或权威的评价。"
-    draw_text_with_fallback(draw, (start_x, 850), text, font=waves_font_24, fill="white")
+    draw_text_with_fallback(draw, (start_x, 850 + _SPEC_H), text, font=waves_font_24, fill="white")
 
     return image
 

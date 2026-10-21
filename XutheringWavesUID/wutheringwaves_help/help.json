@@ -157,6 +157,14 @@
         "need_admin": false
       },
       {
+        "name": "自定义权重",
+        "desc": "玩家上传的评分权重：指令带 cw_ID 使用、个人设置、订阅与群权重；发送【权重帮助】查看全部指令与生效优先级",
+        "eg": "权重帮助",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
         "name": "查看优化建议",
         "desc": "给出某角色提升综合评分的方向：推荐的最优声骸主/副词条配置，以及当前面板各词条的提升收益排序。格式：`<角色名>优化`（同义：`优化建议` / `提升` / `提升建议` / `yh`）。例：`椿优化`。",
         "eg": "椿提升建议",
@@ -729,6 +737,38 @@
         "need_ck": true,
         "need_sk": false,
         "need_admin": false
+      },
+      {
+        "name": "设置角色权重",
+        "desc": "以后查询该角色都用这份权重，按绑定的特征码保存；恢复默认：设置椿权重默认",
+        "eg": "设置椿权重cw_k3m9q2x7",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "订阅权重",
+        "desc": "跟随订阅，作者更新后刷新面板时自动同步；也可直接粘贴网站复制的文本（导入权重）",
+        "eg": "订阅权重ws_ab12cd34",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "查看权重",
+        "desc": "查看当前生效的自定义权重与来源",
+        "eg": "查看权重",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "清空权重",
+        "desc": "清空全部权重设置与订阅，并回显可用于恢复的文本",
+        "eg": "清空权重",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
       }
     ]
   },
@@ -796,6 +836,22 @@
         "name": "删除不活跃群成员",
         "desc": "一键清理本群超过 30 天未活跃的绑定（破坏性）。",
         "eg": "删除不活跃群成员",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": true
+      },
+      {
+        "name": "设置群权重",
+        "desc": "群内面板与群排行默认使用该订阅（必须是公开展示的订阅）",
+        "eg": "设置群权重ws_ab12cd34",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": true
+      },
+      {
+        "name": "取消群权重",
+        "desc": "取消本群的群权重",
+        "eg": "取消群权重",
         "need_ck": false,
         "need_sk": false,
         "need_admin": true

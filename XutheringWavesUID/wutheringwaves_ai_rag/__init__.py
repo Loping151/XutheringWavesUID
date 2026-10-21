@@ -243,6 +243,8 @@ def _register_weapons(aliases: Dict[str, List[str]]) -> List[Tuple]:
 def _register_echoes(aliases: Dict[str, List[str]]):
     for eid, d in _iter_jsons(MAP_DETAIL_PATH / "echo"):
         name = d.get("name", eid)
+        if aliases and name not in aliases:
+            continue
         alias_list = aliases.get(name, [])
         cost = d.get("intensityCode")
         group = d.get("group") or {}

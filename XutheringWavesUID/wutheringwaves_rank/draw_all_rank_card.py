@@ -247,7 +247,11 @@ async def draw_all_rank_card(bot: Bot, ev: Event, char: str, rank_type: str, pag
     elif rank_type == "综合评分":
         temp_notes = "综合评分为个性化标准，按各自配置估算得出，仅供参考，非公平对比。"
     else:
-        temp_notes = "排行标准：以声骸分数（声骸评分高，不代表实际伤害高) 为排序的排名"
+        from .draw_rank_card import rank_standard
+        from ..utils.custom_weight import builtin_only
+
+        with builtin_only():
+            temp_notes = rank_standard(char_id, char)
     text_bar_draw.text((1260, text_bar_h - 30), temp_notes, SPECIAL_GOLD, waves_font_16, "rm")
 
     card_img.alpha_composite(text_bar_img, (0, title_h))
