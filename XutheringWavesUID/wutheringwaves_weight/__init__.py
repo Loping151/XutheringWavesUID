@@ -231,12 +231,7 @@ async def set_group(bot: Bot, ev: Event, text: str):
     await WavesGroupWeight.save_row(row)
     chars = sorted(chars_of(res.get("items") or {}), key=lambda c: -int(c))
     names = "、".join(char_name_of(c) for c in chars[:12])
-    await _say(
-        bot,
-        ev,
-        f"[鸣潮] 本群已使用订阅 {ws}{_desc(res)}作为群权重（{len(chars)} 个角色：{names}）\n"
-        "群内查询面板与群排行默认使用该权重；指令里直接带 cw_ID 时以指令为准",
-    )
+    await _say(bot, ev, f"[鸣潮] 本群已使用订阅 {ws}{_desc(res)}作为群权重（{len(chars)} 个角色：{names}）")
 
 
 async def clear_group(bot: Bot, ev: Event):
