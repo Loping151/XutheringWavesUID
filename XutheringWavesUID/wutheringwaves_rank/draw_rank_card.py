@@ -46,6 +46,7 @@ from ..utils.name_convert import alias_to_char_name, char_name_to_char_id
 from ..utils.ascension.sonata import detect_combo_sonata
 from ..utils.char_info_utils import get_all_role_detail_info_list, get_rover_detail_map
 from ..utils.damage.abstract import DamageRankRegister
+from ..utils.rank_cond import RankCond
 from ..utils.database.models import WavesBind, WavesUser
 from ..utils.database.waves_user_activity import WavesUserActivity
 from ..wutheringwaves_config import PREFIX, WutheringWavesConfig
@@ -262,6 +263,7 @@ async def draw_rank_img(
     char: str,
     rank_type: str,
     page: int = 1,
+    cond: RankCond = RankCond(),
 ) -> Union[str, bytes]:
     char_id = char_name_to_char_id(char)
     if not char_id:
@@ -286,6 +288,7 @@ async def draw_rank_img(
             page,
             "",
             group_uids=member_uids,
+            cond=cond,
         )
 
     rankDetail = DamageRankRegister.find_class(char_id)
@@ -342,6 +345,10 @@ async def draw_rank_img(
             msg.append(f"当前排行开启了登录验证，请使用命令【{PREFIX}登录】登录后此功能！")
         msg.append("")
         return "\n".join(msg)
+    if cond.active:
+        rankInfoList = [i for i in rankInfoList if cond.match_role(i.roleDetail)]
+        if not rankInfoList:
+            return f"[鸣潮] 群【{ev.group_id}】暂无{cond.label}的【{char}】面板"
 
     if rank_type == "评分":
         rankInfoList.sort(
@@ -529,6 +536,8 @@ async def draw_rank_img(
 
     title_name = f"{char_name}{rank_type}群排行"
     title_draw.text((140, 265), f"{title_name}", "black", waves_font_30, "lm")
+    if cond.active:
+        title_draw.text((150 + waves_font_30.getlength(title_name), 268), cond.label, SPECIAL_GOLD, waves_font_20, "lm")
     date_text = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     title_draw.text((110, 205), date_text, GREY, waves_font_20, "lm")
 

@@ -155,7 +155,7 @@ def sub_entries(data: dict) -> Dict[str, str]:
     return out
 
 
-_sig: Tuple[int, Dict[str, str]] = (0, {})
+_sig: Tuple[Optional[tuple], Dict[str, str]] = (None, {})
 
 
 def _build_signatures(nc) -> Dict[str, str]:

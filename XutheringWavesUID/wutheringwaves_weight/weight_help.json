@@ -2,10 +2,10 @@
   "指令里使用权重ID": {
     "desc": "直接带上权重ID，本次查询按该权重评分（优先级最高）",
     "data": [
-      {"name": "按权重查面板", "desc": "椿面板cw_xxx / cw_xxx椿面板 / 椿cw_xxx面板", "eg": "椿面板cw_k3m9q2x7", "need_ck": true, "need_sk": false, "need_admin": false},
-      {"name": "按权重查权重表", "desc": "极限面板也可以", "eg": "椿权重cw_k3m9q2x7", "need_ck": true, "need_sk": false, "need_admin": false},
+      {"name": "按权重查面板", "desc": "椿面板cw_xxx / cw_xxx椿面板 / 椿cw_xxx面板", "eg": "椿面板cw_ab12cd34", "need_ck": true, "need_sk": false, "need_admin": false},
+      {"name": "按权重查权重表", "desc": "极限面板也可以", "eg": "椿权重cw_ab12cd34", "need_ck": true, "need_sk": false, "need_admin": false},
       {"name": "按权重群排行", "desc": "群评分排行改用该权重", "eg": "椿评分排行cw_ID", "need_ck": false, "need_sk": false, "need_admin": false},
-      {"name": "截图评分用权重", "desc": "ScoreEcho 截图评分", "eg": "评分椿cw_k3m9q2x7", "need_ck": false, "need_sk": false, "need_admin": false}
+      {"name": "截图评分用权重", "desc": "ScoreEcho 截图评分", "eg": "评分椿cw_ab12cd34", "need_ck": false, "need_sk": false, "need_admin": false}
     ]
   },
   "个人设置": {
@@ -30,7 +30,7 @@
   "生效优先级（从高到低）": {
     "desc": "伤害计算、综合评分与总排行上传始终使用内置权重",
     "data": [
-      {"name": "1.指令里的ID", "desc": "", "eg": "椿面板cw_k3m9q2x7", "need_ck": false, "need_sk": false, "need_admin": false},
+      {"name": "1.指令里的ID", "desc": "", "eg": "椿面板cw_ab12cd34", "need_ck": false, "need_sk": false, "need_admin": false},
       {"name": "2.群权重", "desc": "仅在设置了群权重的群里，且群订阅包含该角色", "eg": "设置群权重ws_ID", "need_ck": false, "need_sk": false, "need_admin": false},
       {"name": "3.个人设置与订阅", "desc": "", "eg": "设置椿权重cw_ID", "need_ck": false, "need_sk": false, "need_admin": false},
       {"name": "4.内置权重", "desc": "", "eg": "椿权重", "need_ck": false, "need_sk": false, "need_admin": false}

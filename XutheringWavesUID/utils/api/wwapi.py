@@ -91,12 +91,16 @@ class RankItem(BaseModel):
     waves_id: Optional[str] = ""
     version: str
     modal: Optional[str] = ""
+    chain: Optional[int] = None  # 共鸣链筛选, None 不限
+    signature_reson: Optional[int] = None  # 专武谐振阶筛选(0=未装专武), None 不限
 
 
 class CardsRankRequest(BaseModel):
     char_id: int
     rank_type: int
     modal: Optional[str] = ""
+    chain: Optional[int] = None
+    signature_reson: Optional[int] = None
     waves_ids: List[str]
 
 
@@ -399,6 +403,7 @@ class MatrixRankItem(BaseModel):
     version: str
     single_team: bool = False
     char_ids: List[int] = []
+    char_chains: List[Optional[int]] = []  # 与 char_ids 对应的共鸣链筛选, None 不限
 
 
 class MatrixCharDetail(BaseModel):

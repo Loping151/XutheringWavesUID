@@ -1,3 +1,5 @@
+from typing import Tuple
+
 from gsuid_core.sv import SV
 from gsuid_core.bot import Bot
 from gsuid_core.models import Event
@@ -13,6 +15,7 @@ from ..utils.char_info_utils import PATTERN
 from ..utils.name_resolve import resolve_char
 from ..utils.name_convert import char_name_to_char_id
 from ..utils.damage.modal import get_modal_key_by_name
+from ..utils.rank_cond import COND_PATTERN, RankCond, parse_rank_cond, signature_hint, split_char_cond
 from ..utils.util import use_longest_keyword
 
 sv_waves_phantom_rank = SV("ww声骸排行", priority=2)
@@ -23,19 +26,28 @@ sv_waves_rank_local_list = SV("ww练度排行", priority=0)
 sv_waves_phantom_total_rank = SV("ww声骸总排行", priority=0)
 
 
+def _rank_cond(ev: Event, char: str) -> Tuple[str, RankCond]:
+    """筛选写在指令后(长离排行01)优先, 其次角色名后(长离01排行)。"""
+    char, cond = split_char_cond(char)
+    after = parse_rank_cond(ev.regex_dict.get("cond"))
+    return char, after if after.active else cond
+
+
 @sv_waves_rank_list.on_regex(
-    rf"^(?P<char>{PATTERN})(?:排行|排行榜|排名|ph|pm)(?P<pages>\d+)?\s*(?P<cw>[cC][wW]_[0-9a-zA-Z]{{8}})?\s*$",
+    rf"^(?P<char>{PATTERN})(?:排行|排行榜|排名|ph|pm)\s*(?P<cond>{COND_PATTERN})?\s*(?P<pages>\d+)?\s*(?P<cw>[cC][wW]_[0-9a-zA-Z]{{8}})?\s*$",
     block=True,
     to_ai="""查询本群某角色的排行（伤害或评分），仅群聊可用。
 
 当用户在群里问「<角色>排行 / <角色>评分排行 / 群里谁<角色>最强」时调用。
-text 必须是 "<角色名>排行<页码?>" 或 "<角色名>评分排行<页码?>"。
+text 必须是 "<角色名>排行<筛选?><页码?>" 或 "<角色名>评分排行<筛选?><页码?>"。
 名字中含「评分」/「pf」/「练度」会走评分模式，否则走伤害模式。
+筛选: 两位数字 = 共鸣链 + 专武谐振阶（没装专武记 0），如 01；或「0链」「六链」只按共鸣链。
+筛选也可写在角色名后，如 "长离01排行"；单个数字是页码。
 
 私聊会被拒绝。
 
 Args:
-    text: 例: "长离排行"、"椿评分排行2"。
+    text: 例: "长离排行"、"椿评分排行2"、"长离排行01"、"长离0链排行"。
 """,
 )
 async def send_rank_card(bot: Bot, ev: Event):
@@ -56,6 +68,7 @@ async def send_rank_card(bot: Bot, ev: Event):
         .replace("伤害", "").replace("评分", "").replace("pf", "")
         .replace("练度", "").replace("本群", "").replace("群", "")
     )
+    char, cond = _rank_cond(ev, char)
 
     from ..wutheringwaves_config import PREFIX, WutheringWavesConfig
     if rank_type in ("伤害", "综合评分") and not WutheringWavesConfig.get_config("WavesToken").data:
@@ -69,11 +82,11 @@ async def send_rank_card(bot: Bot, ev: Event):
             return await bot.send(res.fail_msg())
         char = res.matched
         if rank_type == "评分":
-            canonical_cmd = f"{PREFIX}{char}评分排行"
+            canonical_cmd = f"{PREFIX}{char}评分排行{cond.token}"
         elif rank_type == "综合评分":
-            canonical_cmd = f"{PREFIX}{char}综合评分排行"
+            canonical_cmd = f"{PREFIX}{char}综合评分排行{cond.token}"
         else:
-            canonical_cmd = f"{PREFIX}{char}排行"
+            canonical_cmd = f"{PREFIX}{char}排行{cond.token}"
 
     from ..utils.custom_weight import find_cw, prepare_plan, using
     from ..utils.resource.constant import SPECIAL_CHAR
@@ -81,11 +94,14 @@ async def send_rank_card(bot: Bot, ev: Event):
     plan = None
     cid = char_name_to_char_id(char) if char else None
     if cid:
+        hint = signature_hint(cond, cid, char)
+        if hint:
+            return await bot.send(hint)
         plan = await prepare_plan(bot, ev, SPECIAL_CHAR.get(cid, [cid]), explicit=find_cw(ev.regex_dict.get("cw") or ""), rank=True)
         if plan is None:
             return
     with using(plan):
-        im = await draw_rank_img(bot, ev, char, rank_type, pages)
+        im = await draw_rank_img(bot, ev, char, rank_type, pages, cond)
 
     if isinstance(im, str):
         at_sender = True if ev.group_id else False
@@ -141,15 +157,17 @@ async def send_phantom_rank_card(bot: Bot, ev: Event):
 
 
 @sv_waves_rank_all_list.on_regex(
-    rf"^(?P<char>{PATTERN})(?:总排行|总排行榜|总排名|zph|zpm)\s*(?P<pages>\d+)?\s*(?P<modal>\S+)?$",
+    rf"^(?P<char>{PATTERN})(?:总排行|总排行榜|总排名|zph|zpm)\s*(?P<cond>{COND_PATTERN})?\s*(?P<pages>\d+)?\s*(?P<modal>\S+)?$",
     block=True,
     to_ai="""查询全体某角色的排行（伤害或评分，跨群）。
 
 当用户问「<角色>总排行 / 全体<角色>最强」时调用。
-text 是 "<角色名>总排行<页码?>"，页码 1-50（默认 1）。名字中含「评分」/「练度」走评分模式。
+text 是 "<角色名>总排行<筛选?><页码?>"，页码 1-50（默认 1）。名字中含「评分」/「练度」走评分模式。
+筛选: 两位数字 = 共鸣链 + 专武谐振阶（没装专武记 0），如 01；或「0链」「六链」只按共鸣链。
+筛选也可写在角色名后，如 "长离01总排行"；单个数字是页码。
 
 Args:
-    text: 例: "长离总排行1" / "椿评分总排行" / "忌炎总排行3"。
+    text: 例: "长离总排行1" / "椿评分总排行" / "长离总排行01" / "长离0链总排行2"。
 """,
 )
 async def send_all_rank_card(bot: Bot, ev: Event):
@@ -162,6 +180,7 @@ async def send_all_rank_card(bot: Bot, ev: Event):
     elif "评分" in char or "练度" in char:
         rank_type = "评分"
     char = char.replace("综合评分", "").replace("综合", "").replace("伤害", "").replace("评分", "").replace("练度", "")
+    char, cond = _rank_cond(ev, char)
 
     res = None
     canonical_cmd = None
@@ -172,19 +191,22 @@ async def send_all_rank_card(bot: Bot, ev: Event):
         char = res.matched
         from ..wutheringwaves_config import PREFIX
         if rank_type == "评分":
-            canonical_cmd = f"{PREFIX}{char}评分总排行"
+            canonical_cmd = f"{PREFIX}{char}评分总排行{cond.token}"
         elif rank_type == "综合评分":
-            canonical_cmd = f"{PREFIX}{char}综合评分总排行"
+            canonical_cmd = f"{PREFIX}{char}综合评分总排行{cond.token}"
         else:
-            canonical_cmd = f"{PREFIX}{char}总排行"
+            canonical_cmd = f"{PREFIX}{char}总排行{cond.token}"
+
+    cid = char_name_to_char_id(char) if char else None
+    hint = signature_hint(cond, cid, char) if cid else None
+    if hint:
+        return await bot.send(hint)
 
     modal = ""
     modal_text = ev.regex_dict.get("modal")
-    if modal_text and char:
-        cid = char_name_to_char_id(char)
-        if cid:
-            modal = get_modal_key_by_name(int(cid), modal_text)
-    im = await draw_all_rank_card(bot, ev, char, rank_type, pages, modal)
+    if modal_text and cid:
+        modal = get_modal_key_by_name(int(cid), modal_text)
+    im = await draw_all_rank_card(bot, ev, char, rank_type, pages, modal, cond=cond)
 
     if isinstance(im, str):
         at_sender = True if ev.group_id else False

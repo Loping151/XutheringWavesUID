@@ -1,4 +1,4 @@
-"""矩阵队伍参数解析: 三个角色名/别名, 或三字首字缩写 (如 爱达千)。"""
+"""矩阵队伍参数解析: 三个角色名/别名, 或三字首字缩写 (如 爱达千); 角色前可加共鸣链 (如 6爱0达0千)。"""
 
 import re
 from typing import Dict, List, Tuple, Optional
@@ -16,7 +16,9 @@ from .resource.constant import SPECIAL_CHAR_RANK_MAP
 TEAM_SIZE = 3
 
 _SEP = re.compile(r"[\s,，、/|]+")
-_FORMAT_HINT = f"请输入{TEAM_SIZE}个角色名, 或{TEAM_SIZE}字首字缩写(如: 爱达千)"
+_INITIAL = re.compile(r"[0-6]?\D")
+_CHAIN_PREFIX = re.compile(r"^([0-6])?(\D.*)$")
+_FORMAT_HINT = f"请输入{TEAM_SIZE}个角色名, 或{TEAM_SIZE}字首字缩写(如: 爱达千、6爱达千)"
 _NOT_FOUND_HINT = "未找到指定角色，请检查输入！"
 
 _initial_index: Dict[str, List[int]] = {}
@@ -107,22 +109,26 @@ def split_team_and_page(text: Optional[str]) -> Tuple[str, Optional[str]]:
     return " ".join(tokens), page
 
 
-def parse_matrix_team(text: str) -> Tuple[List[int], Optional[str]]:
-    """返回 (char_ids, 错误提示); 均为空表示未传队伍参数。"""
+def parse_matrix_team(text: str) -> Tuple[List[int], List[Optional[int]], Optional[str]]:
+    """返回 (char_ids, 各角色共鸣链筛选, 错误提示); 均为空表示未传队伍参数, 链为 None 表示不限。"""
     text = (text or "").strip()
     if not text:
-        return [], None
+        return [], [], None
 
     tokens = [t for t in _SEP.split(text) if t]
-    if len(tokens) == 1 and len(tokens[0]) == TEAM_SIZE:
-        tokens = list(tokens[0])
-    if len(tokens) != TEAM_SIZE:
-        return [], _FORMAT_HINT
+    initials = _INITIAL.findall(tokens[0]) if len(tokens) == 1 else []
+    abbreviated = len(initials) == TEAM_SIZE and "".join(initials) == tokens[0]
+    if abbreviated:
+        tokens = initials
+    matches = [_CHAIN_PREFIX.match(t) for t in tokens]
+    if len(tokens) != TEAM_SIZE or not all(matches):
+        return [], [], _FORMAT_HINT
 
-    char_ids, err = _resolve_tokens(tokens)
+    chains = [int(m.group(1)) if m.group(1) else None for m in matches]
+    char_ids, err = _resolve_tokens([m.group(2) for m in matches])
     if err:
-        return [], _FORMAT_HINT if len(text) == TEAM_SIZE else err
+        return [], [], _FORMAT_HINT if abbreviated else err
 
     if len(set(char_ids)) != TEAM_SIZE:
-        return [], "队伍中出现重复角色"
-    return char_ids, None
+        return [], [], "队伍中出现重复角色"
+    return char_ids, chains, None
