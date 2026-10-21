@@ -1,7 +1,7 @@
 import asyncio
 import math
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
 from pydantic import BaseModel
 
@@ -276,8 +276,8 @@ def _compute_char_rank(all_role_detail, need_expected_damage=False, need_overall
 
 # ─── 刷新前后对比: 声骸评分涨而综合评分跌时, 按乘区变化指出溢出 / 被挤占的乘区 ───
 
-PHANTOM_MIN_GAIN = 1.0
-OVERALL_MIN_DROP = 1.0
+PHANTOM_MIN_GAIN = 0.1
+OVERALL_MIN_DROP = 0.1
 ZONE_MIN_SHIFT = 0.005
 CRIT_IMBALANCE = 1.5
 _NOTE_ZONES = (("暴击率", "双爆"), ("共鸣效率", "共效"))
@@ -311,50 +311,76 @@ def _note_zone(note: str) -> str:
     return next((z for prefix, z in _NOTE_ZONES if note.startswith(prefix)), "")
 
 
-def compose_drift_advice(char_name: str, phantom_gain: float, prev: ScoreReport, cur: ScoreReport) -> str:
-    shifts = {z: math.log(v / prev.zones[z]) for z, v in cur.zones.items() if prev.zones.get(z)}
-    moved = {z: s for z, s in shifts.items() if abs(s) >= ZONE_MIN_SHIFT}
-    gains = sorted((z for z in moved if moved[z] > 0), key=moved.__getitem__, reverse=True)
-    losses = sorted((z for z in moved if moved[z] < 0), key=moved.__getitem__)
-
-    reasons = []
-    if gains and losses:
-        # 上涨乘区的达成率高于所有下跌乘区 → 相对饱和
-        ceiling = max(cur.zones[z] for z in losses)
-        saturated = [z for z in gains if cur.zones[z] > ceiling]
-        if saturated:
-            reasons.append(f"{'、'.join(saturated)}区相对饱和")
-    crit_tag = _crit_balance(cur)
-    if "双爆" in moved and crit_tag:
-        reasons.append(crit_tag)
-
+def compose_drift_advice(
+    char_name: str, phantom_gain: float, prev: ScoreReport, cur: ScoreReport, setup: Sequence[str] = ()
+) -> str:
     lines = [f"[鸣潮] {char_name} 声骸评分 +{phantom_gain:.1f}, 综合评分 {cur.score - prev.score:.1f}"]
-    if moved:
-        lines.append("乘区变化: " + ", ".join(f"{z} {math.expm1(moved[z]):+.1%}" for z in gains + losses))
-    if reasons:
-        lines.append("可能原因: " + "; ".join(reasons))
-    lines.extend(n for n in cur.notes if n not in prev.notes or _note_zone(n) in moved)
+    if setup:
+        lines.append("可能原因: " + ", ".join(setup))
+    else:
+        shifts = {z: math.log(v / prev.zones[z]) for z, v in cur.zones.items() if prev.zones.get(z)}
+        moved = {z: s for z, s in shifts.items() if abs(s) >= ZONE_MIN_SHIFT}
+        gains = sorted((z for z in moved if moved[z] > 0), key=moved.__getitem__, reverse=True)
+        losses = sorted((z for z in moved if moved[z] < 0), key=moved.__getitem__)
+
+        reasons = []
+        if gains and losses:
+            # 上涨乘区的达成率高于所有下跌乘区 → 相对饱和
+            ceiling = max(cur.zones[z] for z in losses)
+            saturated = [z for z in gains if cur.zones[z] > ceiling]
+            if saturated:
+                reasons.append(f"{'、'.join(saturated)}区相对饱和")
+        crit_tag = _crit_balance(cur)
+        if "双爆" in moved and crit_tag:
+            reasons.append(crit_tag)
+
+        if moved:
+            lines.append("乘区变化: " + ", ".join(f"{z} {math.expm1(moved[z]):+.1%}" for z in gains + losses))
+        if reasons:
+            lines.append("可能原因: " + "; ".join(reasons))
+        lines.extend(n for n in cur.notes if n not in prev.notes or _note_zone(n) in moved)
     if cur.partial_max:
         lines.append(f"建议提升词条方向: {cur.partial_max[0]}")
     return "\n".join(lines)
 
 
-def _setup(d: RoleDetailData):
+def _weapon(d: RoleDetailData):
     w = d.weaponData
-    return (d.get_chain_num(), w.weapon.weaponId if w and w.weapon else None, w.resonLevel if w else None)
+    if not w or not w.weapon:
+        return None
+    return w.weapon.weaponId, w.weapon.weaponName, w.level, w.resonLevel
+
+
+def setup_changes(prev: RoleDetailData, cur: RoleDetailData) -> List[str]:
+    out = []
+    if prev.get_chain_num() != cur.get_chain_num():
+        out.append(f"共鸣链 {prev.get_chain_num()} → {cur.get_chain_num()}")
+    structural = bool(out)
+    a, b = _weapon(prev), _weapon(cur)
+    if a != b:
+        if a is None or b is None or a[0] != b[0]:
+            out.append(f"武器 {a[1] if a else '无'} → {b[1] if b else '无'}")
+            structural = True
+        else:
+            if a[2] != b[2]:
+                out.append(f"武器 Lv.{a[2]} → {b[2]}")
+            if a[3] != b[3]:
+                out.append(f"谐振{a[3]}阶 → {b[3]}阶")
+                structural = True
+    if structural:
+        out.append("伤害结构变化")
+    return out
 
 
 async def drift_advice(
     char_name: str, prev_detail: RoleDetailData, cur_detail: RoleDetailData, phantom: float, report: ScoreReport
 ) -> Optional[str]:
     """phantom / report 为刷新后面板的内置权重声骸总分与综合评分; 声骸评分涨了才重算旧面板综合评分。
-    换了武器/谐振/共鸣链的跌分不是乘区问题, 不提示。"""
-    if _setup(prev_detail) != _setup(cur_detail):
-        return None
+    换了武器/谐振/共鸣链时只报换装, 不做乘区分析。"""
     calc, prev_phantom = await asyncio.to_thread(_builtin_panel, prev_detail)
     if phantom - prev_phantom < PHANTOM_MIN_GAIN:
         return None
     prev_report = await asyncio.to_thread(overall_report, calc, prev_detail)
     if prev_report is None or prev_report.score - report.score < OVERALL_MIN_DROP:
         return None
-    return compose_drift_advice(char_name, phantom - prev_phantom, prev_report, report)
+    return compose_drift_advice(char_name, phantom - prev_phantom, prev_report, report, setup_changes(prev_detail, cur_detail))
