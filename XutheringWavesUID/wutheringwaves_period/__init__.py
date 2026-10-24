@@ -6,18 +6,18 @@ from .draw_period import draw_period_img
 from ..utils.at_help import ruser_id, is_intl_uid, intl_unavailable_msg
 from ..utils.error_reply import ERROR_CODE, WAVES_CODE_102
 from ..utils.database.models import WavesBind
-from ..utils.util import use_longest_keyword
+from ..utils.util import use_longest_keyword, with_refresh_alias
 
 sv_period = SV("waves资源简报")
 
 
-_SEND_PERIOD_KEYWORDS = (
+_SEND_PERIOD_KEYWORDS = with_refresh_alias((
     "星声",
     "xs",
     "星声统计",
     "简报",
     "资源简报",
-)
+), suffix=False)
 
 
 @sv_period.on_command(

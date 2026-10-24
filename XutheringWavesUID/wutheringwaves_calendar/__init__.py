@@ -11,7 +11,7 @@ sv_waves_calendar = SV("waves日历")
 
 
 @sv_waves_calendar.on_fullmatch(
-    ("个人日历", "日历", "個人日曆", "日曆", "rl"),
+    ("个人日历", "日历", "個人日曆", "日曆", "rl", "活动", "活動", "活动日历", "卡池", "当期卡池", "当前卡池"),
     block=True,
     to_ai="""查询鸣潮活动日历 + 卡池倒计时一览图。
 

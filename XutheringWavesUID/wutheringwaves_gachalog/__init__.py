@@ -12,7 +12,7 @@ from gsuid_core.data_store import get_res_path
 from gsuid_core.logger import logger
 
 from ..utils.single_flight import SingleFlightLock
-from ..utils.util import get_hide_uid_pref, hide_uid
+from ..utils.util import hide_uid, refresh_aliases, get_hide_uid_pref
 from .merge_utils import GachaMergeError
 from .gacha_handler import (
     fetch_mcgf_data,
@@ -390,7 +390,7 @@ async def pull_cloud_gacha(bot: Bot, ev: Event, uid: str, record_id: str):
         gacha_import_lock.release(lock_key)
 
 
-@sv_update_gacha_log.on_fullmatch(("刷新抽卡记录", "更新抽卡记录", "刷新抽卡", "更新抽卡"), block=True)
+@sv_update_gacha_log.on_fullmatch(refresh_aliases(("抽卡记录", "抽卡記錄", "抽卡纪录", "抽卡数据", "抽卡链接", "抽卡")), block=True)
 async def update_gacha_log_by_cloud(bot: Bot, ev: Event):
     from ..utils.database.waves_gacha_cloud import WavesGachaCloud
     from ..wutheringwaves_login.cloud_login import fetch_cloud_record_id
@@ -433,7 +433,8 @@ async def update_gacha_log_by_cloud(bot: Bot, ev: Event):
 
 
 @sv_gacha_log.on_fullmatch(
-    ("抽卡记录", "查看抽卡记录", "gacha", "ckjl"),
+    ("抽卡记录", "抽卡記錄", "查看抽卡记录", "我的抽卡记录", "gacha", "ckjl", "抽卡", "抽卡分析", "抽卡统计", "抽卡查询"),
+    block=True,
     to_ai="""查询用户已导入的鸣潮抽卡记录统计图（各卡池总抽数、距离保底、出货历史、欧非指数等）。
 
 当用户问「我的抽卡 / 抽卡记录 / 出货怎样 / 多少保底了」时调用。需绑定 UID + 已导入抽卡记录。
@@ -458,7 +459,7 @@ async def send_gacha_log_card_info(bot: Bot, ev: Event):
     await bot.send(im)
 
 
-@sv_gacha_help_log.on_fullmatch("抽卡帮助")
+@sv_gacha_help_log.on_fullmatch(("抽卡帮助", "抽卡导入", "导入抽卡", "导入抽卡数据", "抽卡导入方法", "抽卡记录导入方法", "如何导入抽卡"))
 async def send_gacha_log_help(bot: Bot, ev: Event):
     im = await draw_card_help()
     await bot.send(im)

@@ -11,7 +11,7 @@ from .name_convert import (
     alias_to_char_name_optional,
 )
 from .ascension.char import get_char_model
-from .resource.constant import SPECIAL_CHAR_RANK_MAP
+from .resource.constant import SPECIAL_CHAR_INITIAL, SPECIAL_CHAR_RANK_MAP
 
 TEAM_SIZE = 3
 
@@ -26,7 +26,7 @@ _initial_index_size = 0
 
 
 def _get_initial_index() -> Dict[str, List[int]]:
-    """首字 -> 角色 id 列表; 漂泊者归一到主 id, 排除非四位数字的自定义角色。"""
+    """首字 -> 角色 id 列表; 漂泊者归一到主 id 并收录雷/风/光/暗, 排除非四位数字的自定义角色。"""
     global _initial_index, _initial_index_size
     ensure_data_loaded()
     all_char_id = get_all_char_id()
@@ -42,6 +42,10 @@ def _get_initial_index() -> Dict[str, List[int]]:
             char_ids = index.setdefault(name[0], [])
             if mapped_id not in char_ids:
                 char_ids.append(mapped_id)
+        for initial, rover_id in SPECIAL_CHAR_INITIAL.items():
+            char_ids = index.setdefault(initial, [])
+            if rover_id not in char_ids:
+                char_ids.append(rover_id)
         for char_ids in index.values():
             char_ids.sort()
         _initial_index = index

@@ -199,7 +199,7 @@ async def send_weapon_list(bot: Bot, ev: Event):
 
 
 @sv_waves_guide.on_regex(
-    r"^(?:(?P<version_pre>\d+\.\d+))?(?:套装|套裝)(列表)?(?:(?P<version_post>\d+\.\d+))?$",
+    r"^(?:(?P<version_pre>\d+\.\d+))?(?:声骸|聲骸|合鸣|合鳴)?(?:套装|套裝)(?:列表|效果|信息)?(?:(?P<version_post>\d+\.\d+))?$",
     block=True,
     to_ai="""查询鸣潮全部合鸣套装一览图（含 2/5 件套效果）。
 
@@ -266,7 +266,7 @@ async def send_slash_challenge_info(bot: Bot, ev: Event):
 
 
 @sv_waves_matrix_info.on_regex(
-    r"^(?:第?(?P<period_pre>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)期?(?:矩阵|矩陣|jz信息|matrix)(?:信息)?|(?:矩阵|矩陣|jz信息|matrix)(?:(?:信息(?:第)?|第)(?P<period>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)?|(?P<period_force>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期))期?)$",
+    r"^(?:第?(?P<period_pre>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)期?(?:矩阵|矩陣|jz信息|matrix)(?:信息)?|(?:矩阵|矩陣|jz(?=信息|第|上|下|\d{1,3}(?!\d))|matrix)(?:(?:信息(?:第)?|第)(?P<period>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)?|(?P<period_force>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期))期?)$",
     block=True,
     to_ai="""查询全息矩阵（终焉矩阵）某期的关卡配置图（稳态协议+奇点扩张，含 Buff、敌人、推荐角色）。
 

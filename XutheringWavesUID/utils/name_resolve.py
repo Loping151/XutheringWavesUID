@@ -9,12 +9,15 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 from . import name_convert
 from .name_convert import char_name_to_char_id, ensure_data_loaded
 from .fuzzy_match import fuzzy_suggest
+
+_REFRESH_RE = re.compile("刷新|更新")
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,9 @@ def resolve_char(char_name: Optional[str], top_n: int = 3) -> CharResolution:
 
     if char_name_to_char_id(char_name):
         return CharResolution(char_name)
+    stripped = _REFRESH_RE.sub("", char_name)
+    if stripped and stripped != char_name and char_name_to_char_id(stripped):
+        return CharResolution(stripped)
 
     ensure_data_loaded()
     suggestions = fuzzy_suggest(char_name, name_convert.char_alias_data, top_n=top_n)

@@ -10,6 +10,15 @@ sv_pool_countdown = SV("鸣潮卡池倒计时")
 
 _GET_POOL_COUNTDOWN_KEYWORDS = (
     "卡池倒计时",
+    "复刻",
+    "未复刻",
+    "复刻统计",
+    "复刻倒计时",
+    "复刻时间",
+    "角色复刻",
+    "武器复刻",
+    "復刻",
+    "未復刻",
     "未复刻统计",
     "未复刻角色",
     "未复刻角色统计",
@@ -26,6 +35,7 @@ _GET_POOL_COUNTDOWN_KEYWORDS = (
 
 @sv_pool_countdown.on_command(
     _GET_POOL_COUNTDOWN_KEYWORDS,
+    block=True,
     to_ai="""查询鸣潮未复刻角色或武器倒计时一览图。
 
 当用户问「哪些角色还没复刻 / 武器复刻倒计时 / 未复刻5星 / 卡池倒计时」时调用。

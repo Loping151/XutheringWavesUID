@@ -351,3 +351,19 @@ def use_longest_keyword(ev, keywords: tuple[str, ...]) -> None:
         if tail and k.startswith(ev.command) and text.startswith(tail):
             ev.command, ev.text = k, text[len(tail):].strip()
             return
+
+
+REFRESH_WORDS = ("刷新", "更新")
+
+
+def refresh_aliases(keywords: tuple[str, ...], suffix: bool = True) -> tuple[str, ...]:
+    """刷新X / 更新X (suffix 时含 X刷新 / X更新) 别名, 查询X 不加"""
+    bases = [k for k in keywords if not k.startswith("查询")]
+    aliases = [f"{w}{k}" for k in bases for w in REFRESH_WORDS]
+    if suffix:
+        aliases += [f"{k}{w}" for k in bases for w in REFRESH_WORDS]
+    return tuple(aliases)
+
+
+def with_refresh_alias(keywords: tuple[str, ...], suffix: bool = True) -> tuple[str, ...]:
+    return keywords + refresh_aliases(keywords, suffix)

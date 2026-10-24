@@ -17,7 +17,7 @@ sv_waves_change_help = SV("waves替换帮助")
 
 
 @sv_waves_help.on_fullmatch(
-    ("帮助", "幫助", "help", "bz"),
+    ("帮助", "幫助", "help", "bz", "菜单", "菜單", "功能"),
     block=True,
     to_ai="""返回鸣潮 XutheringWavesUID 插件的全部命令一览图（带分类、说明、示例的帮助图）。
 

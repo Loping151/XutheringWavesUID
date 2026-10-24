@@ -4,6 +4,7 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
 from ..utils.hint import error_reply
+from ..utils.util import with_refresh_alias
 from ..utils.at_help import ruser_id, is_intl_uid, intl_unavailable_msg
 from .draw_role_info import draw_role_img
 from .draw_skin_info import draw_skin_img
@@ -18,7 +19,7 @@ waves_skin_info = SV("waves收藏图鉴", priority=2)
 
 
 @waves_role_info.on_fullmatch(
-    ("查询", "卡片", "kp"),
+    with_refresh_alias(("查询", "卡片", "kp", "名片", "角色卡片")),
     block=True,
     to_ai="""查询自己的鸣潮账号总览卡片（等级 / 活跃天数 / 已激活角色数 / 探索进度等基本信息）。
 

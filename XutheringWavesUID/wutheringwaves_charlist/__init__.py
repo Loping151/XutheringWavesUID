@@ -14,10 +14,11 @@ from ..utils.database.models import WavesBind
 sv_waves_char_list = SV("ww角色练度统计", priority=3)
 
 PARAM_RE = r"全部|all|五星|5星|四星|4星|五|四|5|4|1|2"
+CHAR_LIST_RE = r"(?P<waves_id>\d+)?(?P<pre>刷新|更新|upd)?\s*(?:练度统计|角色列表|练度|ld)(?P<post>刷新|更新)?"
 
 
 @sv_waves_char_list.on_regex(
-    rf"^(\d+)?(练度|ld|练度统计|角色列表|刷新练度|刷新练度统计|刷新角色列表|updld)(?:\s*(?:{PARAM_RE}))*$",
+    rf"^(?:查看)?{CHAR_LIST_RE}(?:\s*(?:{PARAM_RE}))*$",
     block=True,
     to_ai="""查询账号下全部角色的练度统计图（按等级/共鸣链/武器谐振/声骸主词条评分排序）。
 
@@ -30,14 +31,10 @@ Args:
 """,
 )
 async def send_char_list_msg_new(bot: Bot, ev: Event):
-    match = re.search(
-        r"(?P<waves_id>\d+)?(?P<query_type>刷新练度统计|刷新角色列表|刷新练度|练度统计|角色列表|练度|updld|ld)",
-        ev.raw_text,
-    )
+    match = re.search(CHAR_LIST_RE, ev.raw_text)
     if not match:
         return
     query_waves_id = match.group("waves_id")
-    query_type = match.group("query_type")
 
     star_filter = None
     col = None
@@ -51,9 +48,7 @@ async def send_char_list_msg_new(bot: Bot, ev: Event):
         else:
             star_filter = "5"
 
-    is_refresh = False
-    if "刷新" in query_type or "upd" in query_type:
-        is_refresh = True
+    is_refresh = bool(match.group("pre") or match.group("post"))
 
     is_peek = False
     if query_waves_id:

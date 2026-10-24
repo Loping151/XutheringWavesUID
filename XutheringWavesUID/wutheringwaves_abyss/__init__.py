@@ -13,7 +13,7 @@ from ..utils.error_reply import WAVES_CODE_103
 from .draw_challenge_card import draw_challenge_img
 from ..utils.database.models import WavesBind
 from .draw_abyss_card import draw_abyss_img
-from ..utils.util import use_longest_keyword
+from ..utils.util import use_longest_keyword, with_refresh_alias
 
 sv_waves_abyss = SV("waves查询深渊")
 sv_waves_challenge = SV("waves查询全息")
@@ -43,7 +43,7 @@ def _parse_matrix_rank_args(ev: Event, strict: bool):
 
 
 @sv_waves_abyss.on_fullmatch(
-    (
+    with_refresh_alias((
         "查询深渊",
         "sy",
         "st",
@@ -56,7 +56,7 @@ def _parse_matrix_rank_args(ev: Event, strict: bool):
         "稳定区",
         "实验",
         "实验区",
-    ),
+    )),
     block=True,
     to_ai="""查询用户本人在鸣潮「逆境深塔」（深境区/超载/稳定/实验）当前期数的挑战记录。
 
@@ -95,13 +95,13 @@ async def send_waves_abyss_info(bot: Bot, ev: Event):
 
 
 @sv_waves_challenge.on_fullmatch(
-    (
+    with_refresh_alias((
         "查询全息",
         "查询全息战略",
         "全息",
         "qx",
         "全息战略",
-    ),
+    )),
     block=True,
     to_ai="""查询用户本人在鸣潮「全息战略」（同步挑战）的通关记录。
 
@@ -133,11 +133,12 @@ async def send_waves_challenge_info(bot: Bot, ev: Event):
         return await bot.send(im)
 
 
-_SEND_WAVES_SLASH_INFO_KEYWORDS = (
+_SEND_WAVES_SLASH_INFO_KEYWORDS = with_refresh_alias((
     "冥海",
     "mh",
     "hx",
     "海墟",
+    "海虚",
     "冥歌海墟",
     "查询冥海",
     "查询无尽",
@@ -148,7 +149,7 @@ _SEND_WAVES_SLASH_INFO_KEYWORDS = (
     "禁忌",
     "禁忌海域",
     "再生海域",
-)
+), suffix=False)
 
 
 @sv_waves_slash.on_command(
@@ -189,7 +190,7 @@ async def send_waves_slash_info(bot: Bot, ev: Event):
 
 
 @sv_waves_matrix.on_fullmatch(
-    (
+    with_refresh_alias((
         "矩阵",
         "终焉",
         "终焉矩阵",
@@ -199,7 +200,7 @@ async def send_waves_slash_info(bot: Bot, ev: Event):
         "稳态协议",
         "囚笼",
         "jz"
-    ),
+    )),
     block=True,
     to_ai="""查询用户本人在鸣潮「全息矩阵」（矩阵叠兵 / 终焉矩阵 / 奇点扩张 / 稳态协议）的挑战记录。
 
@@ -271,7 +272,7 @@ async def send_waves_rank_slash_list_info(bot: Bot, ev: Event):
 
 
 @sv_waves_rank_matrix.on_regex(
-    r"^(?:矩阵总排行|jzzph|jzzpm|jzddzph|jzddzpm|jzdwzph|jzdwzpm|矩阵总排行榜|矩阵单队总排行|矩阵单队总排行榜|矩阵队伍总排行|矩阵队伍总排行榜)(?P<pages>\d+(?![一-鿿]))?(?P<team>[\s,，、/|]*[一-鿿\d][\s\S]*)?$",
+    r"^(?:矩阵总排行|jzzph|jzzpm|jzddzph|jzddzpm|jzdwzph|jzdwzpm|矩阵总排行榜|矩阵总榜|矩阵单队总排行|矩阵单队总排行榜|矩阵队伍总排行|矩阵队伍总排行榜)(?P<pages>\d+(?![一-鿿]))?(?P<team>[\s,，、/|]*[一-鿿\d][\s\S]*)?$",
     block=True,
     to_ai='''查询全体终焉矩阵积分总排行（跨群）。
 
@@ -304,7 +305,7 @@ async def send_waves_rank_matrix_info(bot: Bot, ev: Event):
 
 
 @sv_waves_rank_matrix_list.on_regex(
-    r"^(?:矩阵排行|jzph|jzpm|jzddph|jzddpm|jzdwph|jzdwpm|矩阵排行榜|矩阵排名|矩阵群排行|矩阵群排行榜|矩阵群排名|群矩阵排行|群矩阵排名|矩阵单队排行|矩阵单队排行榜|矩阵队伍排行|矩阵队伍排行榜)(?P<pages>\d+(?![一-鿿]))?(?P<team>[\s,，、/|]*[一-鿿\d][\s\S]*)?$",
+    r"^(?:矩阵排行|jzph|jzpm|jzddph|jzddpm|jzdwph|jzdwpm|矩阵排行榜|矩阵排名|矩阵群排行|矩阵群排行榜|矩阵群排名|群矩阵排行|群矩阵排名|矩阵单队排行|矩阵单队排行榜|矩阵单队群排行|矩阵单队群排行榜|jzddqph|矩阵队伍排行|矩阵队伍排行榜|矩阵队伍群排行|矩阵队伍群排行榜|jzdwqph)(?P<pages>\d+(?![一-鿿]))?(?P<team>[\s,，、/|]*[一-鿿\d][\s\S]*)?$",
     block=True,
     to_ai='''查询本群终焉矩阵积分排行，仅群聊可用。
 

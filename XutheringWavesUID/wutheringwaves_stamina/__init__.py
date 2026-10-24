@@ -3,6 +3,7 @@ from gsuid_core.bot import Bot
 from gsuid_core.models import Event
 
 from ..utils.at_help import ruser_id
+from ..utils.util import with_refresh_alias
 from ..utils.error_reply import ERROR_CODE, WAVES_CODE_102
 from .draw_waves_stamina import draw_stamina_img
 from ..utils.database.models import WavesBind
@@ -11,14 +12,14 @@ waves_daily_info = SV("waves查询体力")
 
 
 @waves_daily_info.on_fullmatch(
-    (
+    with_refresh_alias((
         "每日",
         "mr",
         "实时便笺",
         "便笺",
         "便签",
         "体力",
-    ),
+    )),
     to_ai="""查询用户当前鸣潮账号的体力 / 每日实时便笺 / 任务进度。
 
 当用户问「我体力多少 / 现在还有多少结晶波片 / 每日做完了吗 / 看下便笺」时调用。

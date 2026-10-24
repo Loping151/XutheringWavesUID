@@ -64,7 +64,7 @@ from ..utils.fonts.waves_fonts import (
     waves_font_44,
     waves_font_58,
 )
-from ..utils.resource.constant import randomize_special_char_id
+from ..utils.resource.constant import SPECIAL_CHAR_RANK_MAP, randomize_special_char_id
 from ..wutheringwaves_abyss.period import (
     MATRIX_BASE_TIMESTAMP,
     parse_rank_date,
@@ -628,7 +628,9 @@ class MatrixRankListInfo:
                         indexed_teams = [
                             (idx, t)
                             for idx, t in indexed_teams
-                            if tuple(sorted(matched.get(f"1_{idx}", []))) == team_key
+                            if tuple(sorted(
+                                int(SPECIAL_CHAR_RANK_MAP.get(str(cid), cid)) for cid in matched.get(f"1_{idx}", [])
+                            )) == team_key
                         ][:1]
                     for orig_idx, t in indexed_teams[:2]:
                         ids = matched.get(f"1_{orig_idx}", [])

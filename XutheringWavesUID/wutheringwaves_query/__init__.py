@@ -10,6 +10,8 @@ from .draw_matrix_appear_rate import draw_matrix_appear_rate
 from .draw_slash_appear_rate import draw_slash_use_rate
 from .draw_tower_appear_rate import draw_tower_use_rate
 from ..utils.util import use_longest_keyword
+from ..utils.name_convert import is_valid_char_name
+from ..utils.char_info_utils import PATTERN
 
 sv_char_hold_rate = SV("waves角色持有率")
 sv_tower_appear_rate = SV("waves深塔出场率", priority=1)
@@ -25,11 +27,17 @@ _HANDLE_CHAR_HOLD_RATE_KEYWORDS = (
     "群角色持有率",
     "群角色持有率列表",
     "群持有率",
+    "本群持有率",
+    "总持有率",
+    "全服持有率",
+    "查看持有率",
+    "持有度",
 )
 
 
 @sv_char_hold_rate.on_command(
     _HANDLE_CHAR_HOLD_RATE_KEYWORDS,
+    block=True,
     to_ai="""查询鸣潮角色持有率统计图。
 
 当用户问「哪些角色冷门 / 谁持有率最高 / UP 池谁多 / 群里大家都抽了谁」时调用。
@@ -41,7 +49,17 @@ Args:
 )
 async def handle_char_hold_rate(bot: Bot, ev: Event):
     use_longest_keyword(ev, _HANDLE_CHAR_HOLD_RATE_KEYWORDS)
-    if "群" in ev.command:
+    await _send_char_hold_rate(bot, ev, "群" in ev.command)
+
+
+@sv_char_hold_rate.on_regex(rf"^(?P<char>{PATTERN}?)(?P<group>群)?持有率$")
+async def handle_one_char_hold_rate(bot: Bot, ev: Event):
+    if is_valid_char_name(ev.regex_dict.get("char") or ""):
+        await _send_char_hold_rate(bot, ev, bool(ev.regex_dict.get("group")))
+
+
+async def _send_char_hold_rate(bot: Bot, ev: Event, in_group: bool):
+    if in_group:
         if not ev.group_id:
             return await bot.send("请在群聊中使用")
         img = await get_char_hold_rate_img(ev, ev.group_id)

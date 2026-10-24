@@ -132,6 +132,9 @@ SPECIAL_CHAR_RANK_MAP = {
     "1310": "1309",
 }
 
+# 单字简称 -> 漂泊者主 id (雷/风/光/暗)
+SPECIAL_CHAR_INITIAL = {name[0]: int(SPECIAL_CHAR_RANK_MAP[char_id]) for char_id, name in SPECIAL_CHAR_NAME.items()}
+
 
 SONATA_FIRST_ID = {
     "凝夜白霜": [6000044],
