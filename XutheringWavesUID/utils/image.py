@@ -25,7 +25,7 @@ from gsuid_core.models import Event
 from gsuid_core.utils.image.utils import sget
 from gsuid_core.utils.image.image_tools import crop_center_img
 
-from .image_meta import open_meta_image
+from .image_meta import open_meta_image, read_pile_only
 from .resource.RESOURCE_PATH import (
     AVATAR_PATH,
     CACHE_PATH,
@@ -304,12 +304,21 @@ def get_bot_bg(background: str) -> Optional[Image.Image]:
     return img
 
 
-def _random_image_from_dir(directory: str) -> Optional[str]:
-    """Return a random image filename from a directory, skipping hidden/non-image files."""
+def _pile_usable(path: str, use: Optional[str]) -> bool:
+    if use is None:
+        return True
+    only = read_pile_only(Path(path))
+    return only is None or only == use
+
+
+def _random_image_from_dir(directory: str, use: Optional[str] = None) -> Optional[str]:
+    """Return a random image filename from a directory, skipping hidden/non-image files.
+    use: stamina/rank 时跳过 meta only 标成另一用途的体力立绘。"""
     valid_files = [
         f
         for f in os.listdir(directory)
         if not f.startswith(".") and f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+        and _pile_usable(f"{directory}/{f}", use)
     ]
     return random.choice(valid_files) if valid_files else None
 
@@ -376,6 +385,7 @@ def _mr_pool(
     force_not_use_custom: bool,
     include_official: bool,
     official_fallback: bool = True,
+    use: Optional[str] = None,
 ) -> list:
     """构建一侧(立绘或背景)的候选池, 每张图一个条目(逐张等权)。
 
@@ -386,13 +396,10 @@ def _mr_pool(
     """
     pool: list = []
     if not force_not_use_custom:
-        if char_id:
-            d = f"{custom_base}/{char_id}"
-            pool += [f"{d}/{f}" for f in _list_official_image_files(d)]
-        else:
-            for cid in _list_custom_char_dirs(custom_base):
-                d = f"{custom_base}/{cid}"
-                pool += [f"{d}/{f}" for f in _list_official_image_files(d)]
+        dirs = [char_id] if char_id else _list_custom_char_dirs(custom_base)
+        for cid in dirs:
+            d = f"{custom_base}/{cid}"
+            pool += [f"{d}/{f}" for f in _list_official_image_files(d) if _pile_usable(f"{d}/{f}", use)]
     if include_official or force_not_use_custom or (official_fallback and not pool):
         if char_id:
             p = f"{official_base}/{official_name}"
@@ -414,6 +421,7 @@ def _mr_pool_pile(char_id, force_not_use_custom, include_official, official_fall
     return _mr_pool(
         str(CUSTOM_MR_CARD_PATH), str(ROLE_PILE_PATH), char_id,
         f"role_pile_{char_id}.png", force_not_use_custom, include_official, official_fallback,
+        use="stamina",
     )
 
 
@@ -519,7 +527,7 @@ async def get_role_pile_default(
     if custom:
         custom_dir = f"{CUSTOM_MR_CARD_PATH}/{resource_id}"
         if os.path.isdir(custom_dir) and len(os.listdir(custom_dir)) > 0:
-            name = _random_image_from_dir(custom_dir)
+            name = _random_image_from_dir(custom_dir, use="rank")
             if name:
                 full = Path(custom_dir) / name
                 return open_meta_image(full), full

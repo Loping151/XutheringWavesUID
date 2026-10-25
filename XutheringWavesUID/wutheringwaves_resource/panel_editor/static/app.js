@@ -526,7 +526,7 @@ function renderTile(img, isLandscape) {
         onClick: e => { e.stopPropagation(); editExisting(img); },
       }, "✎"),
       !isGuest() && state.type === "stamina" && el("button", {
-        class: "tile-act tile-act--p2" + (img.rank_offset ? " tile-act--set" : ""),
+        class: "tile-act tile-act--p2" + (img.rank_offset || img.only ? " tile-act--set" : ""),
         title: "排行位置偏移",
         "aria-label": "排行位置偏移",
         onClick: e => { e.stopPropagation(); openRankOffsetModal(img); },
@@ -543,6 +543,7 @@ function renderTile(img, isLandscape) {
       img.rank_offset && el("span", { class: "tile__offset", title: "排行位置偏移",
         text: `⌖${img.rank_offset.x},${img.rank_offset.y}`
           + (img.rank_offset.scale && img.rank_offset.scale !== 1 ? ` ×${img.rank_offset.scale}` : "") }),
+      img.only && el("span", { class: "tile__offset", text: img.only === "stamina" ? "仅体力" : "仅排行" }),
       el("span", { class: "meta", text: formatBytes(img.size) }),
     ),
   );
@@ -2359,12 +2360,14 @@ const RKO_SCALE = { min: 0.2, max: 3, step: 0.05 };  // 对齐 pile_offset.SCALE
 // 排行 title 画布与立绘默认贴图位 (对齐 draw_rank_card.py / preview.py RANK_PILE_PASTE)
 const RANK_CANVAS = { w: 1050, h: 540, titleH: 500 };
 const RANK_PASTE = { x: 450, y: -120 };
+const PILE_USES = [["", "都用"], ["stamina", "仅体力"], ["rank", "仅排行"]];
 const RANK_LAYER_VER = 1;
 
 function openRankOffsetModal(img) {
   if (!img || state.type !== "stamina" || !state.selectedCharId || isGuest()) return;
   const charId = state.selectedCharId;
   const cur = { x: img.rank_offset?.x || 0, y: img.rank_offset?.y || 0, s: img.rank_offset?.scale || 1 };
+  let use = img.only || "";
   let range = 400, step = 5, dragging = false, saving = false, closed = false, raf = null;
   let assets = null;  // {bg, base, mask, text, pile} 一次拉取, 之后全在 canvas 本地合成
 
@@ -2389,6 +2392,7 @@ function openRankOffsetModal(img) {
   const inY = el("input", { type: "number", class: "rko__num", inputmode: "numeric", step: "1", "aria-label": "Y 偏移" });
   const rangeSeg = el("div", { class: "seg", role: "group", "aria-label": "罗盘量程" });
   const stepSeg = el("div", { class: "seg", role: "group", "aria-label": "微调步长" });
+  const useSeg = el("div", { class: "seg", role: "group", "aria-label": "用途" });
   const scaleRange = el("input", { type: "range", class: "rko__range", "aria-label": "缩放",
     min: String(RKO_SCALE.min), max: String(RKO_SCALE.max), step: "0.01" });
   const scaleOut = el("b", { class: "rko__scale-val" });
@@ -2407,6 +2411,7 @@ function openRankOffsetModal(img) {
     if (document.activeElement !== inY) inY.value = String(cur.y);
     rangeSeg.querySelectorAll("button").forEach(b => b.classList.toggle("is-active", +b.dataset.v === range));
     stepSeg.querySelectorAll("button").forEach(b => b.classList.toggle("is-active", +b.dataset.v === step));
+    useSeg.querySelectorAll("button").forEach(b => b.classList.toggle("is-active", b.dataset.v === use));
     scaleRange.value = String(cur.s);
     const pw = assets?.pile?.naturalWidth, ph = assets?.pile?.naturalHeight;
     scaleOut.textContent = `×${cur.s.toFixed(2)}` + (pw ? ` · ${Math.round(pw * cur.s)}×${Math.round(ph * cur.s)}` : "");
@@ -2544,6 +2549,10 @@ function openRankOffsetModal(img) {
     stepSeg.append(el("button", { type: "button", dataset: { v: String(v) },
       onClick: () => { step = v; render(); } }, `${v}px`));
   }
+  for (const [v, label] of PILE_USES) {
+    useSeg.append(el("button", { type: "button", dataset: { v },
+      onClick: () => { use = v; render(); } }, label));
+  }
   const dpad = el("div", { class: "dpad", role: "group", "aria-label": "方向微调" },
     el("span"),
     el("button", { type: "button", "aria-label": "上移", onClick: () => nudge(0, -1) }, "▲"),
@@ -2559,7 +2568,7 @@ function openRankOffsetModal(img) {
 
   const side = el("div", { class: "rko__side" },
     el("p", { class: "modal__hint",
-      text: "罗盘中心 = 默认位置，点击或拖动取点；滚轮 / 双指捏合 / 滑杆缩放（以立绘中心为锚）。保存 0,0 ×1.00 即清除偏移文件。" }),
+      text: "罗盘中心 = 默认位置，点击或拖动取点；滚轮 / 双指捏合 / 滑杆缩放（以立绘中心为锚）。保存 0,0 ×1.00 即清除偏移。" }),
     compass,
     el("div", { class: "rko__row" }, el("span", { class: "k", text: "量程" }), rangeSeg),
     el("div", { class: "rko__row" },
@@ -2577,6 +2586,7 @@ function openRankOffsetModal(img) {
     ),
     el("div", { class: "rko__row" }, el("span", { class: "k", text: "步长" }), stepSeg),
     dpad,
+    el("div", { class: "rko__row" }, el("span", { class: "k", text: "用途" }), useSeg),
   );
   body.append(el("div", { class: "rko" }, preview, side));
 
@@ -2588,13 +2598,18 @@ function openRankOffsetModal(img) {
       const r = await apiJson("/rank-offset", {
         type: "stamina", char_id: charId, name: img.name, x: cur.x, y: cur.y, scale: cur.s,
       });
-      for (const it of state.imagesByCharId[`stamina|${charId}`] || []) {
-        if (it.name === img.name) it.rank_offset = r.rank_offset;
+      let only = img.only || null;
+      if (use !== (img.only || "")) {
+        only = (await apiJson("/pile-only", {
+          type: "stamina", char_id: charId, name: img.name, only: use || null,
+        })).only;
       }
-      if (state.selectedImage?.name === img.name) state.selectedImage.rank_offset = r.rank_offset;
-      img.rank_offset = r.rank_offset;
+      for (const it of [...(state.imagesByCharId[`stamina|${charId}`] || []), state.selectedImage, img]) {
+        if (it?.name === img.name) { it.rank_offset = r.rank_offset; it.only = only; }
+      }
       const o = r.rank_offset;
-      toast(o ? `已保存 ${o.x},${o.y} ×${o.scale}` : "已清除偏移", "ok");
+      const useText = PILE_USES.find(([v]) => v === (only || ""))[1];
+      toast((o ? `已保存 ${o.x},${o.y} ×${o.scale}` : "已清除偏移") + ` · ${useText}`, "ok");
       closeModal();
       renderCenterBody();
       if (state.renderer === "rank") triggerPreview(true, true);

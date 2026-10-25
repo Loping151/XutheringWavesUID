@@ -21,6 +21,7 @@ from ...utils.image_meta import (
     file_fingerprint,
     move_image_meta,
     read_crop,
+    read_pile_only,
     update_image_meta,
 )
 from ...utils.name_convert import easy_id_to_name
@@ -188,6 +189,7 @@ def list_images(t: str, char_id: str) -> List[dict]:
                 "mtime": int(info.st_mtime),
                 "ver": file_fingerprint(p),
                 "rank_offset": rank_offset_of(p) if t == "stamina" else None,
+                "only": read_pile_only(p) if t == "stamina" else None,
                 "crop": read_crop(p),
             }
         )

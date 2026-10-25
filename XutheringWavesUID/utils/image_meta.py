@@ -2,6 +2,7 @@
 
 crop: 面板图框选, 原图不动, 出图/查重/缩略图时在内存里应用。
 rank: 体力立绘在排行 title 上的偏移, 见 pile_offset。
+only: 体力立绘仅用于体力 (stamina) 或仅用于排行 (rank); 缺省两处都用。
 """
 
 from __future__ import annotations
@@ -51,6 +52,18 @@ def update_image_meta(image: Path, key: str, value) -> None:
         os.replace(name, target)
     finally:
         Path(name).unlink(missing_ok=True)
+
+
+PILE_USES = ("stamina", "rank")
+
+
+def read_pile_only(image: Path) -> Optional[str]:
+    only = read_image_meta(image).get("only")
+    return only if only in PILE_USES else None
+
+
+def write_pile_only(image: Path, only: Optional[str]) -> None:
+    update_image_meta(image, "only", only if only in PILE_USES else None)
 
 
 def delete_image_meta(image: Path) -> None:

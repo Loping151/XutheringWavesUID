@@ -32,10 +32,13 @@ from . import storage as st
 from ...utils.image_meta import (
     MAX_CROP_DIM as _MAX_CROP_DIM,
     MAX_CROP_PIXELS as _MAX_CROP_PIXELS,
+    PILE_USES,
     delete_image_meta,
     normalize_crop,
     read_crop,
+    read_pile_only,
     update_image_meta,
+    write_pile_only,
 )
 from ...utils.pile_offset import (
     SCALE_MAX,
@@ -641,6 +644,21 @@ async def api_rank_offset(payload: dict, _: None = Depends(require_auth)):
     if not (SCALE_MIN <= scale <= SCALE_MAX):
         raise HTTPException(400, f"scale out of range ({SCALE_MIN} - {SCALE_MAX})")
     return {"ok": True, "rank_offset": offset_dict(write_rank_offset(target, x, y, scale))}
+
+
+@app.post("/waves/panel-edit/api/pile-only")
+async def api_pile_only(payload: dict, _: None = Depends(require_auth)):
+    """体力立绘用途: stamina 仅体力 / rank 仅排行 / null 两处都用。"""
+    if payload.get("type") != "stamina":
+        raise HTTPException(400, "only applies to stamina")
+    only = payload.get("only")
+    if only is not None and only not in PILE_USES:
+        raise HTTPException(400, "only must be stamina, rank or null")
+    target = st.safe_target_image("stamina", payload.get("char_id") or "", payload.get("name") or "")
+    if target is None or not target.is_file():
+        raise HTTPException(404, "image not found")
+    write_pile_only(target, only)
+    return {"ok": True, "only": read_pile_only(target)}
 
 
 _RANK_LAYERS = {"bg", "base", "mask", "text", "pile"}
