@@ -961,10 +961,11 @@ class Weapon_21020107(WeaponAbstract):
     type = 2
     name = "沉冥"
 
-    # 攻击提升{0}。获得同奏时，导电伤害提升{1}，持续{3}秒。
-    # 获得同奏时，队伍中角色获得【羁念】效果并移除【怅念】，导电伤害加成提升{2}，持续{3}秒。同名效果之间不可叠加。
-    # 自身的协奏能量消耗时，获得【怅念】效果并移除队伍中角色的【羁念】，自身导电伤害额外提升{4}，持续{5}秒，
-    # 切换至其他角色时，该效果提前结束。
+    # 攻击提升{0}。未拥有并获得同奏时，导电伤害提升{1}，持续{3}秒。
+    # 未拥有并获得同奏时，队伍中角色获得【羁念】效果并移除【怅念】，导电伤害加成提升{2}，持续{3}秒。
+    # 同名效果之间不可叠加。
+    # 自身的协奏能量消耗，且消耗值低于{4}点时，获得【怅念】效果并移除队伍中角色的【羁念】，
+    # 自身导电伤害额外提升{5}，持续{6}秒，切换至其他角色时，该效果提前结束。
     def cast_unison(self, attr: DamageAttribute, isGroup: bool = False):
         """获得同奏 (持有者)"""
         if attr.char_attr != CHAR_ATTR_VOID:
@@ -977,7 +978,7 @@ class Weapon_21020107(WeaponAbstract):
     def cast_concerto(self, attr: DamageAttribute, isGroup: bool = False):
         """消耗协奏能量 (持有者)"""
         if attr.char_attr == CHAR_ATTR_VOID:
-            dmg = f"{self.param(4)}"
+            dmg = f"{self.param(5 if len(self.weapon_detail.param) > 6 else 4)}"
             title = self.get_title()
             msg = f"协奏能量消耗时获得【怅念】，自身导电伤害额外提升{dmg}"
             attr.add_dmg_bonus(calc_percent_expression(dmg), title, msg)
