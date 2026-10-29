@@ -744,7 +744,7 @@ function renderCropper(body) {
   );
 
   const stage = el("div", { class: "cropper__stage" });
-  const wrap = el("div", { class: state.type === "card" ? "cropper__canvas-wrap" : "cropper__canvas-wrap is-clear" });
+  const wrap = el("div", { class: "cropper__canvas-wrap" });
   const img = el("img", {
     class: "cropper__img",
     src: cropImgUrl(),
@@ -758,7 +758,7 @@ function renderCropper(body) {
 }
 
 // 裁剪框贴边时的最小留白(px), 也是 CSS .cropper__canvas-wrap 的初始 padding。
-// 框选超出原图时, 该侧 padding 会按超出量动态增大(见 layoutCropper), 形成"往外拉自动外扩"的白色填充预览。
+// 框选超出原图时, 该侧 padding 会按超出量动态增大(见 layoutCropper), 形成"往外拉自动外扩"的预览。
 const CROP_FRAME = 12;
 
 // 面板(card)图渲染参数: 自定义图经 resize_and_center 以 contain 方式缩放居中进 PANEL_OUT,
@@ -771,9 +771,44 @@ const MR_CARD = { w: 1150, h: 850 };
 const MR_PILE_HTML = { top: -90, right: -30 };
 const MR_PILE_PIL = { x: 550, y: -150 };
 
+const MR_RATIO = MR_CARD.w / MR_CARD.h;
+
 function fitRatioRect(r, ratio) {
   const w = Math.min(r.w, r.h * ratio), h = w / ratio;
   return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
+}
+
+// 内框 = 实际显示区: 面板取可见窗口, 背景取 cover 区; 坐标相对框选左上角
+function visRectInCrop(W, H) {
+  if (state.type === "card") return panelVisibleRectInCrop(W, H);
+  if (state.type === "bg") return fitRatioRect({ x: 0, y: 0, w: W, h: H }, MR_RATIO);
+  return null;
+}
+
+function visRatio() {
+  return state.type === "card" ? (PANEL_VIS.r - PANEL_VIS.l) / (PANEL_VIS.b - PANEL_VIS.t) : MR_RATIO;
+}
+
+// 由内框反推外框, 外框保持比例 R
+function cropFromVis(vx, vy, vw, vh, R) {
+  if (state.type === "bg") {
+    const w = R >= MR_RATIO ? vh * R : vw, h = w / R;
+    return { x: vx - (w - vw) / 2, y: vy - (h - vh) / 2, w, h };
+  }
+  const f = (PANEL_VIS.b - PANEL_VIS.t) / vh;
+  let w, h, pasteX, pasteY;
+  if (R > 1) {
+    w = PANEL_OUT.w / f;
+    h = w / R;
+    pasteX = 0;
+    pasteY = (PANEL_OUT.h - h * f) / 2;
+  } else {
+    h = PANEL_OUT.h / f;
+    w = h * R;
+    pasteX = (PANEL_OUT.w - w * f) / 2;
+    pasteY = 0;
+  }
+  return { x: vx - (PANEL_VIS.l - pasteX) / f, y: vy - (PANEL_VIS.t - pasteY) / f, w, h };
 }
 
 // 缩略图框比例 = 该类型在角色卡的实际显示区比例 (card 取 PANEL_VIS 窗口, bg 取背景容器)
@@ -835,8 +870,6 @@ function drawCropRect(wrap) {
   wrap.querySelector(".cropper__visbox")?.remove();
   if (!state.cropRect) return;
 
-  const isCard = state.type === "card";
-
   const rect = el("div", { class: "cropper__rect" });
   for (const h_ of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
     rect.append(el("span", { class: `handle h-${h_}`, "data-h": h_ }));
@@ -844,28 +877,26 @@ function drawCropRect(wrap) {
   rect.addEventListener("pointerdown", ev => startDrag(ev, wrap, rect));
   wrap.append(rect);
 
-  if (isCard) {
-    const vis = el("div", { class: "cropper__visbox cropper__visbox--active" });
+  if (state.type === "card" || state.type === "bg") {
+    const inset = state.type === "bg" ? " cropper__visbox--inset" : "";
+    const vis = el("div", { class: `cropper__visbox cropper__visbox--active${inset}` });
     for (const h_ of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
       vis.append(el("span", { class: `handle h-${h_}`, "data-h": h_ }));
     }
     vis.addEventListener("pointerdown", ev => startVisDrag(ev, wrap, vis));
     wrap.append(vis);
-  } else if (state.type === "bg") {
-    wrap.append(el("div", { class: "cropper__visbox" }));
   }
 
   layoutCropper(wrap);
 }
 
-// 统一布局: 按框选超出量动态设置 wrap padding(白色外扩区), 再据此定位裁剪框与可见区引导框。
+// 统一布局: 按框选超出量动态设置 wrap padding, 再据此定位裁剪框与可见区引导框。
 function layoutCropper(wrap) {
   const r = state.cropRect;
   const img = state.cropImgEl;
   if (!wrap || !r || !img) return;
   const iw = img.clientWidth, ih = img.clientHeight;
-  const v = state.type === "card" ? panelVisibleRectInCrop(r.w, r.h)
-    : state.type === "bg" ? fitRatioRect({ x: 0, y: 0, w: r.w, h: r.h }, MR_CARD.w / MR_CARD.h) : null;
+  const v = visRectInCrop(r.w, r.h);
   const vMinX = v ? r.x + v.x : Infinity;
   const vMinY = v ? r.y + v.y : Infinity;
   const vMaxX = v ? r.x + v.x + v.w : -Infinity;
@@ -985,7 +1016,7 @@ function startVisDrag(ev, wrap, visEl) {
   const tmp = state.cropTmp;
   if (!tmp) return;
 
-  const cur = panelVisibleRectInCrop(state.cropRect.w, state.cropRect.h);
+  const cur = visRectInCrop(state.cropRect.w, state.cropRect.h);
   if (!cur) return;
   const start = {
     sx: ev.clientX, sy: ev.clientY,
@@ -994,36 +1025,20 @@ function startVisDrag(ev, wrap, visEl) {
     w: cur.w, h: cur.h,
   };
 
-  const VIS_W = PANEL_VIS.r - PANEL_VIS.l;
-  const VIS_H = PANEL_VIS.b - PANEL_VIS.t;
-  const VIS_RATIO = VIS_W / VIS_H;
+  const VIS_RATIO = visRatio();
   const MIN_VH = 24;
   const R = state.cropRect.w / state.cropRect.h;
 
   const applyVis = (vx, vy, vw, vh) => {
-    const f = VIS_H / vh;
-    let W, H, pasteX, pasteY;
-    if (R > 1) {
-      W = PANEL_OUT.w / f;
-      H = W / R;
-      pasteX = 0;
-      pasteY = (PANEL_OUT.h - H * f) / 2;
-    } else {
-      H = PANEL_OUT.h / f;
-      W = H * R;
-      pasteX = (PANEL_OUT.w - W * f) / 2;
-      pasteY = 0;
-    }
+    const c = cropFromVis(vx, vy, vw, vh, R);
     // 与普通框选同边界(尺寸≤3倍图幅、位置±1倍图幅); 超限保持上一状态,
     // 否则反推的外框可无限增大, 拉到边缘后急速缩放失控
     const iw = state.cropImgEl?.clientWidth || 0;
     const ih = state.cropImgEl?.clientHeight || 0;
-    if (!iw || !ih || W > iw * 3 || H > ih * 3) return;
-    let x = vx - (PANEL_VIS.l - pasteX) / f;
-    let y = vy - (PANEL_VIS.t - pasteY) / f;
-    x = Math.min(Math.max(x, -iw), 2 * iw - W);
-    y = Math.min(Math.max(y, -ih), 2 * ih - H);
-    state.cropRect = { x, y, w: W, h: H };
+    if (!iw || !ih || c.w > iw * 3 || c.h > ih * 3) return;
+    c.x = Math.min(Math.max(c.x, -iw), 2 * iw - c.w);
+    c.y = Math.min(Math.max(c.y, -ih), 2 * ih - c.h);
+    state.cropRect = c;
   };
 
   try { visEl.setPointerCapture(ev.pointerId); } catch (_) {}

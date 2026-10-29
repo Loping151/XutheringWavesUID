@@ -762,17 +762,14 @@ input[type="search"] {
   position: relative;
   display: inline-block;
   margin: auto;
-  /* 初始最小留白; 框选超出原图时由 app.js 按超出量动态增大对应侧 padding(白色填充预览) */
+  /* 初始最小留白; 框选超出原图时由 app.js 按超出量动态增大对应侧 padding */
   padding: 12px;
-  background: #fff;
+  background: repeating-conic-gradient(#d9d9d9 0 25%, #fff 0 50%) 0 0 / 16px 16px;
   user-select: none;
   /* 阻止浏览器把触摸手势当作滚动/缩放抢走 */
   touch-action: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-}
-.cropper__canvas-wrap.is-clear {
-  background: repeating-conic-gradient(#d9d9d9 0 25%, #fff 0 50%) 0 0 / 16px 16px;
 }
 .cropper__img {
   display: block;
@@ -888,6 +885,15 @@ input[type="search"] {
 .handle.h-ne { top: -6px; right: -6px; cursor: nesw-resize; }
 .handle.h-sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
 .handle.h-se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+/* 背景内框手柄内缩 */
+.cropper__visbox--inset .handle.h-n  { top: 14px; }
+.cropper__visbox--inset .handle.h-s  { bottom: 14px; }
+.cropper__visbox--inset .handle.h-w  { left: 14px; }
+.cropper__visbox--inset .handle.h-e  { right: 14px; }
+.cropper__visbox--inset .handle.h-nw { top: 14px; left: 14px; }
+.cropper__visbox--inset .handle.h-ne { top: 14px; right: 14px; }
+.cropper__visbox--inset .handle.h-sw { bottom: 14px; left: 14px; }
+.cropper__visbox--inset .handle.h-se { bottom: 14px; right: 14px; }
 
 /* 触摸设备: 视觉手柄变大, 热区再放大一圈, 拖动友好 */
 @media (pointer: coarse) {
@@ -907,6 +913,14 @@ input[type="search"] {
   .handle.h-ne { top: -11px; right: -11px; }
   .handle.h-sw { bottom: -11px; left: -11px; }
   .handle.h-se { bottom: -11px; right: -11px; }
+  .cropper__visbox--inset .handle.h-n  { top: 28px; }
+  .cropper__visbox--inset .handle.h-s  { bottom: 28px; }
+  .cropper__visbox--inset .handle.h-w  { left: 28px; }
+  .cropper__visbox--inset .handle.h-e  { right: 28px; }
+  .cropper__visbox--inset .handle.h-nw { top: 28px; left: 28px; }
+  .cropper__visbox--inset .handle.h-ne { top: 28px; right: 28px; }
+  .cropper__visbox--inset .handle.h-sw { bottom: 28px; left: 28px; }
+  .cropper__visbox--inset .handle.h-se { bottom: 28px; right: 28px; }
   /* 三分线在大屏边距下变细更顺眼 */
   .cropper__rect::before, .cropper__rect::after {
     background: rgba(255, 255, 255, 0.12);
