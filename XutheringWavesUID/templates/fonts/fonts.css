@@ -35,7 +35,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/waves/fonts/SourceHanSansCN-Regular.ttc') format('truetype');
+  src: local('NotoSansCJKjp-Regular'), url('/waves/fonts/SourceHanSansCN-Regular.ttc') format('truetype');
 }
 
 @font-face {
@@ -43,7 +43,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/waves/fonts/SourceHanSansCN-Bold.ttc') format('truetype');
+  src: local('NotoSansCJKjp-Bold'), url('/waves/fonts/SourceHanSansCN-Bold.ttc') format('truetype');
 }
 
 @font-face {
@@ -51,7 +51,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/waves/fonts/SourceHanSansCN-Regular.ttc') format('collection');
+  src: local('NotoSansCJKjp-Regular'), url('/waves/fonts/SourceHanSansCN-Regular.ttc') format('collection');
 }
 
 @font-face {
@@ -59,7 +59,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/waves/fonts/SourceHanSansCN-Bold.ttc') format('collection');
+  src: local('NotoSansCJKjp-Bold'), url('/waves/fonts/SourceHanSansCN-Bold.ttc') format('collection');
 }
 
 @font-face {
@@ -67,7 +67,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/waves/fonts/SourceHanSansCN-Regular.ttc') format('collection');
+  src: local('NotoSansCJKjp-Regular'), url('/waves/fonts/SourceHanSansCN-Regular.ttc') format('collection');
 }
 
 @font-face {
@@ -75,7 +75,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/waves/fonts/SourceHanSansCN-Bold.ttc') format('collection');
+  src: local('NotoSansCJKjp-Bold'), url('/waves/fonts/SourceHanSansCN-Bold.ttc') format('collection');
 }
 
 @font-face {
