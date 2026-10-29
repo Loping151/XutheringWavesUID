@@ -17,6 +17,7 @@ from gsuid_core.logger import logger
 from ...utils import name_convert
 from ...utils.image_meta import (
     CacheFingerprint,
+    clamp_crop,
     crop_image,
     file_fingerprint,
     move_image_meta,
@@ -269,7 +270,10 @@ def get_or_make_thumb(target: Path, max_size: int = 360, t: Optional[str] = None
     try:
         with Image.open(target) as im:
             if t:
-                im = crop_image(im, read_crop(target))
+                crop = read_crop(target)
+                if t != "card":
+                    crop = clamp_crop(crop, im.width, im.height)
+                im = crop_image(im, crop)
             box = _display_crop_box(t, im.width, im.height)
             if box:
                 im = im.crop(box)
@@ -288,6 +292,7 @@ thumb_fingerprint = CacheFingerprint(
     _display_crop_box,
     _panel_visible_box,
     _cover_box,
+    clamp_crop,
     crop_image,
     _PANEL_OUT,
     _PANEL_VIS,

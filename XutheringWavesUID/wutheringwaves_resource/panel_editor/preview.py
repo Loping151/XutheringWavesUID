@@ -1,7 +1,7 @@
 """面板/MR 预览渲染。
 
 - 面板: 复用 draw_char_detail_img(is_limit_query=True, fallback_to_generic=True)。
-- MR: 用固定样本 DailyData/AccountBaseInfo 直接调用 stamina 渲染函数。
+- MR: 用固定样本 DailyData/AccountBaseInfo 直接调用 stamina 渲染函数; 编辑时只取分层, 前端合成。
 - _force_pile_path 注入选中图。
 """
 
@@ -13,7 +13,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Literal, Optional, Tuple
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 from gsuid_core.logger import logger
 from gsuid_core.models import Event
@@ -28,6 +28,12 @@ def _pil_to_jpeg_bytes(im: Image.Image, quality: int = 90) -> bytes:
     buf = BytesIO()
     im.convert("RGB").save(buf, "JPEG", quality=quality, optimize=True)
     return buf.getvalue()
+
+
+def _png_data_url(im: Image.Image) -> str:
+    buf = BytesIO()
+    im.save(buf, "PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 PREVIEW_USER_ID = "0"
@@ -170,11 +176,6 @@ async def render_panel_layers(char_id: str, image_path: Path) -> Optional[dict]:
     if not isinstance(image, Image.Image) or "mask" not in layers:
         return None
 
-    def data_url(im: Image.Image) -> str:
-        buf = BytesIO()
-        im.save(buf, "PNG")
-        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
-
     mask = Image.new("RGBA", layers["mask"].size, "white")
     source_mask = layers["mask"]
     alpha = (
@@ -184,9 +185,9 @@ async def render_panel_layers(char_id: str, image_path: Path) -> Optional[dict]:
     )
     mask.putalpha(alpha)
     return {
-        "base": data_url(image),
-        "mask": data_url(mask),
-        "foreground": data_url(layers["foreground"]),
+        "base": _png_data_url(image),
+        "mask": _png_data_url(mask),
+        "foreground": _png_data_url(layers["foreground"]),
         "x": layers["position"][0],
         "y": layers["position"][1],
         "width": image.width,
@@ -292,11 +293,90 @@ def rank_layer_bytes(kind: str, char_id: str = "", pile_path: Optional[Path] = N
         _draw_rank_text(text, _rank_char_name(char_id))
         return _png_bytes(text), "image/png"
     if kind == "pile" and pile_path is not None:
-        pile = open_meta_image(pile_path)
+        pile = open_meta_image(pile_path, pad=False)
         buf = BytesIO()
         pile.save(buf, "WEBP", quality=85, method=4)
         return buf.getvalue(), "image/webp"
     raise ValueError(f"unknown layer {kind!r}")
+
+
+MR_CANVAS = (1150, 850)
+_MR_SIGN_IN_TEXT = "签到已完成！"
+_MR_ACTIVE_TEXT = "活跃度未满！"
+
+
+def _sample_mr_info(char_id: str):
+    from ...utils.api.model import AccountBaseInfo, DailyData
+
+    char_name = easy_id_to_name(char_id, "漂泊者")
+    role_id = char_id if char_id.isdigit() else "100000001"
+    return (
+        DailyData.model_validate(_build_sample_daily_dict(role_id, char_name)),
+        AccountBaseInfo.model_validate(_build_sample_account_dict(role_id, char_name)),
+    )
+
+
+def _mr_pile_hash(image_path: Path) -> str:
+    # 预览的目标本身就是自定义图, 计算 hash 让用户看到将来命中时的标记
+    from ...wutheringwaves_charinfo.card_hash_index import compute_hash
+    return compute_hash(image_path.name)
+
+
+async def _render_mr_html(
+    info: tuple, pile: Image.Image, has_bg: bool, pile_hash: Optional[str],
+) -> Optional[Image.Image]:
+    from ...utils.image import get_event_avatar
+    from ...wutheringwaves_stamina.draw_waves_stamina import _render_stamina_card
+
+    daily_info, account_info = info
+    ev = make_synthetic_event()
+    try:
+        img = await _render_stamina_card(
+            ev=ev, pile=pile, has_bg=has_bg,
+            daily_info=daily_info, account_info=account_info,
+            sign_in_status=daily_info.hasSignIn, sign_in_text=_MR_SIGN_IN_TEXT,
+            active_status=False, active_text=_MR_ACTIVE_TEXT,
+            avatar=await get_event_avatar(ev), locale="", from_sdk=False,
+            pile_hash=pile_hash,
+        )
+    except Exception as e:
+        logger.exception(f"[鸣潮·面板编辑] HTML MR 预览失败: {e}")
+        return None
+    if isinstance(img, (bytes, bytearray)):
+        img = Image.open(BytesIO(img))
+    return img.convert("RGB") if isinstance(img, Image.Image) else None
+
+
+async def _render_mr_pil(
+    info: tuple, pile: Image.Image, has_bg: bool, pile_hash: Optional[str],
+    base: Optional[Image.Image] = None,
+) -> Image.Image:
+    """base 替换默认 bg.jpg 底图。"""
+    from ...wutheringwaves_stamina.draw_waves_stamina import (
+        _render_stamina_card_pil,
+        draw_pic_with_ring,
+        TEXT_PATH as STAMINA_TEXT_PATH,
+        YES,
+        NO,
+    )
+
+    daily_info, account_info = info
+    if base is None:
+        base = Image.open(STAMINA_TEXT_PATH / "bg.jpg").convert("RGBA")
+    img = await _render_stamina_card_pil(
+        img=base,
+        info=Image.open(STAMINA_TEXT_PATH / "main_bar.png").convert("RGBA"),
+        base_info_bg=Image.open(STAMINA_TEXT_PATH / "base_info_bg.png"),
+        avatar_ring=Image.open(STAMINA_TEXT_PATH / "avatar_ring.png"),
+        avatar=await draw_pic_with_ring(make_synthetic_event()),
+        pile=pile, has_bg=has_bg,
+        daily_info=daily_info, account_info=account_info,
+        sign_in_icon=YES, sing_in_text=_MR_SIGN_IN_TEXT,
+        active_icon=NO, active_text=_MR_ACTIVE_TEXT,
+        locale="",
+        pile_hash=pile_hash,
+    )
+    return img.convert("RGB")
 
 
 async def render_mr_preview(
@@ -312,68 +392,85 @@ async def render_mr_preview(
     role_kind=stamina → 选中的是立绘, 走默认 letterbox 分支。
     use_html: True 走 HTML, 失败回退 PIL。
     """
-    from ...utils.image import get_event_avatar
-    from ...wutheringwaves_stamina.draw_waves_stamina import (
-        _render_stamina_card,
-        _render_stamina_card_pil,
-        draw_pic_with_ring,
-        TEXT_PATH as STAMINA_TEXT_PATH,
-        YES,
-        NO,
-    )
-    from ...utils.api.model import AccountBaseInfo, DailyData
-
-    char_name = easy_id_to_name(char_id, "漂泊者")
-    role_id = char_id if char_id.isdigit() else "100000001"
-
-    daily_info = DailyData.model_validate(_build_sample_daily_dict(role_id, char_name))
-    account_info = AccountBaseInfo.model_validate(_build_sample_account_dict(role_id, char_name))
-
     try:
-        pile = open_meta_image(image_path)
+        pile = open_meta_image(image_path, pad=False)
     except Exception as e:
         logger.warning(f"[鸣潮·面板编辑] 读取 MR 图失败 {image_path}: {e}")
         return None
 
-    ev = make_synthetic_event()
     has_bg = role_kind == "bg"
-    sing_in_text = "签到已完成！"
-    active_text = "活跃度未满！"
+    pile_hash = _mr_pile_hash(image_path)
+    info = _sample_mr_info(char_id)
+    img = await _render_mr_html(info, pile, has_bg, pile_hash) if use_html else None
+    if img is None:
+        if use_html:
+            logger.info("[鸣潮·面板编辑] HTML 预览失败, 回退 PIL")
+        img = await _render_mr_pil(info, pile, has_bg, pile_hash)
+    return _pil_to_jpeg_bytes(img)
 
-    # 预览的目标本身就是自定义图, 计算 hash 让用户看到将来命中时的标记
-    from ...wutheringwaves_charinfo.card_hash_index import compute_hash
-    pile_hash = compute_hash(image_path.name)
 
-    if use_html:
-        try:
-            img = await _render_stamina_card(
-                ev=ev, pile=pile, has_bg=has_bg,
-                daily_info=daily_info, account_info=account_info,
-                sign_in_status=daily_info.hasSignIn, sign_in_text=sing_in_text,
-                active_status=False, active_text=active_text,
-                avatar=await get_event_avatar(ev), locale="", from_sdk=False,
-                pile_hash=pile_hash,
-            )
-        except Exception as e:
-            logger.exception(f"[鸣潮·面板编辑] HTML MR 预览失败: {e}")
-            img = None
-        if isinstance(img, Image.Image):
-            return _pil_to_jpeg_bytes(img)
-        if isinstance(img, (bytes, bytearray)):
-            return bytes(img)
-        logger.info("[鸣潮·面板编辑] HTML 预览失败, 回退 PIL")
+_MR_LAYER_TRIES = 3
+_MR_MISMATCH_PX = 200
 
-    result_img = await _render_stamina_card_pil(
-        img=Image.open(STAMINA_TEXT_PATH / "bg.jpg").convert("RGBA"),
-        info=Image.open(STAMINA_TEXT_PATH / "main_bar.png").convert("RGBA"),
-        base_info_bg=Image.open(STAMINA_TEXT_PATH / "base_info_bg.png"),
-        avatar_ring=Image.open(STAMINA_TEXT_PATH / "avatar_ring.png"),
-        avatar=await draw_pic_with_ring(ev),
-        pile=pile, has_bg=has_bg,
-        daily_info=daily_info, account_info=account_info,
-        sign_in_icon=YES, sing_in_text=sing_in_text,
-        active_icon=NO, active_text=active_text,
-        locale="",
-        pile_hash=pile_hash,
-    )
-    return _pil_to_jpeg_bytes(result_img)
+
+def _layer_mismatch(black: Image.Image, white: Image.Image) -> int:
+    """黑底渲染比白底亮的像素数。"""
+    return sum(ImageChops.subtract(black, white).convert("L").histogram()[48:])
+
+
+async def render_mr_layers(
+    char_id: str,
+    image_path: Path,
+    *,
+    use_html: bool = True,
+    role_kind: Literal["bg", "stamina"] = "bg",
+) -> Optional[dict]:
+    """MR 卡 HUD 分层: 纯黑/纯白底各渲一次, 前端按 底层 × (白 - 黑) + 黑 合成。"""
+    pile_hash = _mr_pile_hash(image_path)
+    info = _sample_mr_info(char_id)
+
+    async def shot(color: str, html: bool) -> Optional[Image.Image]:
+        solid = Image.new("RGBA", MR_CANVAS, color)
+        if html:
+            return await _render_mr_html(info, solid, True, pile_hash)
+        if role_kind == "bg":
+            return await _render_mr_pil(info, solid, True, pile_hash)
+        return await _render_mr_pil(info, Image.new("RGBA", (1, 1)), False, pile_hash, base=solid)
+
+    html = use_html
+    pair: Optional[Tuple[int, Image.Image, Image.Image]] = None
+    for _ in range(_MR_LAYER_TRIES):
+        black = await shot("black", html)
+        if black is None and html:
+            html = False
+            black = await shot("black", False)
+        white = await shot("white", html)
+        if black is None or white is None:
+            return None
+        bad = _layer_mismatch(black, white)
+        if pair is None or bad < pair[0]:
+            pair = (bad, black, white)
+        if bad < _MR_MISMATCH_PX:
+            break
+    bad, black, white = pair
+    if bad >= _MR_MISMATCH_PX:
+        logger.info(f"[鸣潮·面板编辑] MR 分层黑白底排版不一致 ({bad}px), 预览可能有重影")
+    if black.size != MR_CANVAS:
+        black = black.resize(MR_CANVAS, Image.Resampling.LANCZOS)
+    if white.size != MR_CANVAS:
+        white = white.resize(MR_CANVAS, Image.Resampling.LANCZOS)
+
+    base = None
+    if role_kind == "stamina":
+        from ...wutheringwaves_stamina.draw_waves_stamina import TEXT_PATH as STAMINA_TEXT_PATH
+        base = "data:image/jpeg;base64," + base64.b64encode(
+            (STAMINA_TEXT_PATH / "bg.jpg").read_bytes()
+        ).decode("ascii")
+    return {
+        "renderer": "html" if html else "pil",
+        "overlay": _png_data_url(black),
+        "transmit": _png_data_url(ImageChops.subtract(white, black)),
+        "base": base,
+        "width": MR_CANVAS[0],
+        "height": MR_CANVAS[1],
+    }

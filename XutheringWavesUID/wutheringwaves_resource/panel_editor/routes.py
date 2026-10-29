@@ -237,7 +237,7 @@ async def api_image(
     headers = {"Cache-Control": "no-store"}
     if trim and read_crop(target) is not None:
         from ...wutheringwaves_charinfo.card_utils import _crop_card_file
-        img = await _crop_card_file(target)
+        img = await _crop_card_file(target, pad=type == "card")
         if img is not None:
             buf = BytesIO()
             ext = target.suffix.lower()
@@ -835,6 +835,31 @@ async def api_panel_layers(
     return layers
 
 
+@app.get("/waves/panel-edit/api/mr-layers")
+async def api_mr_layers(
+    request: Request,
+    type: str,
+    char_id: str,
+    token: str,
+    renderer: str = "html",
+    _: None = Depends(require_auth),
+):
+    """MR 编辑预览的固定层。"""
+    check_preview_rate(request)
+    if type not in ("bg", "stamina"):
+        raise HTTPException(400, "invalid type")
+    if not st.is_safe_char_id(char_id) or not st.is_safe_token(token):
+        raise HTTPException(400, "invalid char_id or token")
+    current = st.find_tmp_file(token)
+    if current is None:
+        raise HTTPException(404, "tmp not found")
+    from .preview import render_mr_layers
+    layers = await render_mr_layers(char_id, current, use_html=renderer != "pil", role_kind=type)
+    if layers is None:
+        raise HTTPException(500, "preview empty")
+    return layers
+
+
 @app.get("/waves/panel-edit/api/preview")
 async def api_preview(
     request: Request,
@@ -870,53 +895,6 @@ async def api_preview(
             data = await render_mr_preview(char_id, target, use_html=use_html, role_kind=role_kind)
     except Exception as e:
         logger.exception(f"[鸣潮·面板编辑] 预览渲染失败: {e}")
-        raise HTTPException(500, f"render failed: {e}")
-    if not data:
-        raise HTTPException(500, "preview empty")
-    if lq:
-        lq_data = _lq_webp(data)
-        if lq_data is not None:
-            return Response(content=lq_data, media_type="image/webp", headers={"Cache-Control": "no-store"})
-    return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
-
-
-@app.get("/waves/panel-edit/api/preview-tmp")
-async def api_preview_tmp(
-    request: Request,
-    type: str,
-    char_id: str,
-    token: str,
-    renderer: str = "html",
-    lq: int = 0,
-    dx: Optional[int] = None,
-    dy: Optional[int] = None,
-    scale: Optional[float] = None,
-    _: None = Depends(require_auth),
-):
-    """裁剪/上传过程中, 用 tmp 图渲染预览。tmp 无 rank 元数据, 排行偏移只认 dx/dy/scale。"""
-    check_preview_rate(request)
-    from .preview import render_panel_preview, render_mr_preview, render_rank_preview
-
-    if not st.is_valid_type(type):
-        raise HTTPException(400, "invalid type")
-    if not st.is_safe_char_id(char_id):
-        raise HTTPException(400, "invalid char_id")
-    if not st.is_safe_token(token):
-        raise HTTPException(400, "invalid token")
-    current = st.find_tmp_file(token)
-    if current is None:
-        raise HTTPException(404, "tmp not found")
-    try:
-        if type == "card":
-            data = await render_panel_preview(char_id, current)
-        elif type == "stamina" and renderer == "rank":
-            data = await render_rank_preview(char_id, current, _offset_arg(dx, dy, scale))
-        else:
-            use_html = renderer != "pil"
-            role_kind = "bg" if type == "bg" else "stamina"
-            data = await render_mr_preview(char_id, current, use_html=use_html, role_kind=role_kind)
-    except Exception as e:
-        logger.exception(f"[鸣潮·面板编辑] tmp 预览渲染失败: {e}")
         raise HTTPException(500, f"render failed: {e}")
     if not data:
         raise HTTPException(500, "preview empty")
