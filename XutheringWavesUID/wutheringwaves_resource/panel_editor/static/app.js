@@ -771,26 +771,9 @@ const MR_CARD = { w: 1150, h: 850 };
 const MR_PILE_HTML = { top: -90, right: -30 };
 const MR_PILE_PIL = { x: 550, y: -150 };
 
-const cropRatio = () => state.type === "bg" ? MR_CARD.w / MR_CARD.h : null;
-
 function fitRatioRect(r, ratio) {
   const w = Math.min(r.w, r.h * ratio), h = w / ratio;
   return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
-}
-
-function ratioResize(s, dir, dx, dy, ratio, b, min) {
-  const hw = dir.includes("w"), he = dir.includes("e"), hn = dir.includes("n"), hs = dir.includes("s");
-  let w;
-  if ((hw || he) && (hn || hs)) w = s.w + Math.max(he ? dx : -dx, (hs ? dy : -dy) * ratio);
-  else if (hw || he) w = s.w + (he ? dx : -dx);
-  else w = (s.h + (hs ? dy : -dy)) * ratio;
-  const ax = hw ? s.x + s.w : he ? s.x : s.x + s.w / 2;
-  const ay = hn ? s.y + s.h : hs ? s.y : s.y + s.h / 2;
-  const roomW = hw ? ax - b.minX : he ? b.maxX - ax : 2 * Math.min(ax - b.minX, b.maxX - ax);
-  const roomH = hn ? ay - b.minY : hs ? b.maxY - ay : 2 * Math.min(ay - b.minY, b.maxY - ay);
-  w = Math.max(min, Math.min(w, roomW, roomH * ratio));
-  const h = w / ratio;
-  return { x: hw ? ax - w : he ? ax : ax - w / 2, y: hn ? ay - h : hs ? ay : ay - h / 2, w, h };
 }
 
 // 缩略图框比例 = 该类型在角色卡的实际显示区比例 (card 取 PANEL_VIS 窗口, bg 取背景容器)
@@ -841,8 +824,7 @@ function initCropRect(img, wrap) {
     x: crop.x * w / img.naturalWidth, y: crop.y * h / img.naturalHeight,
     w: crop.w * w / img.naturalWidth, h: crop.h * h / img.naturalHeight,
   } : { x: 0, y: 0, w, h };
-  const ratio = cropRatio();
-  state.cropRect = ratio ? fitRatioRect(r, ratio) : r;
+  state.cropRect = r;
   state.cropClient = { w, h };
   drawCropRect(wrap);
   updateRectReadout();
@@ -869,6 +851,8 @@ function drawCropRect(wrap) {
     }
     vis.addEventListener("pointerdown", ev => startVisDrag(ev, wrap, vis));
     wrap.append(vis);
+  } else if (state.type === "bg") {
+    wrap.append(el("div", { class: "cropper__visbox" }));
   }
 
   layoutCropper(wrap);
@@ -880,7 +864,8 @@ function layoutCropper(wrap) {
   const img = state.cropImgEl;
   if (!wrap || !r || !img) return;
   const iw = img.clientWidth, ih = img.clientHeight;
-  const v = state.type === "card" ? panelVisibleRectInCrop(r.w, r.h) : null;
+  const v = state.type === "card" ? panelVisibleRectInCrop(r.w, r.h)
+    : state.type === "bg" ? fitRatioRect({ x: 0, y: 0, w: r.w, h: r.h }, MR_CARD.w / MR_CARD.h) : null;
   const vMinX = v ? r.x + v.x : Infinity;
   const vMinY = v ? r.y + v.y : Infinity;
   const vMaxX = v ? r.x + v.x + v.w : -Infinity;
@@ -952,7 +937,6 @@ function startDrag(ev, wrap, rect) {
     updateRectReadout();
   };
 
-  const ratio = cropRatio();
   const move = e => {
     const dx = e.clientX - start.sx;
     const dy = e.clientY - start.sy;
@@ -963,9 +947,6 @@ function startDrag(ev, wrap, rect) {
     if (!isHandle) {
       x = Math.min(Math.max(start.x + dx, minBX), maxBX - w);
       y = Math.min(Math.max(start.y + dy, minBY), maxBY - h);
-    } else if (ratio) {
-      ({ x, y, w, h } = ratioResize(start, direction, dx, dy, ratio,
-        { minX: minBX, maxX: maxBX, minY: minBY, maxY: maxBY }, MIN));
     } else {
       let left = start.x, top = start.y, right = start.x + start.w, bottom = start.y + start.h;
       if (direction.includes("w")) left = Math.min(Math.max(left + dx, minBX), right - MIN);
@@ -1139,15 +1120,11 @@ function displayToSourceRect(rect) {
   };
 }
 
-// 等于默认框选时不存 meta
 function cropOf(src) {
   const img = state.cropImgEl;
-  if (!src || !img) return src;
-  const whole = { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
-  const ratio = cropRatio();
-  const d = ratio ? fitRatioRect(whole, ratio) : whole;
-  const near = ["x", "y", "w", "h"].every(k => Math.abs(src[k] - d[k]) <= 1);
-  return near ? null : src;
+  const whole = src && img && src.x === 0 && src.y === 0
+    && src.w === img.naturalWidth && src.h === img.naturalHeight;
+  return whole ? null : src;
 }
 
 function updateRectReadout() {
