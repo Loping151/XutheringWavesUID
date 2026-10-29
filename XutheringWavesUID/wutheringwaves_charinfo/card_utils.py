@@ -42,7 +42,7 @@ from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
 from gsuid_core.utils.image.convert import convert_img
 
-from ..utils.image_meta import CacheFingerprint, clamp_crop, crop_image, read_crop
+from ..utils.image_meta import CacheFingerprint, crop_image, crop_image_clear, read_crop
 from ..utils.name_convert import alias_to_char_name, char_name_to_char_id, easy_id_to_name
 from ..utils.resource.constant import SPECIAL_CHAR, SPECIAL_CHAR_ID
 from ..utils.resource.RESOURCE_PATH import (
@@ -708,24 +708,20 @@ async def send_repeated_custom_cards(
 
 
 @to_thread
-def _crop_card_file(path: Path, pad: bool = True) -> Optional[Image.Image]:
+def _crop_card_file(path: Path, white_pad: bool = True) -> Optional[Image.Image]:
     crop = read_crop(path)
     if crop is None:
         return None
     try:
         with Image.open(path) as im:
             im.load()
-            if not pad:
-                crop = clamp_crop(crop, im.width, im.height)
-                if crop is None:
-                    return None
-            return crop_image(im, crop)
+            return crop_image(im, crop) if white_pad else crop_image_clear(im, crop)
     except Exception:
         return None
 
 
 async def _one_card_img(t: str, path: Path) -> str:
-    cropped = await _crop_card_file(path, pad=t == "card")
+    cropped = await _crop_card_file(path, white_pad=t == "card")
     return await convert_img(cropped if cropped is not None else path, is_base64=True)
 
 

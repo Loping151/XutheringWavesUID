@@ -771,6 +771,9 @@ input[type="search"] {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
+.cropper__canvas-wrap.is-clear {
+  background: repeating-conic-gradient(#d9d9d9 0 25%, #fff 0 50%) 0 0 / 16px 16px;
+}
 .cropper__img {
   display: block;
   max-width: 100%;

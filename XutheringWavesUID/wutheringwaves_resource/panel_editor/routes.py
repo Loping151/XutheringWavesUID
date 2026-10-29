@@ -237,7 +237,7 @@ async def api_image(
     headers = {"Cache-Control": "no-store"}
     if trim and read_crop(target) is not None:
         from ...wutheringwaves_charinfo.card_utils import _crop_card_file
-        img = await _crop_card_file(target, pad=type == "card")
+        img = await _crop_card_file(target, white_pad=type == "card")
         if img is not None:
             buf = BytesIO()
             ext = target.suffix.lower()

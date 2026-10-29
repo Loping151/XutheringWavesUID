@@ -455,14 +455,14 @@ async def get_random_waves_role_pile(
 ) -> tuple[Image.Image, Optional[Path]]:
     forced = _force_pile_path.get()
     if forced is not None and forced.exists():
-        return open_meta_image(forced, pad=False), forced
+        return open_meta_image(forced, white_pad=False), forced
     pool = _mr_pool_pile(char_id, force_not_use_custom, _include_official_pile())
     if not pool and char_id:
         # 该角色 custom/官方立绘全缺: 从全库可用立绘里抽
         pool = _mr_pool_pile(None, force_not_use_custom, True)
     if pool:
         full = Path(random.choice(pool))
-        return open_meta_image(full, pad=False), full
+        return open_meta_image(full, white_pad=False), full
     full = ROLE_PILE_PATH / "role_pile_1503.png"
     return Image.open(full).convert("RGBA"), full
 
@@ -473,11 +473,11 @@ async def get_random_waves_bg(
 ) -> tuple[Image.Image, bool, Optional[Path]]:
     forced = _force_bg_path.get()
     if forced is not None and forced.exists():
-        return open_meta_image(forced, pad=False), True, forced
+        return open_meta_image(forced, white_pad=False), True, forced
     pool = _mr_pool_bg(char_id, force_not_use_custom, _include_official_bg())
     if pool:
         full = Path(random.choice(pool))
-        return open_meta_image(full, pad=False), True, full
+        return open_meta_image(full, white_pad=False), True, full
     pile, pile_path = await get_random_waves_role_pile(char_id, force_not_use_custom)
     return pile, False, pile_path
 
@@ -523,14 +523,14 @@ async def get_role_pile_default(
 ) -> tuple[Image.Image, Optional[Path]]:
     forced = _force_pile_path.get()
     if forced is not None and forced.exists():
-        return open_meta_image(forced, pad=False), forced
+        return open_meta_image(forced, white_pad=False), forced
     if custom:
         custom_dir = f"{CUSTOM_MR_CARD_PATH}/{resource_id}"
         if os.path.isdir(custom_dir) and len(os.listdir(custom_dir)) > 0:
             name = _random_image_from_dir(custom_dir, use="rank")
             if name:
                 full = Path(custom_dir) / name
-                return open_meta_image(full, pad=False), full
+                return open_meta_image(full, white_pad=False), full
 
     name = f"role_pile_{resource_id}.png"
     path = ROLE_PILE_PATH / name

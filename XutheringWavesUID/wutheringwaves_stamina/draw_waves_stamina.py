@@ -761,7 +761,8 @@ def _render_stamina_card_pil(
         top = (pile.height - target_h) // 2
         pile = pile.crop((left, top, left + target_w, top + target_h))
 
-        img.paste(pile, (0, 0))
+        img.paste((15, 17, 21, 255), (0, 0, *img.size))
+        img.alpha_composite(pile.convert("RGBA"))
 
         info = Image.open(TEXT_PATH / "main_bar_bg.png").convert("RGBA")
 

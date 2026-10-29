@@ -293,7 +293,7 @@ def rank_layer_bytes(kind: str, char_id: str = "", pile_path: Optional[Path] = N
         _draw_rank_text(text, _rank_char_name(char_id))
         return _png_bytes(text), "image/png"
     if kind == "pile" and pile_path is not None:
-        pile = open_meta_image(pile_path, pad=False)
+        pile = open_meta_image(pile_path, white_pad=False)
         buf = BytesIO()
         pile.save(buf, "WEBP", quality=85, method=4)
         return buf.getvalue(), "image/webp"
@@ -393,7 +393,7 @@ async def render_mr_preview(
     use_html: True 走 HTML, 失败回退 PIL。
     """
     try:
-        pile = open_meta_image(image_path, pad=False)
+        pile = open_meta_image(image_path, white_pad=False)
     except Exception as e:
         logger.warning(f"[鸣潮·面板编辑] 读取 MR 图失败 {image_path}: {e}")
         return None

@@ -113,25 +113,21 @@ def crop_image(image: Image.Image, crop: Optional[dict]) -> Image.Image:
     return canvas
 
 
-def clamp_crop(crop: Optional[dict], w: int, h: int) -> Optional[dict]:
-    """框选与原图取交集; 无交集或等于整图返回 None。"""
+def crop_image_clear(image: Image.Image, crop: Optional[dict]) -> Image.Image:
+    """在内存里应用框选, 越界部分透明。"""
+    image = image.convert("RGBA")
     if crop is None:
-        return None
-    left, top = max(0, crop["x"]), max(0, crop["y"])
-    right, bottom = min(w, crop["x"] + crop["w"]), min(h, crop["y"] + crop["h"])
-    if right <= left or bottom <= top or (left, top, right, bottom) == (0, 0, w, h):
-        return None
-    return {"x": left, "y": top, "w": right - left, "h": bottom - top}
+        return image
+    x, y, w, h = (crop[key] for key in ("x", "y", "w", "h"))
+    return image.crop((x, y, x + w, y + h))
 
 
-def open_meta_image(path: Path, pad: bool = True) -> Image.Image:
-    """pad=False 时越界部分舍去而非填白。"""
+def open_meta_image(path: Path, white_pad: bool = True) -> Image.Image:
     with Image.open(path) as image:
         image.load()
-        crop = read_crop(path)
-        if not pad:
-            crop = clamp_crop(crop, image.width, image.height)
-        return crop_image(image, crop).convert("RGBA")
+        if not white_pad:
+            return crop_image_clear(image, read_crop(path))
+        return crop_image(image, read_crop(path)).convert("RGBA")
 
 
 def file_fingerprint(image: Path) -> str:

@@ -744,7 +744,7 @@ function renderCropper(body) {
   );
 
   const stage = el("div", { class: "cropper__stage" });
-  const wrap = el("div", { class: "cropper__canvas-wrap" });
+  const wrap = el("div", { class: state.type === "card" ? "cropper__canvas-wrap" : "cropper__canvas-wrap is-clear" });
   const img = el("img", {
     class: "cropper__img",
     src: cropImgUrl(),
@@ -771,7 +771,6 @@ const MR_CARD = { w: 1150, h: 850 };
 const MR_PILE_HTML = { top: -90, right: -30 };
 const MR_PILE_PIL = { x: 550, y: -150 };
 
-const cropPads = () => state.type === "card";
 const cropRatio = () => state.type === "bg" ? MR_CARD.w / MR_CARD.h : null;
 
 function fitRatioRect(r, ratio) {
@@ -779,13 +778,7 @@ function fitRatioRect(r, ratio) {
   return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
 }
 
-function clampRectInto(r, maxW, maxH) {
-  const x = Math.max(0, r.x), y = Math.max(0, r.y);
-  const w = Math.min(maxW, r.x + r.w) - x, h = Math.min(maxH, r.y + r.h) - y;
-  return w > 0 && h > 0 ? { x, y, w, h } : { x: 0, y: 0, w: maxW, h: maxH };
-}
-
-function ratioResize(s, dir, dx, dy, ratio, maxW, maxH, min) {
+function ratioResize(s, dir, dx, dy, ratio, b, min) {
   const hw = dir.includes("w"), he = dir.includes("e"), hn = dir.includes("n"), hs = dir.includes("s");
   let w;
   if ((hw || he) && (hn || hs)) w = s.w + Math.max(he ? dx : -dx, (hs ? dy : -dy) * ratio);
@@ -793,8 +786,8 @@ function ratioResize(s, dir, dx, dy, ratio, maxW, maxH, min) {
   else w = (s.h + (hs ? dy : -dy)) * ratio;
   const ax = hw ? s.x + s.w : he ? s.x : s.x + s.w / 2;
   const ay = hn ? s.y + s.h : hs ? s.y : s.y + s.h / 2;
-  const roomW = hw ? ax : he ? maxW - ax : 2 * Math.min(ax, maxW - ax);
-  const roomH = hn ? ay : hs ? maxH - ay : 2 * Math.min(ay, maxH - ay);
+  const roomW = hw ? ax - b.minX : he ? b.maxX - ax : 2 * Math.min(ax - b.minX, b.maxX - ax);
+  const roomH = hn ? ay - b.minY : hs ? b.maxY - ay : 2 * Math.min(ay - b.minY, b.maxY - ay);
   w = Math.max(min, Math.min(w, roomW, roomH * ratio));
   const h = w / ratio;
   return { x: hw ? ax - w : he ? ax : ax - w / 2, y: hn ? ay - h : hs ? ay : ay - h / 2, w, h };
@@ -848,7 +841,6 @@ function initCropRect(img, wrap) {
     x: crop.x * w / img.naturalWidth, y: crop.y * h / img.naturalHeight,
     w: crop.w * w / img.naturalWidth, h: crop.h * h / img.naturalHeight,
   } : { x: 0, y: 0, w, h };
-  if (!cropPads()) r = clampRectInto(r, w, h);
   const ratio = cropRatio();
   state.cropRect = ratio ? fitRatioRect(r, ratio) : r;
   state.cropClient = { w, h };
@@ -960,19 +952,20 @@ function startDrag(ev, wrap, rect) {
     updateRectReadout();
   };
 
-  const pads = cropPads(), ratio = cropRatio();
+  const ratio = cropRatio();
   const move = e => {
     const dx = e.clientX - start.sx;
     const dy = e.clientY - start.sy;
     const MIN = 8;
-    const minBX = pads ? -maxW : 0, maxBX = pads ? 2 * maxW : maxW;
-    const minBY = pads ? -maxH : 0, maxBY = pads ? 2 * maxH : maxH;
+    const minBX = -maxW, maxBX = 2 * maxW;
+    const minBY = -maxH, maxBY = 2 * maxH;
     let { x, y, w, h } = start;
     if (!isHandle) {
       x = Math.min(Math.max(start.x + dx, minBX), maxBX - w);
       y = Math.min(Math.max(start.y + dy, minBY), maxBY - h);
     } else if (ratio) {
-      ({ x, y, w, h } = ratioResize(start, direction, dx, dy, ratio, maxW, maxH, MIN));
+      ({ x, y, w, h } = ratioResize(start, direction, dx, dy, ratio,
+        { minX: minBX, maxX: maxBX, minY: minBY, maxY: maxBY }, MIN));
     } else {
       let left = start.x, top = start.y, right = start.x + start.w, bottom = start.y + start.h;
       if (direction.includes("w")) left = Math.min(Math.max(left + dx, minBX), right - MIN);
@@ -1137,14 +1130,13 @@ function displayToSourceRect(rect) {
   if (!img) return null;
   const sx = img.naturalWidth / img.clientWidth;
   const sy = img.naturalHeight / img.clientHeight;
-  // 面板图允许负坐标, 越界部分显示为白色
-  const src = {
+  return {
+    // 允许负坐标, 越界部分面板图填白, 其余透明
     x: Math.round(rect.x * sx),
     y: Math.round(rect.y * sy),
     w: Math.max(1, Math.round(rect.w * sx)),
     h: Math.max(1, Math.round(rect.h * sy)),
   };
-  return cropPads() ? src : clampRectInto(src, img.naturalWidth, img.naturalHeight);
 }
 
 // 等于默认框选时不存 meta
