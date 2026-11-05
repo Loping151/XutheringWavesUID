@@ -2416,19 +2416,23 @@ const RKO_SCALE = { min: 0.2, max: 3, step: 0.05 };  // 对齐 pile_offset.SCALE
 const RANK_CANVAS = { w: 1050, h: 540, titleH: 500 };
 const RANK_PASTE = { x: 450, y: -120 };
 const PILE_USES = [["", "都用"], ["stamina", "仅体力"], ["rank", "仅排行"]];
-const RANK_LAYER_VER = 2;
+const RANK_LAYER_VER = 3;
 
 function rankLayerUrl(kind, extra = {}) {
   return `${API}/rank-layer?${new URLSearchParams({ kind, ...extra, v: String(RANK_LAYER_VER) })}`;
 }
 
-// 与后端 render_rank_preview 同序: base → pile → text, 整层按 char_mask 抠, 再盖到 bg 上
+function readPixels(img, w, h) {
+  const ctx = offscreen(w, h).getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  return ctx.getImageData(0, 0, w, h).data;
+}
+
+// 逐像素复刻后端 PIL 序列: title.paste(pile, pile) → 写字 → 按 char_mask paste → alpha_composite 到 bg
 function drawRankPreview(canvas, assets, pile, crop, off) {
-  const layer = assets.layer;
-  const lc = layer.getContext("2d");
-  lc.globalCompositeOperation = "source-over";
-  lc.clearRect(0, 0, layer.width, layer.height);
-  lc.drawImage(assets.base, 0, 0);
+  const { w: W, h: H, titleH: TH } = RANK_CANVAS;
+  const lc = assets.layer.getContext("2d", { willReadFrequently: true });
+  lc.clearRect(0, 0, W, TH);
   // 缩放以立绘中心为锚, 与后端 place_rank_pile 同算法 (floor 取整)
   const s = off?.scale ?? 1;
   const { w, h } = crop;
@@ -2436,13 +2440,26 @@ function drawRankPreview(canvas, assets, pile, crop, off) {
   drawCropPadded(lc, pile, crop,
     RANK_PASTE.x + (off?.x || 0) + Math.floor((w - nw) / 2),
     RANK_PASTE.y + (off?.y || 0) + Math.floor((h - nh) / 2), nw, nh);
-  lc.drawImage(assets.text, 0, 0);
-  lc.globalCompositeOperation = "destination-in";
-  lc.drawImage(assets.mask, 0, 0);
-  const c = sizeCanvas(canvas, RANK_CANVAS.w, RANK_CANVAS.h);
-  c.clearRect(0, 0, canvas.width, canvas.height);
-  c.drawImage(assets.bg, 0, 0);
-  c.drawImage(layer, 0, 0);
+  const p = lc.getImageData(0, 0, W, TH).data;
+  assets.px ||= {
+    bg: readPixels(assets.bg, W, H), base: readPixels(assets.base, W, TH),
+    mask: readPixels(assets.mask, W, TH), text: readPixels(assets.text, W, TH),
+  };
+  const { base, mask, text } = assets.px;
+  const out = new ImageData(new Uint8ClampedArray(assets.px.bg), W, H);
+  const o = out.data;
+  for (let i = 0; i < W * TH * 4; i += 4) {
+    const pa = p[i + 3] / 255, ta = text[i + 3] / 255, m = mask[i] / 255;
+    const a1 = pa * pa + mask[i + 1] / 255 * (1 - pa);
+    const tw = ta && a1 * 255 < 0.5 ? 1 : ta;
+    const a = ta + a1 * (1 - ta);
+    const k = a * m * m, kb = 1 - a * m;
+    for (let c = 0; c < 3; c++) {
+      const t1 = p[i + c] * pa + base[i + c] * (1 - pa);
+      o[i + c] = (text[i + c] * tw + t1 * (1 - tw)) * k + o[i + c] * kb;
+    }
+  }
+  sizeCanvas(canvas, W, H).putImageData(out, 0, 0);
 }
 
 function openRankOffsetModal(img) {
