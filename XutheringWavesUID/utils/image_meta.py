@@ -113,20 +113,9 @@ def crop_image(image: Image.Image, crop: Optional[dict]) -> Image.Image:
     return canvas
 
 
-def crop_image_clear(image: Image.Image, crop: Optional[dict]) -> Image.Image:
-    """在内存里应用框选, 越界部分透明。"""
-    image = image.convert("RGBA")
-    if crop is None:
-        return image
-    x, y, w, h = (crop[key] for key in ("x", "y", "w", "h"))
-    return image.crop((x, y, x + w, y + h))
-
-
-def open_meta_image(path: Path, white_pad: bool = True) -> Image.Image:
+def open_meta_image(path: Path) -> Image.Image:
     with Image.open(path) as image:
         image.load()
-        if not white_pad:
-            return crop_image_clear(image, read_crop(path))
         return crop_image(image, read_crop(path)).convert("RGBA")
 
 

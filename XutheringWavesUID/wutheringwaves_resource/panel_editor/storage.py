@@ -18,7 +18,6 @@ from ...utils import name_convert
 from ...utils.image_meta import (
     CacheFingerprint,
     crop_image,
-    crop_image_clear,
     file_fingerprint,
     move_image_meta,
     read_crop,
@@ -270,8 +269,7 @@ def get_or_make_thumb(target: Path, max_size: int = 360, t: Optional[str] = None
     try:
         with Image.open(target) as im:
             if t:
-                crop = read_crop(target)
-                im = crop_image(im, crop) if t == "card" else crop_image_clear(im, crop)
+                im = crop_image(im, read_crop(target))
             box = _display_crop_box(t, im.width, im.height)
             if box:
                 im = im.crop(box)
@@ -291,7 +289,6 @@ thumb_fingerprint = CacheFingerprint(
     _panel_visible_box,
     _cover_box,
     crop_image,
-    crop_image_clear,
     _PANEL_OUT,
     _PANEL_VIS,
     _BG_DISPLAY_RATIO,
