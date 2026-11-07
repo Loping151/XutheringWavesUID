@@ -27,6 +27,7 @@ waves_skin_info = SV("waves收藏图鉴", priority=2)
 
 Args:
     text: 无需参数，留空即可。
+    user_id: 可选，调用方用户 ID（如 QQ 号），MCP 跨平台调用时传入以定位当前用户绑定。留空则使用当前对话发起者。
 """,
 )
 async def send_role_info(bot: Bot, ev: Event):
@@ -60,6 +61,7 @@ async def send_role_info(bot: Bot, ev: Event):
 
 Args:
     text: 无需参数，留空即可。
+    user_id: 可选，调用方用户 ID（如 QQ 号），MCP 跨平台调用时传入以定位当前用户绑定。留空则使用当前对话发起者。
 """,
 )
 async def send_skin_info(bot: Bot, ev: Event):

@@ -577,6 +577,7 @@ async def _forward_upload_to_master(bot: Bot, ev: Event):
 
 Args:
     text: 无需参数，留空即可。
+    user_id: 可选，调用方用户 ID（如 QQ 号），MCP 跨平台调用时传入以定位当前用户绑定。留空则使用当前对话发起者。
 """,
 )
 async def send_card_info(bot: Bot, ev: Event):
@@ -789,6 +790,7 @@ text 是角色名（已自动去掉前缀「角色面板」或「查询」）。
 
 Args:
     text: 角色名。例: "长离" / "椿" / "凌阳"。命令字 `角色面板` 或 `查询` 后跟角色名时 text 是角色名本身。
+    user_id: 可选，调用方用户 ID（如 QQ 号），MCP 跨平台调用时传入以定位当前用户绑定。留空则使用当前对话发起者。
 """,
 )
 async def send_char_detail_msg(bot: Bot, ev: Event):

@@ -5,7 +5,7 @@
 - 磁盘: `PLAYER_PATH/<uid>/rawData.json` (角色展柜) / `charListData.json` (评分缓存) / `baseInfo.json` (账号总览)
 """
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from pydantic_ai import RunContext
 
@@ -58,6 +58,44 @@ async def _read_player_json(uid, filename: str) -> Optional[Any]:
         return None
     from ...utils.player_store import read_player_json
     return await read_player_json(PLAYER_PATH / str(uid) / filename)
+
+
+async def _resolve_target_uid(
+    ev,
+    uid: Optional[str] = None,
+    target_user_id: Optional[str] = None,
+) -> Tuple[Optional[str], Optional[str]]:
+    """统一解析目标 UID 并进行鉴权。
+
+    Returns:
+        (target_uid, error_message): 成功时 error_message 为 None。
+    """
+    target_uid = uid
+    if target_uid:
+        if not _validate_uid(target_uid):
+            return None, "uid 格式错误，须为 9 位数字"
+        target_uid = str(target_uid)
+        if ev is not None and not await _check_uid_belongs(ev, target_uid):
+            return None, "uid 不属于当前用户，仅主人可查他人 UID"
+        return target_uid, None
+
+    if target_user_id and ev is not None:
+        if str(target_user_id) != str(ev.user_id) and not _is_master(ev):
+            return None, "仅主人可按他人 user_id 查询 UID"
+        try:
+            target_uid = await WavesBind.get_uid_by_game(target_user_id, ev.bot_id)
+        except Exception as e:
+            return None, f"按 user_id 查 UID 失败: {e}"
+        if not target_uid:
+            return None, f"用户 {target_user_id} 未绑定任何鸣潮 UID"
+        return target_uid, None
+
+    if ev is not None:
+        target_uid = await _resolve_user_default_uid(ev)
+        if target_uid:
+            return target_uid, None
+
+    return None, "未提供 UID 也找不到默认绑定 UID；告知用户先 `绑定<UID>`"
 
 
 def _score_rating(score: float) -> str:
@@ -138,25 +176,9 @@ async def get_user_wuwa_char_list(
         f"[鸣潮·AI工具] get_user_wuwa_char_list 入口 uid={uid!r} target_user_id={target_user_id!r}"
     )
     ev = ctx.deps.ev if ctx and ctx.deps else None
-    target_uid = uid
-    if target_uid:
-        if not _validate_uid(target_uid):
-            return "uid 格式错误，须为 9 位数字"
-        target_uid = str(target_uid)
-        if ev is not None and not await _check_uid_belongs(ev, target_uid):
-            return "uid 不属于当前用户，仅主人可查他人 UID"
-    else:
-        if target_user_id and ev is not None:
-            if str(target_user_id) != str(ev.user_id) and not _is_master(ev):
-                return "仅主人可按他人 user_id 查询 UID"
-            try:
-                target_uid = await WavesBind.get_uid_by_game(target_user_id, ev.bot_id)
-            except Exception as e:
-                return f"按 user_id 查 UID 失败: {e}"
-        elif ev is not None:
-            target_uid = await _resolve_user_default_uid(ev)
-    if not target_uid:
-        return "未提供 UID 也找不到默认绑定 UID；告知用户先 `绑定<UID>`"
+    target_uid, err = await _resolve_target_uid(ev, uid, target_user_id)
+    if err or not target_uid:
+        return err or "未提供 UID 也找不到默认绑定 UID"
 
     role_map = await get_all_role_detail_info(target_uid)
     if not role_map:
@@ -185,6 +207,7 @@ async def get_user_wuwa_char_detail(
     ctx: RunContext[ToolContext],
     char_name: str,
     uid: Optional[str] = None,
+    target_user_id: Optional[str] = None,
 ) -> str:
     """查询某 UID 某角色的完整面板详情（等级 / 共鸣链 / 武器谐振 / 技能等级 / 装备的 5 个声骸）。
 
@@ -195,27 +218,20 @@ async def get_user_wuwa_char_detail(
     Args:
         char_name: 角色中文名。模糊匹配。
         uid: 鸣潮 9 位 UID。留空则用当前对话用户的默认绑定 UID。
+        target_user_id: 可选，目标用户 user_id（QQ 号）。和 uid 二选一即可，uid 优先。
 
     Returns:
         Markdown 格式的角色完整面板详情。
     """
     logger.info(
-        f"[鸣潮·AI工具] get_user_wuwa_char_detail 入口 char_name={char_name!r} uid={uid!r}"
+        f"[鸣潮·AI工具] get_user_wuwa_char_detail 入口 char_name={char_name!r} uid={uid!r} target_user_id={target_user_id!r}"
     )
     if not char_name:
         return "请提供 char_name 角色名"
     ev = ctx.deps.ev if ctx and ctx.deps else None
-    target_uid = uid
-    if target_uid:
-        if not _validate_uid(target_uid):
-            return "uid 格式错误，须为 9 位数字"
-        target_uid = str(target_uid)
-        if ev is not None and not await _check_uid_belongs(ev, target_uid):
-            return "uid 不属于当前用户，仅主人可查他人 UID"
-    elif ev is not None:
-        target_uid = await _resolve_user_default_uid(ev)
-    if not target_uid:
-        return "未提供 UID 也找不到默认绑定 UID"
+    target_uid, err = await _resolve_target_uid(ev, uid, target_user_id)
+    if err or not target_uid:
+        return err or "未提供 UID 也找不到默认绑定 UID"
 
     role_map = await get_all_role_detail_info(target_uid)
     if not role_map:
@@ -270,6 +286,7 @@ async def get_user_wuwa_char_detail(
 async def get_user_wuwa_char_scores(
     ctx: RunContext[ToolContext],
     uid: Optional[str] = None,
+    target_user_id: Optional[str] = None,
     top_n: int = 20,
 ) -> str:
     """查询某 UID 的练度评分排行（来自 charListData.json，XW 评分缓存）。
@@ -280,26 +297,19 @@ async def get_user_wuwa_char_scores(
 
     Args:
         uid: 鸣潮 9 位 UID。留空则用当前对话用户的默认绑定 UID。
+        target_user_id: 可选，目标用户 user_id（QQ 号）。和 uid 二选一即可，uid 优先。
         top_n: 返回前 N 个角色，默认 20。
 
     Returns:
         Markdown 表格 (排名 / 角色名 / 评分 / 评级)。
     """
     logger.info(
-        f"[鸣潮·AI工具] get_user_wuwa_char_scores 入口 uid={uid!r} top_n={top_n}"
+        f"[鸣潮·AI工具] get_user_wuwa_char_scores 入口 uid={uid!r} target_user_id={target_user_id!r} top_n={top_n}"
     )
     ev = ctx.deps.ev if ctx and ctx.deps else None
-    target_uid = uid
-    if target_uid:
-        if not _validate_uid(target_uid):
-            return "uid 格式错误，须为 9 位数字"
-        target_uid = str(target_uid)
-        if ev is not None and not await _check_uid_belongs(ev, target_uid):
-            return "uid 不属于当前用户，仅主人可查他人 UID"
-    elif ev is not None:
-        target_uid = await _resolve_user_default_uid(ev)
-    if not target_uid:
-        return "未提供 UID 也找不到默认绑定 UID"
+    target_uid, err = await _resolve_target_uid(ev, uid, target_user_id)
+    if err or not target_uid:
+        return err or "未提供 UID 也找不到默认绑定 UID"
 
     data = await _read_player_json(target_uid, "charListData.json")
     if not isinstance(data, dict) or not data:
@@ -332,6 +342,7 @@ async def get_user_wuwa_char_scores(
 async def get_user_wuwa_baseinfo(
     ctx: RunContext[ToolContext],
     uid: Optional[str] = None,
+    target_user_id: Optional[str] = None,
 ) -> str:
     """查询某 UID 的鸣潮账号基本信息（漂泊者等级 / 世界等级 / 活跃天数 / 成就 / 角色数 / 奇藏箱数 / 周本进度等）。
 
@@ -340,23 +351,18 @@ async def get_user_wuwa_baseinfo(
 
     Args:
         uid: 鸣潮 9 位 UID。留空则用当前对话用户的默认绑定 UID。
+        target_user_id: 可选，目标用户 user_id（QQ 号）。和 uid 二选一即可，uid 优先。
 
     Returns:
         Markdown 文本，含账号概览各项数值。
     """
-    logger.info(f"[鸣潮·AI工具] get_user_wuwa_baseinfo 入口 uid={uid!r}")
+    logger.info(
+        f"[鸣潮·AI工具] get_user_wuwa_baseinfo 入口 uid={uid!r} target_user_id={target_user_id!r}"
+    )
     ev = ctx.deps.ev if ctx and ctx.deps else None
-    target_uid = uid
-    if target_uid:
-        if not _validate_uid(target_uid):
-            return "uid 格式错误，须为 9 位数字"
-        target_uid = str(target_uid)
-        if ev is not None and not await _check_uid_belongs(ev, target_uid):
-            return "uid 不属于当前用户，仅主人可查他人 UID"
-    elif ev is not None:
-        target_uid = await _resolve_user_default_uid(ev)
-    if not target_uid:
-        return "未提供 UID 也找不到默认绑定 UID"
+    target_uid, err = await _resolve_target_uid(ev, uid, target_user_id)
+    if err or not target_uid:
+        return err or "未提供 UID 也找不到默认绑定 UID"
 
     data = await _read_player_json(target_uid, "baseInfo.json")
     if not isinstance(data, dict) or not data:

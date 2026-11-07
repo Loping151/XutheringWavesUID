@@ -21,6 +21,7 @@ text 可附页码（数字），分页查看。
 
 Args:
     text: 命令字 + 可选页码。例: "声骸列表" / "声骸列表2" / "声骸"。
+    user_id: 可选，调用方用户 ID（如 QQ 号），MCP 跨平台调用时传入以定位当前用户绑定。留空则使用当前对话发起者。
 """,
 )
 async def send_echo_list_msg(bot: Bot, ev: Event):

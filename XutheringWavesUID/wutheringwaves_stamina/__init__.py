@@ -28,6 +28,7 @@ waves_daily_info = SV("waves查询体力")
 
 Args:
     text: 无需参数，留空即可。
+    user_id: 可选，调用方用户 ID（如 QQ 号），MCP 跨平台调用时传入以定位当前用户绑定。留空则使用当前对话发起者。
 """,
 )
 async def send_daily_info_pic(bot: Bot, ev: Event):
