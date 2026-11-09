@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 import aiofiles
 from gsuid_core.logger import logger
 
+from .player_store import write_player_json
 from .resource.RESOURCE_PATH import PLAYER_PATH
 
 
@@ -31,24 +32,27 @@ def _default_char_record() -> Dict[str, Any]:
 
 
 async def load_state(uid: str) -> Optional[Dict[str, Any]]:
-    """None = 读取失败 (caller 应 skip); 文件不存在视为首次, 返回空骨架。"""
+    """None = 读取失败 (caller 应 skip); 文件不存在视为首次, 返回空骨架; 损坏则取开头完整部分。"""
     path = _state_path(uid)
     if not path.exists():
         return {"chars": {}}
     try:
-        async with aiofiles.open(path, "r", encoding="utf-8") as f:
-            return json.loads(await f.read())
+        async with aiofiles.open(path, "rb") as f:
+            raw = await f.read()
     except Exception as e:
         logger.warning(f"[鸣潮·角色状态] load {uid}: {e}")
         return None
+    try:
+        state, _ = json.JSONDecoder().raw_decode(raw.decode("utf-8", "ignore"))
+    except ValueError as e:
+        logger.warning(f"[鸣潮·角色状态] load {uid}: {e}")
+        state = None
+    return state if isinstance(state, dict) else {"chars": {}}
 
 
 async def save_state(uid: str, state: Dict[str, Any]) -> bool:
-    path = _state_path(uid)
-    path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        async with aiofiles.open(path, "w", encoding="utf-8") as f:
-            await f.write(json.dumps(state, ensure_ascii=False, indent=2))
+        await write_player_json(_state_path(uid), state)
         return True
     except Exception as e:
         logger.warning(f"[鸣潮·角色状态] save {uid}: {e}")

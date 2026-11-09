@@ -258,9 +258,22 @@ class WavesUser(User, table=True):
     @classmethod
     @with_session
     async def select_data_by_cookie(
-        cls: Type[T_WavesUser], session: AsyncSession, cookie: str
+        cls: Type[T_WavesUser], session: AsyncSession, cookie: str, game_id: Optional[int] = None
     ) -> Optional[T_WavesUser]:
-        sql = select(cls).where(cls.cookie == cookie)
+        filters = [cls.cookie == cookie]
+        if game_id is not None:
+            filters.append(cls.game_id == game_id)
+        sql = select(cls).where(*filters)
+        result = await session.execute(sql)
+        data = result.scalars().all()
+        return data[0] if data else None
+
+    @classmethod
+    @with_session
+    async def select_data_by_bat(
+        cls: Type[T_WavesUser], session: AsyncSession, bat: str
+    ) -> Optional[T_WavesUser]:
+        sql = select(cls).where(cls.bat == bat)
         result = await session.execute(sql)
         data = result.scalars().all()
         return data[0] if data else None

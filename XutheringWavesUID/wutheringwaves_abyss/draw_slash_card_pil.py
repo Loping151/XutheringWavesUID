@@ -44,6 +44,7 @@ from ..utils.fonts.waves_fonts import (
     waves_font_42,
 )
 from ..utils.resource.RESOURCE_PATH import SLASH_PATH, PLAYER_PATH
+from ..wutheringwaves_config import WutheringWavesConfig, PREFIX
 
 TEXT_PATH = Path(__file__).parent / "texture2d"
 
@@ -95,6 +96,8 @@ async def get_slash_data(uid: str, ck: str, is_self_ck: bool) -> Union[SlashDeta
     slash_data = slash_data.data
     if not slash_data or (isinstance(slash_data, dict) and not slash_data.get("isUnlock", False)):
         if not is_self_ck:
+            if slash_data is None and await waves_api.is_hidden_to_guest(uid, ck):
+                return f"用户未展示挑战数据, 请尝试【{PREFIX}登录】"
             return SLASH_ERROR_MESSAGE_NO_UNLOCK
         return SLASH_ERROR_MESSAGE_NO_DATA
     else:
@@ -365,7 +368,6 @@ async def upload_slash_record(
     user_id: str = "",
     bot_id: str = "",
 ):
-    from ..wutheringwaves_config import WutheringWavesConfig, PREFIX
     from ..utils.util import resolve_hide_uid
 
     WavesToken = WutheringWavesConfig.get_config("WavesToken").data

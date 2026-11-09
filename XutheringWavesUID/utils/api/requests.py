@@ -150,6 +150,14 @@ class WavesApi:
         )
         return waves_user
 
+    async def refresh_bat_by_value(self, bat: str) -> Optional[str]:
+        if not bat:
+            return None
+        waves_user = await WavesUser.select_data_by_bat(bat)
+        if not waves_user or not await self.refresh_bat_token(waves_user):
+            return None
+        return waves_user.bat
+
     async def get_used_headers(
         self, cookie: str, uid: str, needToken=False, game_id: Optional[int] = WAVES_GAME_ID
     ) -> Dict[str, Any]:
@@ -166,6 +174,7 @@ class WavesApi:
             game_id=game_id,
         ) or await WavesUser.select_data_by_cookie(
             cookie=cookie,
+            game_id=game_id,
         )
 
         if not waves_user:
@@ -279,6 +288,8 @@ class WavesApi:
         random.shuffle(user_list)
         deep_probe = 0
         for user in user_list:
+            if user.game_id != WAVES_GAME_ID:
+                continue
             if self.is_net(user.uid):
                 # 国际服账号 cookie 是 launcher auto_token，作为 kurobbs JWT 用必失败
                 continue
@@ -348,7 +359,7 @@ class WavesApi:
             "serverId": self.get_server_id(roleId, serverId),
             "roleId": roleId,
         }
-        return await self._waves_request(REFRESH_URL, "POST", header, data=data)
+        return await self._waves_request(REFRESH_URL, "POST", header, data=data, renew_bat=False)
 
     async def login_log(self, roleId: str, token: str):
         """登录校验"""
@@ -390,6 +401,10 @@ class WavesApi:
         else:
             info = await self._waves_request(BASE_DATA_URL, "POST", header, data=data)
         return info
+
+    async def is_hidden_to_guest(self, roleId: str, token: str) -> bool:
+        info = await self.get_base_info(roleId, token)
+        return info.success and isinstance(info.data, dict) and info.data.get("showToGuest") is False
 
     async def get_sign_in_init(
         self, roleId: str, token: str, gameId: int = WAVES_GAME_ID, serverId: Optional[str] = None
@@ -1124,6 +1139,7 @@ class WavesApi:
         data: Optional[Dict[str, Any]] = None,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        renew_bat: bool = True,
     ) -> KuroApiResp[Union[str, Dict[str, Any], List[Any]]]:
         if header is None:
             header = await get_base_header()
@@ -1180,6 +1196,13 @@ class WavesApi:
                     continue
 
                 response = await do_request(data, client)
+                if (
+                    renew_bat
+                    and response.is_bat_token_invalid
+                    and (bat := await self.refresh_bat_by_value(header.get("b-at", "")))
+                ):
+                    header = {**header, "b-at": bat}
+                    response = await do_request(data, client)
 
                 res_data = response.data or {}
                 if self.captcha_solver and isinstance(res_data, dict) and res_data.get("geeTest") is True:

@@ -69,6 +69,8 @@ async def get_matrix_data(uid: str, ck: str, is_self_ck: bool) -> Union[MatrixDe
     matrix_data = matrix_data.data
     if not matrix_data or (isinstance(matrix_data, dict) and not matrix_data.get("isUnlock", False)):
         if not is_self_ck:
+            if matrix_data is None and await waves_api.is_hidden_to_guest(uid, ck):
+                return f"用户未展示挑战数据, 请尝试【{PREFIX}登录】"
             return MATRIX_ERROR_NO_UNLOCK
         return MATRIX_ERROR_NO_DATA
     else:
