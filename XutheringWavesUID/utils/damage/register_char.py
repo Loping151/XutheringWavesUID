@@ -8,6 +8,7 @@ from .utils import (
     Hack_Shifting_Role_Ids,
     Tune_Strain_Role_Ids,
     Unison_Role_Ids,
+    Unison_Response_Role_Ids,
     temp_atk,
     temp_def,
     hit_damage,
@@ -904,7 +905,7 @@ class Char_1312(CharAbstract):
             title = f"{self.name}-延奏技能"
             msg = "下一位登场角色导电伤害加深20%"
             attr.add_dmg_deepen(0.2, title, msg)
-        if attr.unison_boon and attr.char_damage == skill_damage:
+        if attr.unison_boon and attr.char_damage == skill_damage and check_char_id(attr, Unison_Response_Role_Ids):
             title = f"{self.name}-延奏技能"
             msg = "拥有【同奏增益】时，共鸣技能伤害加深25%"
             attr.add_dmg_deepen(0.25, title, msg)
@@ -1376,6 +1377,66 @@ class Char_1511(CharAbstract):
             title = f"{self.name}-四链"
             msg = "队伍附加【骇破·偏移】后, 全属性伤害加成提升20%"
             attr.add_dmg_bonus(0.2, title, msg)
+
+
+class Char_1512(CharAbstract):
+    id = 1512
+    name = "莉莉"
+    starLevel = 5
+
+    def _do_buff(
+        self,
+        attr: DamageAttribute,
+        chain: int = 0,
+        resonLevel: int = 1,
+        isGroup: bool = True,
+    ):
+        # 共鸣解放-梦芳: 队友施放变奏技能获取1层(一链2层), 上限4层, 同奏队两名队友各变奏两次
+        # 每层攻击按莉莉共鸣效率260%取上限7%
+        boon = 4 if chain >= 1 or attr.env_unison else 2
+        if attr.char_template == temp_atk:
+            title = f"{self.name}-共鸣解放-梦芳"
+            msg = f"{boon}层，队伍中所有角色攻击提升7%*{boon}"
+            attr.add_atk_percent(0.07 * boon, title, msg)
+
+        if chain >= 2:
+            title = f"{self.name}-二链"
+            msg = f"{boon}层【梦芳】，暴击提升2%*{boon}，暴击伤害提升6%*{boon}"
+            attr.add_crit_rate(0.02 * boon)
+            attr.add_crit_dmg(0.06 * boon)
+            attr.add_effect(title, msg)
+
+        # 共鸣回路-斑白眠梦: 可响应同奏的登场角色每层【同奏增益】攻击提升7%, 最多4层
+        if attr.char_template == temp_atk and attr.unison_boon and check_char_id(attr, Unison_Response_Role_Ids):
+            unison = min(attr.unison_boon, 4)
+            title = f"{self.name}-共鸣回路-斑白眠梦"
+            msg = f"{unison}层【同奏增益】，攻击提升7%*{unison}"
+            attr.add_atk_percent(0.07 * unison, title, msg)
+
+        if attr.char_damage == phantom_damage:
+            title = f"{self.name}-共鸣回路-斑白眠梦"
+            msg = "登场角色声骸技能暴击提升10%，暴击伤害提升20%"
+            attr.add_crit_rate(0.1)
+            attr.add_crit_dmg(0.2)
+            attr.add_effect(title, msg)
+
+        title = f"{self.name}-延奏技能"
+        msg = "队伍中的角色全伤害加深25%"
+        attr.add_dmg_deepen(0.25, title, msg)
+
+        if attr.char_template == temp_atk:
+            title = f"{self.name}-合鸣效果-茜染怀想之花"
+            msg = "提供治疗时，队伍中角色攻击提升10%"
+            attr.add_atk_percent(0.1, title, msg)
+            if attr.env_unison and check_char_id(attr, Unison_Role_Ids):
+                msg = "获得同奏、响应同奏时，攻击额外提升15%"
+                attr.add_atk_percent(0.15, title, msg)
+
+        # 安魂
+        weapon_clz = WavesWeaponRegister.find_class(21030076)
+        if weapon_clz:
+            w = weapon_clz(21030076, 90, 6, resonLevel)
+            w.do_action("hit_create_healing", attr, isGroup)
 
 
 class Char_1601(CharAbstract):

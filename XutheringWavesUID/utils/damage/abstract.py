@@ -194,6 +194,10 @@ class WeaponAbstract(object):
         """共鸣技能造成治疗"""
         pass
 
+    def hit_create_healing(self, attr: DamageAttribute, isGroup: bool = False):
+        """重击造成治疗"""
+        pass
+
     def cast_unison(self, attr: DamageAttribute, isGroup: bool = False):
         """获得同奏"""
         pass

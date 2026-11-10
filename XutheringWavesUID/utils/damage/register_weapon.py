@@ -16,6 +16,7 @@ from .utils import (
     Abnormal_Role_Ids,
     Electro_Flare_Role_Ids,
     Unison_Role_Ids,
+    Unison_Response_Role_Ids,
     temp_atk,
     temp_def,
     temp_life,
@@ -1317,6 +1318,28 @@ class Weapon_21030074(WeaponAbstract):
         return True
 
 
+class Weapon_21030076(WeaponAbstract):
+    id = 21030076
+    type = 3
+    name = "安魂"
+
+    # 生命值提升{0}。施放共鸣解放时，回复{1}点协奏能量，每{2}秒可触发1次。
+    # 重击造成治疗时，队伍中的角色获得【落梦归魂】状态，持续{4}秒。
+    # 【落梦归魂】持续期间，若该角色获得同奏或响应同奏，该角色攻击提升{3}，持续{7}秒。
+    # 重击造成治疗时，队伍中的登场角色获得{5}声骸技能伤害加成，持续{6}秒。同名效果之间不可叠加。
+    def hit_create_healing(self, attr: DamageAttribute, isGroup: bool = False):
+        """重击造成治疗"""
+        title = self.get_title()
+        if attr.char_template == temp_atk and attr.env_unison and check_char_id(attr, Unison_Role_Ids):
+            dmg = f"{self.param(3)}"
+            msg = f"【落梦归魂】获得或响应同奏，攻击提升{dmg}"
+            attr.add_atk_percent(calc_percent_expression(dmg), title, msg)
+        if attr.char_damage == phantom_damage:
+            dmg = f"{self.param(5)}"
+            msg = f"重击造成治疗时，登场角色声骸技能伤害加成提升{dmg}"
+            attr.add_dmg_bonus(calc_percent_expression(dmg), title, msg)
+
+
 class Weapon_21030084(WeaponAbstract):
     id = 21030084
     type = 3
@@ -2313,7 +2336,7 @@ class Weapon_21050116(WeaponAbstract):
         electro = attr.env_electro_flare and check_char_id(attr, Electro_Flare_Role_Ids)
         unison = (
             attr.env_unison
-            and check_char_id(attr, Unison_Role_Ids)
+            and check_char_id(attr, Unison_Response_Role_Ids)
             and (attr.unison_boon > 0 or any(x in Unison_Role_Ids for x in attr.teammate_char_ids))
         )
         if electro or unison:

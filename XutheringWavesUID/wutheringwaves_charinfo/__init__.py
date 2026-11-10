@@ -35,7 +35,8 @@ from .upload_card import (
 from .card_utils import (
     CUSTOM_PATH_NAME_MAP,
     get_char_id_and_name,
-    match_hash_id_from_event,
+    match_cards_from_event,
+    send_found_matches,
     send_custom_card_single,
     send_custom_card_single_by_id,
     send_repeated_custom_cards,
@@ -306,18 +307,16 @@ async def repeated_char_card(bot: Bot, ev: Event):
 async def _send_char_card_single(bot: Bot, ev: Event, char, hash_id, card_type):
     if not hash_id:
         at_sender = True if ev.group_id else False
-        target_type = TYPE_MAP.get(card_type, "card")
+        char_id = None
         if char:
             char_id, _, msg = get_char_id_and_name(char)
             if msg:
                 return await bot.send((" " if at_sender else "") + msg, at_sender)
-            match = await match_hash_id_from_event(ev, target_type, char_id)
-        else:
-            match = await match_hash_id_from_event(ev, target_type, None)
-        if not match:
+        matches = await match_cards_from_event(ev, char_id)
+        if not matches:
             msg = "[鸣潮] 未找到相似图片，请提供id或附带图片。"
             return await bot.send((" " if at_sender else "") + msg, at_sender)
-        hash_id = match[0]
+        return await send_found_matches(bot, matches)
     if not char:
         return await send_custom_card_single_by_id(bot, ev, hash_id)
     return await send_custom_card_single(
@@ -890,7 +889,7 @@ async def _send_char_detail_typo(bot: Bot, ev: Event):
 
 
 @waves_new_char_detail.on_regex(
-    rf"^(?P<lead_space>\s+)?(?:(?P<cw1>{_CW})\s*)?(?P<waves_id>\d{{9}})?(?P<char>{PATTERN})(?:\s*(?P<cw2>{_CW})\s*)?(?P<query_type>面板|面版|面包|🍞|mb|声骸(?=替?换)|伤害(?P<damage>(\d+)?))(?:\s*(?P<waves_id_tail>\d{{9}}))?(?:\s*(?P<cw3>{_CW}))?(?P<is_pk>pk|对比|PK|比|比较)?(\s*)?(?P<change_list>((替?换[^换]*)*)?)\s*(?P<cw4>{_CW})?\s*$",
+    rf"^(?P<lead_space>\s+)?(?:(?P<cw1>{_CW})\s*)?(?P<waves_id>\d{{9}})?(?P<char>{PATTERN})(?:\s*(?P<cw2>{_CW})\s*)?(?P<query_type>面板|面版|面包|🍞|mb|limit|声骸(?=替?换)|伤害(?P<damage>(\d+)?))(?:\s*(?P<waves_id_tail>\d{{9}}))?(?:\s*(?P<cw3>{_CW}))?(?P<is_pk>pk|对比|PK|比|比较)?(\s*)?(?P<change_list>((替?换[^换]*)*)?)\s*(?P<cw4>{_CW})?\s*$",
     block=True,
 )
 async def send_char_detail_msg2(bot: Bot, ev: Event):
@@ -928,7 +927,7 @@ async def _send_char_detail2(bot: Bot, ev: Event):
     if isinstance(query_type, str) and "伤害" in query_type and not damage:
         damage = "1"
 
-    is_limit_query = False
+    is_limit_query = query_type == "limit"
     if isinstance(char, str) and ("极限" in char or "limit" in char):
         is_limit_query = True
         char = char.replace("极限", "").replace("limit", "")

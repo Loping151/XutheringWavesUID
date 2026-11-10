@@ -118,8 +118,9 @@ def get_weapon_detail(
             stat["value"] = f"{int(stat['value'])}"
 
     result.sub_effect = {}
+    effect_head = result.effect.replace("生命值提升", "生命提升", 1)
     for i, v in enumerate(fixed_name):
-        if result.effect.startswith(v):
+        if effect_head.startswith(v):
             value = weapon_data["param"][0][resonLevel - 1]
             name = v.replace("提升", "").replace("全", "")
             result.sub_effect = {"name": name, "value": f"{value}"}

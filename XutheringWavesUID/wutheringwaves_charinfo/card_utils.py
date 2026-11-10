@@ -63,6 +63,32 @@ ORB_FEATURES = 2000
 CROP_PORTRAIT = (85, 265, 525, 1070)
 CROP_LANDSCAPE = (520, 0, 1100, 620)
 
+ANCHOR_THRESHOLD = 0.6
+ANCHOR_MARGIN = 8
+_STAMINA_ICON = Path(__file__).parents[1] / "wutheringwaves_stamina" / "texture2d" / "活跃度.png"
+
+# 立绘区布局: width 单块原始宽度, max_cols 最多横拼几列, crop 立绘区, gap 竖向两块的最小间距,
+# search 比对的自定义图目录, anchors 定位用的固定元素 [(图, 边长(None=原尺寸), 在单块上的位置)]
+ART_LAYOUTS = {
+    "card": {
+        "width": 1200,
+        "max_cols": 3,
+        "crop": CROP_PORTRAIT,
+        "gap": 1000,
+        "search": ["card"],
+        "anchors": [(Path(__file__).parent / "texture2d" / "char_fg.png", None, (25, 170))],
+    },
+    "stamina": {
+        "width": 1150,
+        "max_cols": 1,
+        "crop": CROP_LANDSCAPE,
+        "gap": 600,
+        "search": ["stamina", "bg"],
+        # HTML 渲染与 PIL 渲染的活跃度图标
+        "anchors": [(_STAMINA_ICON, 56, (60, 568)), (_STAMINA_ICON, 80, (67, 509))],
+    },
+}
+
 CUSTOM_PATH_NAME_MAP = {
     "card": "面板",
     "bg": "背景",
@@ -166,121 +192,127 @@ def _compute_orb_features_from_image(image: Image.Image):
     return pts, descriptors
 
 
+_anchor_cache: Dict[Tuple[Path, Optional[int]], tuple] = {}
+
+
+def _anchor_template(path: Path, size: Optional[int]):
+    key = (path, size)
+    if key not in _anchor_cache:
+        img = Image.open(path).convert("RGBA")
+        if size:
+            img = img.resize((size, size), Image.Resampling.LANCZOS)
+        arr = np.array(img)
+        gray = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_RGB2GRAY)
+        mask = ((arr[:, :, 3] > 200) * 255).astype(np.uint8)
+        _anchor_cache[key] = gray, mask
+    return _anchor_cache[key]
+
+
+def _anchor_tops(gray, layout: dict, dx: int) -> List[int]:
+    """在原始比例的灰度图里找锚点, 返回 x 偏移为 dx 的那一列中每一块的顶部 y"""
+    tops: List[int] = []
+    for path, size, (ax, ay) in layout["anchors"]:
+        tpl, mask = _anchor_template(path, size)
+        left = max(0, dx + ax - ANCHOR_MARGIN)
+        strip = gray[:, left : dx + ax + tpl.shape[1] + ANCHOR_MARGIN]
+        if strip.shape[0] < tpl.shape[0] or strip.shape[1] < tpl.shape[1]:
+            continue
+        score = cv2.matchTemplate(strip, tpl, cv2.TM_CCOEFF_NORMED, mask=mask)
+        score = np.nan_to_num(score, posinf=0.0, neginf=0.0).max(axis=1)
+        while True:
+            y = int(score.argmax())
+            if score[y] < ANCHOR_THRESHOLD:
+                break
+            tops.append(y - ay)
+            score[max(0, y - layout["gap"]) : y + layout["gap"]] = 0
+    return sorted(tops)
+
+
+def _art_tiles(image: Image.Image) -> List[Tuple[str, Image.Image]]:
+    """用锚点找出图里每一块面板/体力卡, 返回 [(布局类型, 立绘区)]。
+
+    横拼: 依次假设 1~max_cols 列, 取首个能找到锚点的列数; 竖拼: 同一列里的多个锚点。
+    """
+    for t, layout in ART_LAYOUTS.items():
+        left, top, right, bottom = layout["crop"]
+        for cols in range(1, layout["max_cols"] + 1):
+            scale = image.width / (layout["width"] * cols)
+            base = image.resize((layout["width"] * cols, int(image.height / scale)))
+            gray = np.array(base.convert("L"))
+            tiles = []
+            for i in range(cols):
+                dx = i * layout["width"]
+                for dy in _anchor_tops(gray, layout, dx):
+                    crop = base.crop((dx + left, dy + top, dx + right, dy + bottom))
+                    crop = crop.resize((crop.width * 2, crop.height * 2), Image.Resampling.LANCZOS)
+                    tiles.append((t, crop))
+            if tiles:
+                return tiles
+    return []
+
+
+def _best_orb_match(feat_new, search_types: List[str], char_id: Optional[str]) -> Tuple[float, Optional[Path]]:
+    best_sim = 0.0
+    best_path: Optional[Path] = None
+    for t in search_types:
+        base = CUSTOM_PATH_MAP.get(t, CUSTOM_CARD_PATH)
+        if char_id:
+            char_dirs = [base / f"{char_id}"]
+        else:
+            char_dirs = [d for d in base.iterdir() if d.is_dir()] if base.exists() else []
+        for dir_path in char_dirs:
+            if not dir_path.exists():
+                continue
+            for img_path in _iter_images(dir_path):
+                feat_old = get_orb_features(img_path)
+                if feat_old is None:
+                    continue
+                sim = _orb_similarity(feat_new, feat_old)
+                if sim is not None and sim > best_sim:
+                    best_sim = sim
+                    best_path = img_path
+        if best_sim >= ORB_THRESHOLD:
+            break
+    return best_sim, best_path
+
+
 @to_thread
-def _match_one_image_orb(
-    image_bytes: bytes,
-    search_types: List[str],
-    target_type: str,
-    char_id: Optional[str],
-) -> Tuple[float, Optional[Path], Optional[str]]:
-    """单张候选图片的 ORB 处理 + 库内匹配, 全部同步, 用线程池执行避免阻塞 loop"""
+def _match_one_image_orb(image_bytes: bytes, char_id: Optional[str]) -> List[Path]:
+    """单张图片: 切出各块立绘区后逐块 ORB 比对, 全部同步, 用线程池执行避免阻塞 loop"""
     try:
         image = Image.open(BytesIO(image_bytes)).convert("RGB")
     except Exception:
-        return 0.0, None, None
+        return []
 
-    if image.width > image.height:
-        crop_boxes = [CROP_LANDSCAPE]
-    else:
-        crop_boxes = [CROP_PORTRAIT]
-        if image.height > 4000:
-            left0, top0, right0, bottom0 = CROP_PORTRAIT
-            crop_boxes.append((left0, top0 + 875, right0, bottom0 + 875))
-
-    best_sim = 0.0
-    best_path: Optional[Path] = None
-    best_char_id: Optional[str] = None
-
-    for crop_box in crop_boxes:
-        left, top, right, bottom = crop_box
-
-        if left >= image.width or top >= image.height:
-            crop = image
-        else:
-            left = max(0, left)
-            top = max(0, top)
-            right = min(right, image.width)
-            bottom = min(bottom, image.height)
-            if right <= left or bottom <= top:
-                crop = image
-            else:
-                crop = image.crop((left, top, right, bottom))
-        crop = crop.resize((crop.width * 2, crop.height * 2), Image.Resampling.LANCZOS)
+    matched: List[Path] = []
+    for t, crop in _art_tiles(image):
         feat_new = _compute_orb_features_from_image(crop)
         if feat_new is None:
             continue
-
-        for current_type in search_types:
-            if char_id:
-                char_dirs = [CUSTOM_PATH_MAP.get(current_type, CUSTOM_CARD_PATH) / f"{char_id}"]
-            else:
-                char_dirs = []
-                base = CUSTOM_PATH_MAP.get(current_type, CUSTOM_CARD_PATH)
-                if base.exists():
-                    for d in base.iterdir():
-                        if d.is_dir():
-                            char_dirs.append(d)
-
-            for dir_path in char_dirs:
-                if not dir_path.exists():
-                    continue
-                for img_path in _iter_images(dir_path):
-                    feat_old = get_orb_features(img_path)
-                    if feat_old is None:
-                        continue
-                    sim = _orb_similarity(feat_new, feat_old)
-                    if sim is None:
-                        continue
-                    if sim > best_sim:
-                        best_sim = sim
-                        best_path = img_path
-                        best_char_id = dir_path.name
-
-            if best_sim >= ORB_THRESHOLD:
-                break
-
-        if best_sim >= ORB_THRESHOLD:
-            break
-
-    return best_sim, best_path, best_char_id
+        sim, path = _best_orb_match(feat_new, ART_LAYOUTS[t]["search"], char_id)
+        if path is not None and sim >= ORB_THRESHOLD:
+            matched.append(path)
+    return matched
 
 
-async def match_hash_id_from_event(
+async def match_cards_from_event(
     ev: Event,
-    target_type: str,
     char_id: Optional[str] = None,
-) -> Optional[Tuple[str, Path, float, str]]:
+) -> List[Tuple[str, str, Path]]:
+    """从消息图片里找出所有相似的自定义图, 返回 [(类型, 角色id, 路径)]"""
     if cv2 is None:
         logger.warning("[鸣潮·卡片工具] 未安装opencv-python，无法使用相似度识别。")
-        return None
+        return []
 
-    urls = await get_image(ev)
-    if not urls:
-        return None
-
-    best_sim = 0.0
-    best_path: Optional[Path] = None
-    best_char_id: Optional[str] = None
-
-    search_types = [target_type]
-    other_types = [t for t in ["card", "bg", "stamina"] if t != target_type]
-    search_types.extend(other_types)
-
-    for url in urls:
+    matches: List[Tuple[str, str, Path]] = []
+    for url in await get_image(ev):
         image_bytes = await _fetch_image_bytes(url)
         if not image_bytes:
             continue
-        sim, path, c_id = await _match_one_image_orb(image_bytes, search_types, target_type, char_id)
-        if sim > best_sim:
-            best_sim = sim
-            best_path = path
-            best_char_id = c_id
-
-    if best_path is None or best_char_id is None:
-        return None
-    if best_sim < ORB_THRESHOLD:
-        return None
-    return get_hash_id(best_path.name), best_path, best_sim, best_char_id
+        for path in await _match_one_image_orb(image_bytes, char_id):
+            if all(path != m[2] for m in matches):
+                matches.append((card_hash_index.detect_type(path) or "card", path.parent.name, path))
+    return matches
 
 
 def _shorten_rel_path(path: Path) -> str:
@@ -725,7 +757,7 @@ async def _one_card_img(t: str, path: Path) -> str:
     return await convert_img(cropped if cropped is not None else path, is_base64=True)
 
 
-async def _send_found_matches(bot: Bot, matches) -> None:
+async def send_found_matches(bot: Bot, matches) -> None:
     """命中非空: 单张直接发; 多张走转发消息 (来源「xx角色的xx图」+ 图)。"""
     if len(matches) == 1:
         _t, _cid, path = matches[0]
@@ -757,7 +789,7 @@ async def send_custom_card_single(
 
     matches = card_hash_index.find(hash_id)
     if matches:
-        return await _send_found_matches(bot, matches)
+        return await send_found_matches(bot, matches)
 
     if not card_hash_index.list_dir(target_type, char_id):
         msg = f"[鸣潮] 角色【{char}】暂未上传过{type_label}图！"
@@ -776,4 +808,4 @@ async def send_custom_card_single_by_id(
     if not matches:
         msg = f"[鸣潮] 未找到id为【{hash_id}】的图片！"
         return await bot.send((" " if at_sender else "") + msg, at_sender)
-    await _send_found_matches(bot, matches)
+    await send_found_matches(bot, matches)

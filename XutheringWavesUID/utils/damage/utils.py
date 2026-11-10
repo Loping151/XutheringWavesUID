@@ -87,6 +87,8 @@ cast_variation = "cast_variation"
 cast_tunebreak = "cast_tunebreak"
 # 共鸣技能造成治疗
 skill_create_healing = "skill_create_healing"
+# 重击造成治疗
+hit_create_healing = "hit_create_healing"
 # 获得同奏
 cast_unison = "cast_unison"
 # 消耗协奏能量
@@ -152,6 +154,9 @@ Hack_Shifting_Role_Ids = [1308, 1511]
 
 # 可获得同奏或响应同奏 角色 (Unison)
 Unison_Role_Ids = [1304, 1311, 1312]
+
+# 可响应同奏 角色, 仅这些角色可获得【同奏增益】
+Unison_Response_Role_Ids = [1311, 1312]
 
 # 可施加任意【异常效应】的角色并集 (光噪/虚湮/聚爆/霜渐/风蚀/电磁)
 Abnormal_Role_Ids = sorted(
