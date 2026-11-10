@@ -337,7 +337,7 @@ def _render_slash_pil(period: int, endless_data: Dict[str, Any], buff_data):
             card_w = (width - 120 - MONSTER_COL_GAP * (MONSTER_COLS - 1)) // MONSTER_COLS
             card_h = MONSTER_CARD_H
 
-            for monster_info in list(monsters.values())[:8]:
+            for monster_id, monster_info in list(monsters.items())[:8]:
                 name = monster_info.get("Name", "未知")
                 element_id = monster_info.get("Element", 0)
                 element_name = ELEMENT_NAME_MAP.get(element_id, "无")
@@ -349,6 +349,7 @@ def _render_slash_pil(period: int, endless_data: Dict[str, Any], buff_data):
                     card_w,
                     card_h,
                     name,
+                    monster_id,
                     element_name,
                     color,
                     level,
@@ -455,7 +456,7 @@ def _draw_floor_section(
         card_w = (width - 60 - MONSTER_COL_GAP * (MONSTER_COLS - 1)) // MONSTER_COLS
         card_h = MONSTER_CARD_H
 
-        for monster_info in list(monsters.values())[:8]:
+        for monster_id, monster_info in list(monsters.items())[:8]:
             name = monster_info.get("Name", "未知")
             element_id = monster_info.get("Element", 0)
             element_name = ELEMENT_NAME_MAP.get(element_id, "未知")
@@ -468,6 +469,7 @@ def _draw_floor_section(
                 card_w,
                 card_h,
                 name,
+                monster_id,
                 element_name,
                 color,
                 level,
@@ -553,6 +555,7 @@ def _draw_challenge_monster_card(
     width: int,
     height: int,
     name: str,
+    monster_id: Union[str, int],
     element_name: str,
     color,
     level: int = 0,
@@ -568,7 +571,7 @@ def _draw_challenge_monster_card(
     )
 
     icon_size = 48
-    icon = _decode_data_url(get_monster_icon(name), icon_size)
+    icon = _decode_data_url(get_monster_icon(name, monster_id), icon_size)
     _draw_round_icon(base, icon, (x + 8, y + 8, x + 8 + icon_size, y + 8 + icon_size), color)
 
     text_x = x + 64
@@ -724,7 +727,7 @@ def _prepare_matrix_info(matrix_data: Dict[str, Any]) -> tuple[str, list[Dict], 
             "name": name,
             "tags": tags,
             "desc_lines": desc_lines[:4],
-            "icon": _decode_data_url(get_monster_icon(name), 62),
+            "icon": _decode_data_url(get_monster_icon(name, wave.get("MonsterId", 0)), 62),
         })
 
     roles = []

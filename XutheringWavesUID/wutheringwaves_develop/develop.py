@@ -310,7 +310,7 @@ def _compose_develop_canvas(all_card: List[Image.Image]) -> Image.Image:
 async def draw_material_card(cultivate_cost_list: List[CultivateCost], title: str):
     material_imgs = []
     for cultivate_cost in cultivate_cost_list:
-        material_imgs.append(await get_material_img(cultivate_cost.id))
+        material_imgs.append(await get_material_img(cultivate_cost.id, cultivate_cost.iconUrl))
     return await _compose_material_card(cultivate_cost_list, title, material_imgs)
 
 

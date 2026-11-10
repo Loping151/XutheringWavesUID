@@ -20,17 +20,17 @@ from ..util import (
     generate_random_string,
 )
 
-KURO_VERSION = "3.1.3"
+KURO_VERSION = "3.5.0"
 PLATFORM_SOURCE = "ios"
 CONTENT_TYPE = "application/x-www-form-urlencoded; charset=utf-8"
 IOS_USER_AGENT = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) "
-    "AppleWebKit/605.1.15 (KHTML, like Gecko)  KuroGameBox/3.1.3"
+    "AppleWebKit/605.1.15 (KHTML, like Gecko)  KuroGameBox/3.5.0"
 )
 ANDROID_USER_AGENT = (
     "Mozilla/5.0 (Linux; Android 16; 25098PN5AC Build/BP2A.250605.031.A3; wv) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.34 "
-    "Mobile Safari/537.36 Kuro/3.0.0 KuroGameBox/3.0.0"
+    "Mobile Safari/537.36 Kuro/3.5.0 KuroGameBox/3.5.0"
 )
 
 

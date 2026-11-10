@@ -1024,6 +1024,7 @@ async def pic_download_from_url(
         img = Image.open(_path).convert("RGBA")
     except Exception as e:
         logger.warning(f"[鸣潮·图像] 打开图片失败: {_path}, {e}")
+        _path.unlink(missing_ok=True)
         raise
 
     if _path != webp_path:

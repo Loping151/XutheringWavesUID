@@ -1,6 +1,6 @@
 import asyncio
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Union, Optional
 from pathlib import Path
 import base64
 from io import BytesIO
@@ -17,7 +17,7 @@ from ..utils.image import ELEMENT_COLOR_MAP, pil_to_b64, img_to_b64
 from ..utils.resource.download_file import get_phantom_img
 from ..utils.image import get_square_avatar, get_square_avatar_path
 from ..utils.name_convert import echo_name_to_echo_id, char_name_to_char_id
-from ..utils.resource.RESOURCE_PATH import PHANTOM_PATH
+from ..utils.resource.RESOURCE_PATH import PHANTOM_PATH, MONSTER_PATH
 from ..utils.render_utils import (
     PLAYWRIGHT_AVAILABLE,
     image_to_base64,
@@ -49,15 +49,17 @@ ELEMENT_NAME_MAP = {
 
 
 
-def get_monster_icon(monster_name: str) -> Optional[str]:
-    echo_id = echo_name_to_echo_id(monster_name)
-    if echo_id:
+def get_monster_icon(monster_name: str, monster_id: Union[str, int]) -> Optional[str]:
+    path = MONSTER_PATH / f"monster_{monster_id}.png"
+    if not path.exists():
+        echo_id = echo_name_to_echo_id(monster_name)
+        if not echo_id:
+            return None
         path = PHANTOM_PATH / f"phantom_{echo_id}.png"
         if not path.exists():
             path = PHANTOM_PATH / "phantom_390070051.png"
-        b64 = img_to_b64(path, quality=75, bake=True, cover_size=(128, 128))
-        return b64 if b64 else None
-    return None
+    b64 = img_to_b64(path, quality=75, bake=True, cover_size=(128, 128))
+    return b64 if b64 else None
 
 
 def _clean_text(text: str) -> str:
@@ -82,12 +84,12 @@ async def _process_floor_data(floor_data: Dict[str, Any]) -> Dict[str, Any]:
     raw_monsters = floor_data.get("Monsters", {})
     
     # 只取前8个怪物
-    for m_info in list(raw_monsters.values())[:8]:
+    for m_id, m_info in list(raw_monsters.items())[:8]:
         m_name = m_info.get("Name", "未知")
         m_element_id = m_info.get("Element", 0)
         element_name = ELEMENT_NAME_MAP.get(m_element_id, "未知")
         
-        icon_base64 = get_monster_icon(m_name)
+        icon_base64 = get_monster_icon(m_name, m_id)
         
         monsters_data.append({
             "name": m_name,
@@ -248,7 +250,7 @@ async def draw_matrix_wiki_render(season: Optional[int] = None) -> Optional[byte
         seen_names.add(name)
 
         # 通过名字反查本地声骸图标
-        icon_base64 = get_monster_icon(name)
+        icon_base64 = get_monster_icon(name, wave.get("MonsterId", 0))
 
         # 提取Tags
         tags = []
@@ -401,12 +403,12 @@ async def draw_slash_wiki_render(period: Optional[int] = None) -> Optional[bytes
         raw_monsters = floor_data.get("Monsters", {})
         level = floor_data.get("Level", 0)
 
-        for m_info in list(raw_monsters.values())[:8]:
+        for m_id, m_info in list(raw_monsters.items())[:8]:
             m_name = m_info.get("Name", "未知")
             m_element_id = m_info.get("Element", 0)
             element_name = ELEMENT_NAME_MAP.get(m_element_id, "未知")
 
-            icon_base64 = get_monster_icon(m_name)
+            icon_base64 = get_monster_icon(m_name, m_id)
 
             monsters_data.append({
                 "name": m_name,
