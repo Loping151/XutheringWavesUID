@@ -1,460 +1,88 @@
+{% import "wiki/_challenge_base.html" as ui with context %}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wuthering Waves Tower Wiki</title>
     <style>
-        @import url('{{ font_css_url }}');
+        {{ ui.base_css() }}
 
-        :root {
-            --bg-color: #0f0f13;
-            --card-bg: rgba(20, 20, 25, 0.88);
-            --main-color: {{ theme_color }};
-            --text-main: #ffffff;
-            --text-sub: #a0a0a0;
-            --border-color: rgba(255, 255, 255, 0.1);
-        }
+        .wings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; }
+        .wing .lineup { margin-top: 18px; }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            background-color: transparent;
-            font-family: 'Source Han Sans CN', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif;
-            color: var(--text-main);
-            width: 1000px;
-            overflow: hidden;
-        }
-
-        .container {
-            width: 1000px;
-            min-height: 400px;
-            position: relative;
-            background-color: var(--bg-color);
-            background-image: url('{{ bg_url }}');
-            background-size: cover;
-            background-position: center;
-        }
-
-        .overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(to bottom, rgba(15, 15, 19, 0.4), rgba(15, 15, 19, 0.95) 80%),
-                        linear-gradient(to right, rgba(78, 124, 255, 0.15) 0%, transparent 40%);
-            z-index: 1;
-        }
-
-        .content {
-            position: relative;
-            z-index: 2;
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            gap: 25px;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 15px;
-        }
-
-        .title {
-            font-size: 72px;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 4px 20px rgba(0,0,0,0.8);
-            margin-bottom: 10px;
-            letter-spacing: 4px;
-        }
-
-        .subtitle {
-            font-size: 26px;
-            color: #ccc;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 8px 28px;
-            border-radius: 24px;
-            display: inline-block;
-            border: 1px solid rgba(255,255,255,0.15);
-            letter-spacing: 2px;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 24px;
-            backdrop-filter: blur(12px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-            min-width: 0;
-            overflow: hidden;
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid rgba(255,255,255,0.08);
-            padding-bottom: 12px;
-            margin-bottom: 8px;
-        }
-
-        .card-title {
-            font-size: 34px;
-            font-weight: bold;
-            color: var(--main-color);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
-        }
-
-        .sub-card-title {
-            font-size: 28px;
-            font-weight: bold;
-            color: #fff;
-            margin-bottom: 14px;
-            border-left: 5px solid var(--main-color);
-            padding-left: 14px;
-            display: flex;
-            align-items: baseline;
-            gap: 12px;
-            min-width: 0;
-            max-width: 100%;
-            flex-wrap: wrap;
-        }
-
-        .sub-card-title .cost-tag {
+        .storey { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr); gap: 40px; padding: 22px 0; border-top: 1px solid var(--rule); }
+        .storey:first-of-type { border-top: 0; padding-top: 0; }
+        .levels { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+        .level { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
+        .level-no {
+            flex: 0 0 62px;
             font-family: 'Oswald', sans-serif;
-            font-size: 18px;
-            color: #999;
-            font-weight: normal;
-            background: rgba(255,255,255,0.08);
-            padding: 3px 10px;
-            border-radius: 12px;
-        }
-
-        .section-block {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            min-width: 0;
-            max-width: 100%;
-        }
-
-        .tower-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            align-items: stretch;
-            min-width: 0;
-        }
-
-        .tower-row > .tower-column > .card {
-            height: 100%;
-        }
-
-        .deep-tower-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            align-items: stretch;
-            min-width: 0;
-        }
-
-        .deep-tower-grid .floor-block {
-            background: rgba(255,255,255,0.02);
-            padding: 18px;
-            border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.08);
-            min-width: 0;
-            max-width: 100%;
-            width: 100%;
-            overflow: hidden;
-        }
-
-        .tower-column {
-            min-width: 0;
-        }
-
-        .monster-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 14px;
-            min-width: 0;
-        }
-
-        .monster-card {
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.45) 0%, rgba(20, 20, 30, 0.35) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 10px 14px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
-            min-width: 0;
-            max-width: 100%;
-        }
-
-        .monster-icon {
-            width: 56px;
-            height: 56px;
-            object-fit: cover;
-            border-radius: 50%;
-            background: linear-gradient(135deg, rgba(40,40,50,0.8) 0%, rgba(20,20,25,0.9) 100%);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            flex-shrink: 0;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-        }
-
-        .monster-info {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            overflow: hidden;
-            flex: 1;
-            min-width: 0;
-        }
-
-        .monster-name {
-            font-size: 20px;
             font-weight: bold;
-            color: #fff;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+            font-size: 76px;
+            line-height: 0.95;
+            color: transparent;
+            -webkit-text-stroke: 1.5px var(--accent-soft);
         }
-
-        .monster-details {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 16px;
-            color: #aaa;
-            margin-top: 4px;
-        }
-
-        .monster-level {
-            font-family: 'Oswald', sans-serif;
+        .level-no small {
+            display: block;
+            font-family: 'Source Han Sans CN', sans-serif;
             font-size: 13px;
-            color: #d0d0d0;
-            margin-top: 2px;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+            font-weight: normal;
+            line-height: 1.5;
+            color: var(--sub);
+            -webkit-text-stroke: 0;
+            margin-top: 8px;
         }
-
-        .element-badge {
-            font-family: 'Oswald', sans-serif;
-            font-weight: bold;
-            font-size: 15px;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-        }
-
-        .buff-text {
-            font-size: 18px;
-            line-height: 1.6;
-            color: #ccc;
-            padding: 8px 14px;
-            background: rgba(255,255,255,0.03);
-            border-radius: 8px;
-            border-left: 3px solid rgba(100, 180, 255, 0.4);
-            margin-bottom: 8px;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-
-        .footer {
-            margin-top: 12px;
-            text-align: center;
-            opacity: 0.6;
-        }
-
-        .footer img {
-            height: 24px;
-        }
+        .level .lineup { flex: 1; }
+        .level .foe { flex-basis: 112px; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="overlay"></div>
         <div class="content">
-            <div class="header">
-                <div class="title">{{ title }}</div>
-                {% if duration %}
-                <div class="subtitle">{{ duration }}</div>
-                {% endif %}
-            </div>
+            {% set top = deep_tower.floors[-1].monsters if deep_tower and deep_tower.floors else [] %}
+            {{ ui.hero(title, duration, top|map(attribute='icon')|list) }}
 
-            <!-- Row 1: Left & Right Towers -->
-            <div class="tower-row">
-                <!-- Left Tower -->
-                <div class="tower-column">
-                    {% if left_tower %}
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">{{ left_tower.name }}</div>
-                        </div>
-                        {% for floor in left_tower.floors %}
-                        <div class="floor-block">
-                            <div class="sub-card-title">{{ floor.name }} <span class="cost-tag">消耗疲劳: {{ floor.cost }}</span></div>
-
-                            {% if floor.buffs %}
-                            <div class="section-block" style="margin-bottom: 14px;">
-                                {% for buff in floor.buffs %}
-                                <div class="buff-text">{{ buff }}</div>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-
-                            {% if floor.monsters %}
-                            <div class="monster-grid">
-                                {% for monster in floor.monsters %}
-                                <div class="monster-card" style="border-color: {{ monster.color }}40;">
-                                    {% if monster.icon %}
-                                    <img src="{{ monster.icon }}" class="monster-icon" style="border-color: {{ monster.color }};">
-                                    {% else %}
-                                    <div class="monster-icon" style="background: {{ monster.color }}30; border-color: {{ monster.color }};"></div>
-                                    {% endif %}
-
-                                    <div class="monster-info">
-                                        <div class="monster-name">{{ monster.name }}</div>
-                                        {% if monster.level %}
-                                        <div class="monster-level">Lv.{{ monster.level }}</div>
-                                        {% endif %}
-                                        <div class="monster-details">
-                                            {% if monster.element %}
-                                            <span class="element-badge" style="color: {{ monster.color }};">{{ monster.element }}抗性</span>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                </div>
-
-                <!-- Right Tower -->
-                <div class="tower-column">
-                    {% if right_tower %}
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">{{ right_tower.name }}</div>
-                        </div>
-                        {% for floor in right_tower.floors %}
-                        <div class="floor-block">
-                            <div class="sub-card-title">{{ floor.name }} <span class="cost-tag">消耗疲劳: {{ floor.cost }}</span></div>
-
-                            {% if floor.buffs %}
-                            <div class="section-block" style="margin-bottom: 14px;">
-                                {% for buff in floor.buffs %}
-                                <div class="buff-text">{{ buff }}</div>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-
-                            {% if floor.monsters %}
-                            <div class="monster-grid">
-                                {% for monster in floor.monsters %}
-                                <div class="monster-card" style="border-color: {{ monster.color }}40;">
-                                    {% if monster.icon %}
-                                    <img src="{{ monster.icon }}" class="monster-icon" style="border-color: {{ monster.color }};">
-                                    {% else %}
-                                    <div class="monster-icon" style="background: {{ monster.color }}30; border-color: {{ monster.color }};"></div>
-                                    {% endif %}
-
-                                    <div class="monster-info">
-                                        <div class="monster-name">{{ monster.name }}</div>
-                                        {% if monster.level %}
-                                        <div class="monster-level">Lv.{{ monster.level }}</div>
-                                        {% endif %}
-                                        <div class="monster-details">
-                                            {% if monster.element %}
-                                            <span class="element-badge" style="color: {{ monster.color }};">{{ monster.element }}抗性</span>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Row 2: Deep Tower -->
-            {% if deep_tower %}
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">{{ deep_tower.name }}</div>
-                </div>
-
-                <div class="deep-tower-grid">
-                    {% for floor in deep_tower.floors %}
-                    <div class="floor-block">
-                        <div class="sub-card-title">{{ floor.name }} <span class="cost-tag">消耗疲劳: {{ floor.cost }}</span></div>
-
-                        {% if floor.buffs %}
-                        <div class="section-block" style="margin-bottom: 14px;">
-                            {% for buff in floor.buffs %}
-                            <div class="buff-text">{{ buff }}</div>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-
-                        {% if floor.monsters %}
-                        <div class="monster-grid">
-                            {% for monster in floor.monsters %}
-                            <div class="monster-card" style="border-color: {{ monster.color }}40;">
-                                {% if monster.icon %}
-                                <img src="{{ monster.icon }}" class="monster-icon" style="border-color: {{ monster.color }};">
-                                {% else %}
-                                <div class="monster-icon" style="background: {{ monster.color }}30; border-color: {{ monster.color }};"></div>
-                                {% endif %}
-
-                                <div class="monster-info">
-                                    <div class="monster-name">{{ monster.name }}</div>
-                                    {% if monster.level %}
-                                    <div class="monster-level">Lv.{{ monster.level }}</div>
-                                    {% endif %}
-                                    <div class="monster-details">
-                                        {% if monster.element %}
-                                        <span class="element-badge" style="color: {{ monster.color }};">{{ monster.element }}抗性</span>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                    </div>
+            <div class="wings">
+                {% for tower in (left_tower, right_tower) if tower %}
+                <div class="wing">
+                    {% for floor in tower.floors %}
+                    <div class="head"><h2>{{ tower.name.split(' ')[0] }}</h2><i></i><span>{{ floor.name|replace(' ', '') }} · 疲劳<b>{{ floor.cost }}</b></span></div>
+                    {% for buff in floor.buffs %}<div class="p">{{ buff }}</div>{% endfor %}
+                    {{ ui.lineup(floor.monsters) }}
                     {% endfor %}
                 </div>
+                {% endfor %}
+            </div>
+
+            {% if deep_tower and deep_tower.floors %}
+            {% set groups = [] %}
+            {% for floor in deep_tower.floors %}
+            {% if groups and groups[-1].buffs == floor.buffs %}{% set _ = groups[-1].floors.append((loop.index, floor)) %}
+            {% else %}{% set _ = groups.append({'buffs': floor.buffs, 'floors': [(loop.index, floor)]}) %}{% endif %}
+            {% endfor %}
+            <div>
+                <div class="head"><h2>深境之塔</h2><i></i></div>
+                {% for group in groups %}
+                <div class="storey">
+                    <div>
+                        {% for buff in group.buffs %}<div class="p">{{ buff }}</div>{% endfor %}
+                    </div>
+                    <div class="levels">
+                        {% for no, floor in group.floors %}
+                        <div class="level">
+                            <div class="level-no">{{ no }}<small>疲劳 {{ floor.cost }}</small></div>
+                            {{ ui.lineup(floor.monsters) }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
             </div>
             {% endif %}
 
-            {% if footer_url %}
-            <div class="footer">
-                <img src="{{ footer_url }}" alt="Footer">
-            </div>
-            {% endif %}
+            {{ ui.footer() }}
         </div>
     </div>
 </body>

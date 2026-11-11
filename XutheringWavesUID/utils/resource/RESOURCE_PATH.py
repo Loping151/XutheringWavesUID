@@ -28,6 +28,7 @@ RESOURCE_PATH = MAIN_PATH / "resource"
 PHANTOM_PATH = RESOURCE_PATH / "phantom"
 MATERIAL_PATH = RESOURCE_PATH / "material"
 MONSTER_PATH = RESOURCE_PATH / "monster"
+SLASH_BUFF_PATH = RESOURCE_PATH / "slash_buff"
 AVATAR_PATH = RESOURCE_PATH / "waves_avatar"
 WEAPON_PATH = RESOURCE_PATH / "waves_weapon"
 ROLE_PILE_PATH = RESOURCE_PATH / "role_pile"
@@ -125,6 +126,7 @@ def init_dir():
         PHANTOM_PATH,
         MATERIAL_PATH,
         MONSTER_PATH,
+        SLASH_BUFF_PATH,
         AVATAR_PATH,
         WEAPON_PATH,
         ROLE_PILE_PATH,

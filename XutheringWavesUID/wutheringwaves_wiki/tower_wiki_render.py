@@ -2,8 +2,6 @@ import asyncio
 import re
 from typing import Dict, Any, Union, Optional
 from pathlib import Path
-import base64
-from io import BytesIO
 
 from PIL import Image
 
@@ -14,15 +12,15 @@ from ..utils.resource.RESOURCE_PATH import (
     waves_templates,
 )
 from ..utils.image import ELEMENT_COLOR_MAP, pil_to_b64, img_to_b64
-from ..utils.resource.download_file import get_phantom_img
-from ..utils.image import get_square_avatar, get_square_avatar_path
+from ..utils.image import get_square_avatar_path
 from ..utils.name_convert import echo_name_to_echo_id, char_name_to_char_id
-from ..utils.resource.RESOURCE_PATH import PHANTOM_PATH, MONSTER_PATH
+from ..utils.resource.RESOURCE_PATH import PHANTOM_PATH, MONSTER_PATH, SLASH_BUFF_PATH
 from ..utils.render_utils import (
     PLAYWRIGHT_AVAILABLE,
     image_to_base64,
     render_html,
 )
+from .highlight import highlight
 from ..wutheringwaves_abyss.period import (
     get_slash_period_number,
     get_tower_period_number,
@@ -58,8 +56,61 @@ def get_monster_icon(monster_name: str, monster_id: Union[str, int]) -> Optional
         path = PHANTOM_PATH / f"phantom_{echo_id}.png"
         if not path.exists():
             path = PHANTOM_PATH / "phantom_390070051.png"
-    b64 = img_to_b64(path, quality=75, bake=True, cover_size=(128, 128))
+    b64 = img_to_b64(path, quality=75, bake=True, cover_size=(256, 256))
     return b64 if b64 else None
+
+
+def get_monster_elements(m_info: Dict[str, Any]) -> list:
+    return m_info.get("Elements") or [m_info.get("Element", 0)]
+
+
+def get_monsters(floor_data: Dict[str, Any], level: int = 0) -> list:
+    monsters = []
+    for m_id, m_info in list(floor_data.get("Monsters", {}).items())[:8]:
+        name = m_info.get("Name", "未知")
+        elements = [
+            {"name": e_name, "color": ELEMENT_COLOR_MAP.get(e_name, "#b4b4b4")}
+            for e_name in (ELEMENT_NAME_MAP.get(e, "未知") for e in get_monster_elements(m_info))
+        ]
+        monsters.append({
+            "name": name,
+            "level": m_info.get("Level", 0) or level,
+            "color": elements[0]["color"],
+            "elements": elements,
+            "icon": get_monster_icon(name, m_id),
+        })
+    return monsters
+
+
+def get_matrix_bosses(level: Dict[str, Any]) -> list:
+    """Waves 按名去重；后续轮次新增的说明行以【轮次N解锁】追加"""
+    bosses: Dict[str, Dict[str, Any]] = {}
+    for wave in level.get("Waves", []):
+        name = wave.get("Name", "未知")
+        lines = []
+        for part in re.split(r"<br\s*/?>", wave.get("Desc", "")):
+            cleaned = re.sub(r"<[^>]+>", "", part).strip()
+            if cleaned and cleaned != name:
+                lines.append(cleaned)
+        boss = bosses.get(name)
+        if boss is None:
+            bosses[name] = {
+                "name": name,
+                "monster_id": wave.get("MonsterId", 0),
+                "tags": wave.get("Tags", []),
+                "desc_lines": lines,
+                "round": 1,
+            }
+            continue
+        boss["round"] += 1
+        for line in lines:
+            if not any(line in seen for seen in boss["desc_lines"]):
+                boss["desc_lines"].append(f"【轮次{boss['round']}解锁】{line}")
+    return list(bosses.values())
+
+
+def _hl(text: str) -> str:
+    return highlight(text, ELEMENT_COLOR_MAP)
 
 
 def _clean_text(text: str) -> str:
@@ -77,27 +128,9 @@ async def _process_floor_data(floor_data: Dict[str, Any]) -> Dict[str, Any]:
     for buff in raw_buffs.values():
         desc = _clean_text(buff.get("Desc", "")).rstrip("。")
         if desc:
-            buffs_text.append(desc)
+            buffs_text.append(_hl(desc))
 
-    # 处理怪物
-    monsters_data = []
-    raw_monsters = floor_data.get("Monsters", {})
-    
-    # 只取前8个怪物
-    for m_id, m_info in list(raw_monsters.items())[:8]:
-        m_name = m_info.get("Name", "未知")
-        m_element_id = m_info.get("Element", 0)
-        element_name = ELEMENT_NAME_MAP.get(m_element_id, "未知")
-        
-        icon_base64 = get_monster_icon(m_name, m_id)
-        
-        monsters_data.append({
-            "name": m_name,
-            "level": m_info.get("Level", 0),
-            "element": element_name,
-            "color": ELEMENT_COLOR_MAP.get(element_name, "#b4b4b4"),
-            "icon": icon_base64
-        })
+    monsters_data = get_monsters(floor_data)
 
     return {
         "cost": floor_data.get("Cost", 0),
@@ -237,51 +270,20 @@ async def draw_matrix_wiki_render(season: Optional[int] = None) -> Optional[byte
         desc = re.sub(r"<[^>]+>", "", desc)
         buffs.append({
             "name": buff.get("Name", ""),
-            "desc": desc,
+            "desc": _hl(desc),
         })
 
-    # 处理Boss（去重）
     bosses = []
-    seen_names = set()
-    for wave in target_level.get("Waves", []):
-        name = wave.get("Name", "未知")
-        if name in seen_names:
-            continue
-        seen_names.add(name)
-
-        # 通过名字反查本地声骸图标
-        icon_base64 = get_monster_icon(name, wave.get("MonsterId", 0))
-
-        # 提取Tags
+    for boss in get_matrix_bosses(target_level):
         tags = []
-        for tag in wave.get("Tags", []):
+        for tag in boss["tags"]:
             color = tag.get("Color", "ffffffff")
-            if len(color) == 8:
-                color = color[:6]
-            tags.append({
-                "name": tag.get("Name", ""),
-                "color": color,
-            })
-
-        # 解析完整描述，按<br>分段
-        desc_raw = wave.get("Desc", "")
-        # 先去掉第一段（boss名字的span）
-        parts = re.split(r"<br\s*/?>", desc_raw)
-        desc_lines = []
-        for p in parts:
-            cleaned = re.sub(r"<[^>]+>", "", p).strip()
-            if not cleaned:
-                continue
-            # 跳过第一行（只有boss名字的行）
-            if cleaned == name:
-                continue
-            desc_lines.append(cleaned)
-
+            tags.append({"name": tag.get("Name", ""), "color": color[:6] if len(color) == 8 else color})
         bosses.append({
-            "name": name,
-            "icon": icon_base64,
+            "name": boss["name"],
+            "icon": get_monster_icon(boss["name"], boss["monster_id"]),
             "tags": tags,
-            "desc_lines": desc_lines,
+            "desc_lines": [_hl(line) for line in boss["desc_lines"]],
         })
 
     # 处理角色增益
@@ -294,7 +296,7 @@ async def draw_matrix_wiki_render(season: Optional[int] = None) -> Optional[byte
         role_icon = None
         char_id = char_name_to_char_id(name)
         if char_id:
-            role_icon = img_to_b64(get_square_avatar_path(char_id), quality=75, bake=True, cover_size=(128, 128)) or None
+            role_icon = img_to_b64(get_square_avatar_path(char_id), quality=75, bake=True, cover_size=(256, 256)) or None
 
         # 获取增益描述
         enhance_descs = role_data.get("EnhanceSkillDesc", [])
@@ -305,7 +307,7 @@ async def draw_matrix_wiki_render(season: Optional[int] = None) -> Optional[byte
         roles.append({
             "name": name,
             "icon": role_icon,
-            "desc": desc,
+            "desc": _hl(desc),
         })
 
     # 加载背景
@@ -374,16 +376,19 @@ async def draw_slash_wiki_render(period: Optional[int] = None) -> Optional[bytes
     # 处理全局Buff
     global_buffs = []
     if buff_data:
+        buff_icons = load_json_file(MAP_CHALLENGE_PATH / "slash_buff_icon.json") or {}
         for b_name, b_desc in buff_data.items():
-             global_buffs.append({
-                 "name": b_name,
-                 "desc": _clean_text(b_desc).rstrip("。")
-             })
+            icon = buff_icons.get(b_name)
+            global_buffs.append({
+                "name": b_name,
+                "desc": _hl(_clean_text(b_desc).rstrip("。")),
+                "icon": img_to_b64(SLASH_BUFF_PATH / f"{icon}.png", quality=75, bake=True) if icon else "",
+            })
 
     # 处理海域特性
     desc = endless_data.get("Desc", "")
     desc = _clean_text(desc).rstrip("。")
-    desc_lines = [line for line in desc.split("\n") if line.strip()]
+    desc_lines = [_hl(line.strip()) for line in re.split(r"<br\s*/?>|\n", desc) if line.strip()]
 
     # 处理半场 (Floors)
     raw_floors = endless_data.get("Floor", {})
@@ -396,27 +401,9 @@ async def draw_slash_wiki_render(period: Optional[int] = None) -> Optional[bytes
         f_desc = []
         f_desc_raw = _clean_text(floor_data.get("Desc", "")).rstrip("。")
         if f_desc_raw:
-             f_desc.append(f_desc_raw)
+             f_desc.append(_hl(f_desc_raw))
 
-        # Monsters
-        monsters_data = []
-        raw_monsters = floor_data.get("Monsters", {})
-        level = floor_data.get("Level", 0)
-
-        for m_id, m_info in list(raw_monsters.items())[:8]:
-            m_name = m_info.get("Name", "未知")
-            m_element_id = m_info.get("Element", 0)
-            element_name = ELEMENT_NAME_MAP.get(m_element_id, "未知")
-
-            icon_base64 = get_monster_icon(m_name, m_id)
-
-            monsters_data.append({
-                "name": m_name,
-                "level": level,
-                "element": element_name,
-                "color": ELEMENT_COLOR_MAP.get(element_name, "#b4b4b4"),
-                "icon": icon_base64
-            })
+        monsters_data = get_monsters(floor_data, floor_data.get("Level", 0))
 
         floors_render_data.append({
             "name": f"半场 {i + 1}",

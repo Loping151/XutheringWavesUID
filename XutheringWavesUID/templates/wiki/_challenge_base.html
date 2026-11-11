@@ -1,0 +1,200 @@
+{% macro base_css() %}
+        @import url('{{ font_css_url }}');
+
+        :root {
+            --accent: {{ theme_color }};
+            --accent-soft: color-mix(in srgb, var(--accent) 55%, #fff);
+            --ink: #090b10;
+            --rule: rgba(255, 255, 255, 0.14);
+            --text: #f2f3f6;
+            --body: #cdd1d9;
+            --sub: #8f96a3;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: transparent;
+            font-family: 'Source Han Sans CN', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif;
+            color: var(--text);
+            width: 1000px;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 1000px;
+            min-height: 400px;
+            position: relative;
+            overflow: hidden;
+            background-color: var(--ink);
+            background-image: url('{{ bg_url }}');
+            background-size: cover;
+            background-position: center top;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            background:
+                radial-gradient(1100px 520px at 78% -60px, color-mix(in srgb, var(--accent) 42%, transparent), transparent 70%),
+                linear-gradient(to bottom, rgba(9, 11, 16, 0.3), rgba(9, 11, 16, 0.93) 380px, rgba(9, 11, 16, 0.97));
+        }
+
+        .content {
+            position: relative;
+            z-index: 2;
+            padding: 0 44px 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 34px;
+        }
+
+        .hero { position: relative; height: 318px; margin: 0 -44px -6px; padding: 0 44px; overflow: hidden; }
+        .hero-art { position: absolute; right: -36px; top: -6px; display: flex; flex-direction: row-reverse; }
+        .hero-art i {
+            width: 336px; height: 336px;
+            margin-left: -128px;
+            background-color: var(--accent-soft);
+            background-size: cover;
+            background-blend-mode: luminosity;
+            -webkit-mask-size: cover;
+            -webkit-mask-composite: source-in;
+            opacity: 0.92;
+        }
+        .hero-art i:nth-child(2) { opacity: 0.62; transform: scale(0.9); transform-origin: bottom; }
+        .hero-art i:nth-child(3) { opacity: 0.36; transform: scale(0.8); transform-origin: bottom; }
+        .hero::after {
+            content: '';
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            height: 150px;
+            background: linear-gradient(to bottom, transparent, rgba(9, 11, 16, 0.96));
+        }
+        .hero-text { position: absolute; left: 44px; bottom: 26px; z-index: 1; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.85); }
+        .hero-title { font-size: 106px; font-weight: bold; line-height: 1.05; letter-spacing: 10px; }
+        .hero-meta {
+            display: flex;
+            align-items: baseline;
+            gap: 22px;
+            margin-top: 10px;
+            font-family: 'Oswald', 'Source Han Sans CN', sans-serif;
+            font-size: 28px;
+            letter-spacing: 3px;
+            color: #dfe2e8;
+        }
+        .hero-meta b { font-size: 34px; color: var(--accent-soft); letter-spacing: 4px; }
+
+        .head { display: flex; align-items: baseline; gap: 18px; margin-bottom: 16px; }
+        .head h2 { font-size: 34px; font-weight: bold; letter-spacing: 5px; white-space: nowrap; }
+        .head i { flex: 1; height: 1px; background: var(--rule); transform: translateY(-9px); }
+        .head span {
+            font-family: 'Oswald', 'Source Han Sans CN', sans-serif;
+            font-size: 18px;
+            color: var(--sub);
+            letter-spacing: 2px;
+            white-space: nowrap;
+        }
+        .head span b { font-size: 26px; color: var(--accent-soft); margin-left: 6px; }
+
+        .label { font-size: 15px; font-weight: bold; color: var(--accent-soft); letter-spacing: 6px; margin-bottom: 10px; }
+
+        .p { font-size: 17px; line-height: 1.62; color: var(--body); overflow-wrap: break-word; white-space: pre-line; }
+        .p + .p { margin-top: 9px; padding-top: 9px; border-top: 1px dashed rgba(255, 255, 255, 0.1); }
+        .p b { display: block; font-size: 21px; color: var(--accent-soft); letter-spacing: 2px; margin-bottom: 2px; }
+
+        em { font-style: normal; }
+        .hl-el { color: color-mix(in srgb, var(--el) 68%, #fff); font-weight: bold; }
+        .hl-kw { color: var(--text); font-weight: bold; }
+        .hl-num { color: var(--accent-soft); font-family: 'Oswald', 'Source Han Sans CN', sans-serif; font-size: 1.06em; letter-spacing: 0.5px; }
+
+        .lineup { display: flex; gap: 2px; min-width: 0; }
+        .foe { --el: #b4b4b4; flex: 0 1 140px; min-width: 0; text-align: center; }
+        .foe-art { position: relative; aspect-ratio: 1 / 0.94; }
+        .foe-art::before {
+            content: '';
+            position: absolute;
+            left: 4%; right: 4%; bottom: -10px;
+            height: 46%;
+            background: radial-gradient(closest-side, color-mix(in srgb, var(--el) 78%, transparent), transparent);
+        }
+        .foe-art::after {
+            content: '';
+            position: absolute;
+            left: 10%; right: 10%; bottom: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--el) 80%, #fff), transparent);
+        }
+        .foe-art img {
+            position: absolute;
+            inset: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            object-position: top;
+            -webkit-mask-image: radial-gradient(ellipse 56% 68% at 50% 40%, #000 64%, transparent 100%);
+        }
+        .foe-name {
+            margin-top: 8px;
+            font-size: 17px;
+            font-weight: bold;
+            height: 24px;
+            line-height: 24px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .foe-name.s1 { font-size: 15px; }
+        .foe-name.s2 { font-size: 13px; }
+        .foe-name.s3 { font-size: 11px; }
+        .foe-name.s4 { font-size: 10px; }
+        .foe-name.s5 { font-size: 9px; letter-spacing: -0.2px; }
+        .lineup.dense .foe-name { font-size: 15px; }
+        .lineup.dense .foe-name.s1 { font-size: 13px; }
+        .lineup.dense .foe-name.s2 { font-size: 11px; }
+        .lineup.dense .foe-name.s3, .lineup.dense .foe-name.s4, .lineup.dense .foe-name.s5 { font-size: 9px; letter-spacing: -0.2px; }
+        .lineup.dense .foe-meta { font-size: 12px; }
+        .foe-meta { font-size: 13px; line-height: 18px; color: var(--sub); }
+        .foe-meta span { font-family: 'Oswald', sans-serif; margin-right: 4px; }
+        .foe-meta b { color: color-mix(in srgb, var(--el) 72%, #fff); }
+        .foe-meta b + b { margin-left: 7px; }
+
+        .footer { text-align: center; opacity: 0.55; }
+        .footer img { height: 24px; }
+{% endmacro %}
+
+{% macro hero(title, sub, arts) %}
+{% set _t = title.split(' ', 1) %}
+            <div class="hero">
+                <div class="hero-art">
+                    {% for src in arts if src %}{% if loop.index <= 3 %}<i style="background-image: url('{{ src }}'); -webkit-mask-image: url('{{ src }}'), radial-gradient(ellipse 50% 56% at 50% 46%, #000 60%, transparent 100%);"></i>{% endif %}{% endfor %}
+                </div>
+                <div class="hero-text">
+                    <div class="hero-title">{{ _t[0] }}</div>
+                    <div class="hero-meta">{% if _t|length > 1 %}<b>{{ _t[1] }}</b>{% endif %}{% if sub %}<span>{{ sub }}</span>{% endif %}</div>
+                </div>
+            </div>
+{% endmacro %}
+
+{% macro foe(name, icon, color, level, elements) %}
+{% set _l = name|length if name else 0 %}
+                <div class="foe" style="--el: {{ color }};">
+                    <div class="foe-art">{% if icon %}<img src="{{ icon }}">{% endif %}</div>
+                    <div class="foe-name{% if _l > 9 %} s5{% elif _l > 8 %} s4{% elif _l > 7 %} s3{% elif _l > 6 %} s2{% elif _l > 5 %} s1{% endif %}">{{ name }}</div>
+                    <div class="foe-meta">
+                        {% if level %}<span>Lv.{{ level }}</span>{% endif %}
+                        {% for e in elements %}<b style="--el: {{ e.color }};">{{ e.name }}</b>{% endfor %}
+                    </div>
+                </div>
+{% endmacro %}
+
+{% macro lineup(monsters) %}
+                <div class="lineup{% if monsters|length > 4 %} dense{% endif %}">
+                    {% for m in monsters %}{{ foe(m.name, m.icon, m.color, m.level, m.elements) }}{% endfor %}
+                </div>
+{% endmacro %}
+
+{% macro footer() %}
+            {% if footer_url %}
+            <div class="footer"><img src="{{ footer_url }}" alt=""></div>
+            {% endif %}
+{% endmacro %}

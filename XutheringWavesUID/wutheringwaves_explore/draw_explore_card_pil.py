@@ -1,5 +1,5 @@
 from ..wutheringwaves_config import PREFIX
-import math
+from typing import List, Tuple
 from io import BytesIO
 from pathlib import Path
 
@@ -12,20 +12,7 @@ from gsuid_core.utils.image.convert import convert_img
 
 from ..utils import hint
 from ..utils.util import get_hide_uid_pref, hide_uid
-from ..utils.image import (
-    GREY,
-    YELLOW,
-    WAVES_VOID,
-    WAVES_MOLTEN,
-    WAVES_SIERRA,
-    WAVES_MOONLIT,
-    WAVES_SINKING,
-    WAVES_FREEZING,
-    WAVES_LINGERING,
-    add_footer,
-    change_color,
-    get_waves_bg,
-)
+from ..utils.image import GREY, YELLOW, add_footer, get_waves_bg
 from ..utils.api.model import (
     AreaInfo,
     ExploreArea,
@@ -42,60 +29,98 @@ from ..utils.fonts.waves_fonts import (
     waves_font_30,
     waves_font_36,
     waves_font_42,
+    waves_font_50,
 )
 
 TEXT_PATH = Path(__file__).parent / "texture2d"
 
-tag_yes = Image.open(TEXT_PATH / "tag_yes.png")
-tag_yes_draw = ImageDraw.Draw(tag_yes)
-tag_yes_draw.text((85, 30), "已完成", "white", waves_font_36, "mm")
-tag_no = Image.open(TEXT_PATH / "tag_no.png")
-tag_no_draw = ImageDraw.Draw(tag_no)
-tag_no_draw.text((85, 30), "未完成", "white", waves_font_36, "mm")
+WIDTH = 1500
+PAD = 70
+COLS = 3
+COL_GAP = 50
+COL_W = (WIDTH - PAD * 2 - COL_GAP * (COLS - 1)) // COLS
+BASE_INFO_H = 250
+COUNTRY_HEAD_H = 150
+DONE_LINE_H = 44
+AREA_HEAD_H = 66
+ITEM_H = 50
+AREA_GAP = 36
+COUNTRY_GAP = 50
 
-country_color_map = {
-    "黑海岸": (28, 55, 118),
-    "瑝珑": (140, 113, 58),
-    "黎那汐塔": (95, 52, 39),
-    "罗伊冰原": (141, 159, 77),
-}
+BODY = (205, 209, 217)
+ZERO = (135, 142, 155)
+NEAR = (255, 217, 138)
+RULE = (58, 62, 72)
 
-progress_color = [
-    (10, WAVES_MOONLIT),
-    (20, WAVES_LINGERING),
-    (35, WAVES_FREEZING),
-    (50, WAVES_SIERRA),
-    (70, WAVES_SINKING),
-    (80, WAVES_VOID),
-    (90, YELLOW),
-    (100, WAVES_MOLTEN),
-]
+TodoArea = Tuple[AreaInfo, List[ExploreItem]]
 
 
-def get_progress_color(progress):
-    float_progress = float(progress)
-    result = WAVES_MOONLIT
-    for _p, color in progress_color:
-        if float_progress >= _p:
-            result = color
-    return result
+def split_explore_areas(explore: ExploreArea) -> Tuple[List[str], List[TodoArea]]:
+    """(已完成区域名, [(区域, 未完成项按进度从高到低)])"""
+    done: List[str] = []
+    todo: List[TodoArea] = []
+    for area in explore.areaInfoList or []:
+        items = sorted((item for item in area.itemList if item.progress < 100), key=lambda item: -item.progress)
+        if items:
+            todo.append((area, items))
+        else:
+            done.append(area.areaName)
+    return done, todo
 
 
-def _change_color_sync(chain, color, w=None, h=None):
-    pixels = chain.load()
-    if w is None:
-        w = chain.size[0]
-    if h is None:
-        h = chain.size[1]
-    if not isinstance(h, int) or not isinstance(w, int):
-        return chain
-    if len(color) == 4:
-        color = color[:3]
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = pixels[x, y]
-            pixels[x, y] = color + (a,)
-    return chain
+def _country_color(explore: ExploreArea) -> Tuple[int, int, int]:
+    color = explore.country.detailPageProgressColor.lstrip("#")
+    try:
+        return tuple(int(color[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore
+    except ValueError:
+        return YELLOW[:3]
+
+
+def _soft(color: Tuple[int, int, int]) -> Tuple[int, int, int]:
+    return tuple(int(c + (255 - c) * 0.22) for c in color)  # type: ignore
+
+
+def _tone(progress, color: Tuple[int, int, int]) -> Tuple[Tuple[int, int, int], Tuple[int, ...]]:
+    """(百分比文字色, 进度线色): 0 灰 / <50 淡 / <90 实 / 其余金"""
+    progress = float(progress)
+    if progress <= 0:
+        return ZERO, color
+    if progress < 50:
+        return BODY, tuple(int(c * 0.45 + 16) for c in color)
+    if progress < 90:
+        return (255, 255, 255), color
+    return NEAR, NEAR
+
+
+def _wrap_done(draw: ImageDraw.ImageDraw, names: List[str]) -> List[List[str]]:
+    lines: List[List[str]] = [[]]
+    x = 130
+    for name in names:
+        w = draw.textlength(name, waves_font_26) + 40
+        if lines[-1] and x + w > WIDTH - PAD * 2:
+            lines.append([])
+            x = 130
+        lines[-1].append(name)
+        x += w
+    return lines
+
+
+def _layout_columns(todo: List[TodoArea]) -> Tuple[List[Tuple[int, int, TodoArea]], int]:
+    """瀑布流: 每块放进当前最矮的列。返回 ([(列, y, 区域)], 总高)"""
+    heights = [0] * COLS
+    placed = []
+    for area in todo:
+        col = heights.index(min(heights))
+        placed.append((col, heights[col], area))
+        heights[col] += AREA_HEAD_H + ITEM_H * len(area[1]) + AREA_GAP
+    return placed, max(heights)
+
+
+def _progress_line(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, progress, color, thick: int):
+    draw.rectangle((x, y, x + w, y + 1), fill=RULE)
+    filled = int(w * min(float(progress), 100) / 100)
+    if filled > 0:
+        draw.rectangle((x, y - thick + 2, x + filled, y + 1), fill=color)
 
 
 async def draw_explore_img(ev: Event, uid: str, user_id: str):
@@ -118,20 +143,8 @@ async def draw_explore_img(ev: Event, uid: str, user_id: str):
     if not is_self_ck and not explore_data.open:
         return hint.error_reply(msg="探索数据未开启")
 
-    # 计算总高度
-    base_info_h = 250
-    footer_h = 70
-    h = base_info_h + footer_h
-    explore_title_h = 200
-    explore_frame_h = 500
-
     if not explore_data.exploreList:
         return hint.error_reply(msg="探索数据为空")
-
-    for mi, _explore in enumerate(explore_data.exploreList):
-        h += explore_title_h
-        if _explore.areaInfoList:
-            h += math.ceil(len(_explore.areaInfoList) / 3) * explore_frame_h
 
     # 头像部分
     avatar, avatar_ring = await draw_pic_with_ring(ev)
@@ -146,40 +159,28 @@ async def draw_explore_img(ev: Event, uid: str, user_id: str):
         except Exception:
             country_icons.append(None)
 
-    img = await _compose_explore_img(
-        h,
-        base_info_h,
-        explore_title_h,
-        explore_frame_h,
-        account_info,
-        explore_data,
-        avatar,
-        avatar_ring,
-        country_icons,
-        user_pref,
-    )
+    img = await _compose_explore_img(account_info, explore_data, avatar, avatar_ring, country_icons, user_pref)
     img = await convert_img(img)
     return img
 
 
 @to_thread
-def _compose_explore_img(
-    h,
-    base_info_h,
-    explore_title_h,
-    explore_frame_h,
-    account_info,
-    explore_data,
-    avatar,
-    avatar_ring,
-    country_icons,
-    user_pref,
-) -> Image.Image:
-    img = get_waves_bg(2000, h, "bg3")
+def _compose_explore_img(account_info, explore_data, avatar, avatar_ring, country_icons, user_pref) -> Image.Image:
+    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    blocks = []
+    h = BASE_INFO_H
+    for explore in explore_data.exploreList[::-1]:
+        done, todo = split_explore_areas(explore)
+        done_lines = _wrap_done(measure, done) if done else []
+        placed, todo_h = _layout_columns(todo)
+        blocks.append((explore, done_lines, placed))
+        h += COUNTRY_HEAD_H + len(done_lines) * DONE_LINE_H + (20 if done_lines else 0) + todo_h + COUNTRY_GAP
+    h += 60
+
+    img = get_waves_bg(WIDTH, h, "bg3")
     img.paste(avatar, (85, 70), avatar)
     img.paste(avatar_ring, (95, 80), avatar_ring)
 
-    # 基础信息 名字 特征码
     base_info_bg = draw_base_info_bg(
         f"{account_info.name[:10]}",
         f"特征码:  {hide_uid(account_info.id, user_pref=user_pref)}",
@@ -187,7 +188,6 @@ def _compose_explore_img(
     )
     img.paste(base_info_bg, (75, 20), base_info_bg)
 
-    # 账号基本信息，由于可能会没有，放在一起
     if account_info.is_full:
         title_bar = Image.open(TEXT_PATH / "title_bar.png")
         title_bar_draw = ImageDraw.Draw(title_bar)
@@ -198,94 +198,53 @@ def _compose_explore_img(
         title_bar_draw.text((810, 78), f"Lv.{account_info.worldLevel}", "white", waves_font_42, "mm")
         img.paste(title_bar, (40, 70), title_bar)
 
-    explore_title = Image.open(TEXT_PATH / "explore_title.png")
+    draw = ImageDraw.Draw(img)
+    y = BASE_INFO_H
+    for mi, (explore, done_lines, placed) in enumerate(blocks):
+        color = _country_color(explore)
+        soft = _soft(color)
 
-    explore_frame = Image.open(TEXT_PATH / "explore_frame.png")
-    explore_bar = Image.open(TEXT_PATH / "explore_bar.png")
-    max_len = 357
-    hi = base_info_h
-    for mi, _explore in enumerate(explore_data.exploreList[::-1]):
-        _explore: ExploreArea
-        _explore_title = explore_title.copy()
-        _explore_title = _change_color_sync(_explore_title, country_color_map.get(_explore.country.countryName, YELLOW))
-        # 大区域探索度
-        content_img = country_icons[mi] if mi < len(country_icons) else None
-        if content_img is not None:
-            _explore_title.alpha_composite(content_img, (150, 30))
-        _explore_title_draw = ImageDraw.Draw(_explore_title)
-        _explore_title_draw.text((370, 100), f"{_explore.country.countryName}", "white", waves_font_42, "lm")
-        _explore_title_draw.text(
-            (370, 150),
-            f"探索度: {_explore.countryProgress}%",
-            "white",
-            waves_font_42,
-            "lm",
-        )
-        tag = tag_yes if float(_explore.countryProgress) == 100 else tag_no
-        _explore_title.alpha_composite(tag, (1740, 60))
+        bar = (PAD - 20, y, WIDTH - PAD + 20, y + 120)
+        draw.rectangle(bar, fill=tuple(int(c * 0.42 + 8) for c in color))
+        _progress_line(draw, bar[0], bar[3] - 2, bar[2] - bar[0], explore.countryProgress, soft, 6)
 
-        img.paste(_explore_title, (0, hi), _explore_title)
+        icon = country_icons[mi] if mi < len(country_icons) else None
+        name_x = PAD
+        if icon is not None:
+            icon = icon.resize((100, 100), Image.LANCZOS)
+            img.alpha_composite(icon, (PAD - 8, y + 8))
+            name_x = PAD + 110
+        draw.text((name_x, y + 58), explore.country.countryName, "white", waves_font_42, "lm")
+        draw.text((WIDTH - PAD, y + 58), f"{explore.countryProgress}%", "white", waves_font_50, "rm")
+        y += COUNTRY_HEAD_H
 
-        for ni, _subArea in enumerate(_explore.areaInfoList or []):
-            _subArea: AreaInfo
-            _explore_frame = explore_frame.copy()
-            _explore_frame = _change_color_sync(_explore_frame, get_progress_color(_subArea.areaProgress), h=83)
-            _explore_frame_draw = ImageDraw.Draw(_explore_frame)
+        if done_lines:
+            draw.text((PAD, y + 22), "已完成", soft, waves_font_24, "lm")
+            for line in done_lines:
+                x = PAD + 130
+                for name in line:
+                    draw.text((x, y + 22), name, BODY, waves_font_26, "lm")
+                    x += int(draw.textlength(name, waves_font_26)) + 40
+                y += DONE_LINE_H
+            y += 20
 
-            _explore_frame_draw.text((30, 50), f"{_subArea.areaName}", "white", waves_font_36, "lm")
-            _explore_frame_draw.text((570, 50), f"{_subArea.areaProgress}%", "white", waves_font_36, "rm")
-
-            for bi, _item in enumerate(_subArea.itemList):
-                _item: ExploreItem
-                _explore_bar = explore_bar.copy()
-
-                _explore_frame.alpha_composite(_explore_bar, (20, 90 + 70 * bi))
-                ratio = _item.progress * 0.01
-                # 进度条
-                _explore_frame_draw.rounded_rectangle(
-                    (131, 113 + 70 * bi, int(131 + ratio * max_len), 126 + 70 * bi),
-                    radius=10,
-                    fill=get_progress_color(_item.progress),
-                )
-
-                # 小地区探索度
-                if len(_item.name) >= 4:
-                    s = len(_item.name) // 2
-                    _explore_frame_draw.text(
-                        (68, 95 + 70 * bi),
-                        f"{_item.name[:s]}",
-                        "white",
-                        waves_font_24,
-                        "mm",
-                    )
-                    _explore_frame_draw.text(
-                        (68, 125 + 70 * bi),
-                        f"{_item.name[s:]}",
-                        "white",
-                        waves_font_24,
-                        "mm",
-                    )
-                else:
-                    _explore_frame_draw.text(
-                        (68, 120 + 70 * bi),
-                        f"{_item.name}",
-                        "white",
-                        waves_font_30,
-                        "mm",
-                    )
-                _explore_frame_draw.text(
-                    (580, 120 + 70 * bi),
-                    f"{_item.progress}%",
-                    "white",
-                    waves_font_30,
-                    "rm",
-                )
-
-            _w = 100 + 600 * (ni % 3)
-            _h = hi + explore_title_h + explore_frame_h * int(ni / 3)
-            img.alpha_composite(_explore_frame, (_w, _h))
-
-        hi += math.ceil(len(_explore.areaInfoList or []) / 3) * explore_frame_h + explore_title_h
+        todo_h = 0
+        for col, top, (area, items) in placed:
+            x = PAD + col * (COL_W + COL_GAP)
+            ay = y + top
+            draw.text((x, ay + 30), area.areaName, "white", waves_font_36, "lm")
+            text_color, line_color = _tone(area.areaProgress, color)
+            draw.text((x + COL_W, ay + 30), f"{area.areaProgress}%", text_color, waves_font_30, "rm")
+            _progress_line(draw, x, ay + 58, COL_W, area.areaProgress, line_color, 4)
+            iy = ay + AREA_HEAD_H
+            for item in items:
+                text_color, line_color = _tone(item.progress, color)
+                draw.text((x, iy + 22), item.name, ZERO if item.progress <= 0 else BODY, waves_font_26, "lm")
+                draw.text((x + COL_W, iy + 22), f"{item.progress}%", text_color, waves_font_26, "rm")
+                _progress_line(draw, x, iy + ITEM_H - 6, COL_W, item.progress, line_color, 3)
+                iy += ITEM_H
+            todo_h = max(todo_h, top + AREA_HEAD_H + ITEM_H * len(items) + AREA_GAP)
+        y += todo_h + COUNTRY_GAP
 
     img = add_footer(img)
     return img

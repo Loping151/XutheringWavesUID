@@ -1,404 +1,68 @@
+{% import "wiki/_challenge_base.html" as ui with context %}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wuthering Waves Slash Wiki</title>
     <style>
-        @import url('{{ font_css_url }}');
+        {{ ui.base_css() }}
 
-        :root {
-            --bg-color: #0f0f13;
-            --card-bg: rgba(20, 20, 25, 0.88);
-            --main-color: {{ theme_color }};
-            --text-main: #ffffff;
-            --text-sub: #a0a0a0;
-            --border-color: rgba(255, 255, 255, 0.1);
+        .relics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px 30px; }
+        .relic { text-align: center; }
+        .relic-art { height: 178px; }
+        .relic-art img {
+            width: 132px; height: 132px;
+            object-fit: contain;
+            filter: drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 50%, transparent));
+            -webkit-box-reflect: below -22px linear-gradient(transparent 58%, rgba(0, 0, 0, 0.42));
         }
+        .relic .p { text-align: center; }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            background-color: transparent;
-            font-family: 'Source Han Sans CN', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif;
-            color: var(--text-main);
-            width: 1000px;
-            overflow: hidden;
-        }
-
-        .container {
-            width: 1000px;
-            min-height: 400px;
-            position: relative;
-            background-color: var(--bg-color);
-            background-image: url('{{ bg_url }}');
-            background-size: cover;
-            background-position: center;
-        }
-
-        .overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(to bottom, rgba(15, 15, 19, 0.4), rgba(15, 15, 19, 0.95) 80%),
-                        linear-gradient(to right, rgba(78, 124, 255, 0.15) 0%, transparent 40%);
-            z-index: 1;
-        }
-
-        .content {
-            position: relative;
-            z-index: 2;
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            gap: 25px;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 15px;
-        }
-
-        .title {
-            font-size: 72px;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 4px 20px rgba(0,0,0,0.8);
-            margin-bottom: 10px;
-            letter-spacing: 4px;
-        }
-
-        .subtitle {
-            font-size: 26px;
-            color: #ccc;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 8px 28px;
-            border-radius: 24px;
-            display: inline-block;
-            border: 1px solid rgba(255,255,255,0.15);
-            letter-spacing: 2px;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 24px;
-            backdrop-filter: blur(12px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-            min-width: 0;
-            overflow: hidden;
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid rgba(255,255,255,0.08);
-            padding-bottom: 12px;
-            margin-bottom: 8px;
-        }
-
-        .card-title {
-            font-size: 34px;
-            font-weight: bold;
-            color: var(--main-color);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
-        }
-
-        .card-meta {
-            font-family: 'Oswald', sans-serif;
-            font-size: 22px;
-            color: #bbb;
-            background: rgba(255,255,255,0.1);
-            padding: 4px 12px;
-            border-radius: 6px;
-        }
-
-        .section-block {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            min-width: 0;
-            max-width: 100%;
-        }
-
-        .block-title {
-            font-size: 28px;
-            font-weight: bold;
-            color: #6fb5ff;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            text-shadow: 0 2px 6px rgba(0,0,0,0.4);
-        }
-
-        .block-title.monster-title {
-            color: #ff7676;
-        }
-
-        .text-content {
-            font-size: 22px;
-            line-height: 1.7;
-            color: #e0e0e0;
-        }
-
-        .monster-grid-slash {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-        }
-
-        .monster-card {
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.45) 0%, rgba(20, 20, 30, 0.35) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 10px 14px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
-            min-width: 0;
-            max-width: 100%;
-        }
-
-        .monster-icon {
-            width: 56px;
-            height: 56px;
-            object-fit: cover;
-            border-radius: 50%;
-            background: linear-gradient(135deg, rgba(40,40,50,0.8) 0%, rgba(20,20,25,0.9) 100%);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            flex-shrink: 0;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-        }
-
-        .monster-info {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            overflow: hidden;
-            flex: 1;
-            min-width: 0;
-        }
-
-        .monster-name {
-            font-size: 20px;
-            font-weight: bold;
-            color: #fff;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.5);
-        }
-
-        .monster-details {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 16px;
-            color: #aaa;
-            margin-top: 4px;
-        }
-
-        .monster-level {
-            font-family: 'Oswald', sans-serif;
-            font-size: 13px;
-            color: #d0d0d0;
-            margin-top: 2px;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-        }
-
-        .element-badge {
-            font-family: 'Oswald', sans-serif;
-            font-weight: bold;
-            font-size: 15px;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-        }
-
-        .monster-card-slim {
-            padding: 8px 10px;
-            gap: 10px;
-        }
-
-        .monster-card-slim .monster-icon {
-            width: 46px;
-            height: 46px;
-        }
-
-        .monster-card-slim .monster-name {
-            font-size: 16px;
-        }
-
-        .monster-card-slim .element-badge {
-            font-size: 13px;
-        }
-
-        .buff-text {
-            font-size: 18px;
-            line-height: 1.6;
-            color: #ccc;
-            padding: 8px 14px;
-            background: rgba(255,255,255,0.03);
-            border-radius: 8px;
-            border-left: 3px solid rgba(100, 180, 255, 0.4);
-            margin-bottom: 8px;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-
-        .footer {
-            margin-top: 12px;
-            text-align: center;
-            opacity: 0.6;
-        }
-
-        .footer img {
-            height: 24px;
-        }
-
-        .global-buffs {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-        }
-        .global-buffs .block-title {
-            color: #6fb5ff;
-        }
-
-        .buff-item {
-            padding: 14px 18px;
-            background: rgba(255,255,255,0.03);
-            border-radius: 10px;
-            border-left: 4px solid rgba(100, 180, 255, 0.5);
-            margin-bottom: 12px;
-        }
-
-        .buff-item .buff-name {
-            font-size: 22px;
-            font-weight: bold;
-            color: #a8d4ff;
-            margin-bottom: 6px;
-        }
-
-        .buff-item .buff-desc {
-            font-size: 18px;
-            color: #ccc;
-            line-height: 1.6;
-        }
+        .halves { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; }
+        .half .lineup { margin-top: 18px; }
+        .half .foe { flex-basis: 108px; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="overlay"></div>
         <div class="content">
-            <div class="header">
-                <div class="title">{{ title }}</div>
-                {% if duration %}
-                <div class="subtitle">{{ duration }}</div>
-                {% endif %}
+            {% set top = floors[-1].monsters if floors else [] %}
+            {{ ui.hero(title, duration, top|map(attribute='icon')|list) }}
+
+            {% if desc %}
+            <div>
+                <div class="head"><h2>海域特性</h2><i></i></div>
+                {% for line in desc %}<div class="p">{{ line }}</div>{% endfor %}
             </div>
+            {% endif %}
 
-            {% if desc or global_buffs %}
-            <div class="card global-buffs">
-                {% if desc %}
-                <div class="section-block">
-                    <div class="block-title">【海域特性】</div>
-                    {% for line in desc %}
-                    <div class="buff-text">{{ line }}</div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-
-                {% if global_buffs %}
-                <div class="section-block">
-                    <div class="block-title">【本期信物】</div>
+            {% if global_buffs %}
+            <div>
+                <div class="head"><h2>本期信物</h2><i></i></div>
+                <div class="relics">
                     {% for buff in global_buffs %}
-                    <div class="buff-item">
-                        <div class="buff-name">{{ buff.name }}</div>
-                        <div class="buff-desc">{{ buff.desc }}</div>
+                    <div class="relic">
+                        <div class="relic-art">{% if buff.icon %}<img src="{{ buff.icon }}">{% endif %}</div>
+                        <div class="p"><b>{{ buff.name }}</b>{{ buff.desc }}</div>
                     </div>
                     {% endfor %}
                 </div>
-                {% endif %}
             </div>
             {% endif %}
 
-            {% for floor in floors %}
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">{{ floor.name }}</div>
-                    {% if floor.cost %}
-                    <div class="card-meta">消耗疲劳: {{ floor.cost }}</div>
-                    {% endif %}
+            <div class="halves">
+                {% for floor in floors %}
+                <div class="half">
+                    <div class="head"><h2>{{ floor.name|replace(' ', '') }}</h2><i></i>{% if floor.cost %}<span>疲劳<b>{{ floor.cost }}</b></span>{% endif %}</div>
+                    {% for line in floor.desc %}<div class="p">{{ line }}</div>{% endfor %}
+                    {% for buff in floor.buffs %}<div class="p">{{ buff }}</div>{% endfor %}
+                    {{ ui.lineup(floor.monsters) }}
                 </div>
-
-                {% if floor.desc %}
-                <div class="section-block">
-                    <div class="block-title">【区域详情】</div>
-                    {% for line in floor.desc %}
-                    <div class="buff-text">{{ line }}</div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-
-                {% if floor.buffs %}
-                <div class="section-block">
-                    <div class="block-title">【环境Buff】</div>
-                    {% for buff in floor.buffs %}
-                    <div class="buff-text">{{ buff }}</div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-
-                {% if floor.monsters %}
-                <div class="section-block">
-                    <div class="block-title monster-title">【敌人列表】</div>
-                    <div class="monster-grid-slash">
-                        {% for monster in floor.monsters %}
-                        <div class="monster-card monster-card-slim" style="border-color: {{ monster.color }}40;">
-                            {% if monster.icon %}
-                            <img src="{{ monster.icon }}" class="monster-icon" style="border-color: {{ monster.color }};">
-                            {% else %}
-                            <div class="monster-icon" style="background: {{ monster.color }}30; border-color: {{ monster.color }};"></div>
-                            {% endif %}
-
-                            <div class="monster-info">
-                                <div class="monster-name">{{ monster.name }}</div>
-                                {% if monster.level %}
-                                <div class="monster-level">Lv.{{ monster.level }}</div>
-                                {% endif %}
-                                <div class="monster-details">
-                                    {% if monster.element %}
-                                    <span class="element-badge" style="color: {{ monster.color }};">{{ monster.element }}抗性</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
+                {% endfor %}
             </div>
-            {% endfor %}
 
-            {% if footer_url %}
-            <div class="footer">
-                <img src="{{ footer_url }}" alt="Footer">
-            </div>
-            {% endif %}
+            {{ ui.footer() }}
         </div>
     </div>
 </body>

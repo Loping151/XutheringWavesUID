@@ -2,67 +2,45 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>鸣潮探索志</title>
+    <title>鸣潮探索度</title>
     <style>
         @import url('{{ font_css_url }}');
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
         :root {
+            --ink: #090b10;
+            --rule: rgba(255, 255, 255, 0.13);
+            --text: #f2f3f6;
+            --body: #cdd1d9;
+            --sub: #878e9b;
+            --near: #ffd98a;
             --gold: #d4b163;
             --gold-soft: rgba(212, 177, 99, 0.35);
-            --ink-1: rgba(15, 17, 21, 0.78);
-            --ink-2: rgba(22, 25, 31, 0.82);
             --line: rgba(255, 255, 255, 0.08);
-            --line-soft: rgba(255, 255, 255, 0.04);
-            --text-main: #f3f3f3;
             --text-sub: #9aa0aa;
         }
 
-        body {
-            background: #0a0c10;
-            font-family: 'Source Han Sans CN', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif;
-            color: var(--text-main);
-            width: 1000px;
-            position: relative;
-            filter: brightness(1.1);
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        .bg-layer {
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            pointer-events: none;
+        body {
+            background: transparent;
+            font-family: 'Source Han Sans CN', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif;
+            color: var(--text);
+            width: 1000px;
             overflow: hidden;
         }
 
-        .bg-layer img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
+        .container {
+            width: 1000px;
+            position: relative;
+            background: var(--ink) url('{{ bg_url }}') center top / cover;
         }
-
-        .bg-layer::after {
-            content: "";
+        .overlay {
             position: absolute;
             inset: 0;
-            background:
-                radial-gradient(ellipse at 50% -10%, rgba(212, 177, 99, 0.22), transparent 55%),
-                linear-gradient(180deg, rgba(10, 12, 16, 0.30) 0%, rgba(10, 12, 16, 0.55) 100%);
+            background: linear-gradient(to bottom, rgba(9, 11, 16, 0.55), rgba(9, 11, 16, 0.92) 300px, rgba(9, 11, 16, 0.96));
         }
+        .content { position: relative; padding: 40px 44px 28px; display: flex; flex-direction: column; gap: 44px; }
 
-        .container {
-            position: relative;
-            z-index: 1;
-            padding: 20px 22px 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        /* ============ User Card ============ */
         .user-card {
             position: relative;
             display: flex;
@@ -206,505 +184,150 @@
             background: var(--line);
         }
 
-        /* ============ Region Card ============ */
-        .region-card {
-            background: var(--ink-1);
-            backdrop-filter: blur(6px);
-            border: 1px solid var(--line);
-            border-radius: 4px;
-            overflow: hidden;
-            box-shadow: 0 6px 18px -6px rgba(0,0,0,0.5);
-        }
-
-        .region-header {
+        .cty { --c: #d5a500; }
+        .cty-head {
             position: relative;
-            height: 96px;
             display: flex;
             align-items: center;
-            padding: 0 28px 0 22px;
-            background-size: cover;
-            background-position: center;
-            isolation: isolate;
+            gap: 18px;
+            height: 92px;
+            padding: 0 26px 0 20px;
+            background: linear-gradient(90deg, color-mix(in srgb, var(--c) 48%, #0b0d12), color-mix(in srgb, var(--c) 14%, #0b0d12));
+            overflow: hidden;
         }
-
-        .region-header::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(90deg,
-                rgba(0,0,0,0.55) 0%,
-                rgba(0,0,0,0.30) 60%,
-                rgba(0,0,0,0.45) 100%);
-            z-index: -1;
-        }
-
-        .region-header::after {
-            content: "";
-            position: absolute;
-            left: 0; top: 0; bottom: 0;
-            width: 5px;
-            background: var(--region-color, var(--gold));
-            box-shadow: 0 0 14px var(--region-color, var(--gold));
-        }
-
-        .region-icon {
-            width: 62px;
-            height: 62px;
-            object-fit: contain;
-            margin-right: 18px;
-            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6));
-        }
-
-        .region-title {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            min-width: 0;
-        }
-
-        .region-name-row {
-            display: flex;
-            align-items: baseline;
-            gap: 14px;
-        }
-
-        .region-name {
-            font-size: 36px;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            color: #fff;
+        .cty-head img { width: 62px; height: 62px; object-fit: contain; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6)); }
+        .cty-name { font-size: 36px; font-weight: 800; letter-spacing: 1.5px; line-height: 1; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85); }
+        .cty-pct {
+            margin-left: auto;
+            font-family: 'Oswald', sans-serif;
+            font-weight: bold;
+            font-size: 54px;
             line-height: 1;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.85);
+            text-shadow: 0 3px 12px rgba(0, 0, 0, 0.85);
         }
+        .cty-pct small { font-size: 26px; margin-left: 2px; opacity: 0.85; }
+        .cty-head::before, .cty-head::after { content: ''; position: absolute; left: 0; bottom: 0; height: 4px; }
+        .cty-head::before { right: 0; background: rgba(0, 0, 0, 0.45); }
+        .cty-head::after { width: var(--p); background: color-mix(in srgb, var(--c) 82%, #fff); box-shadow: 0 0 12px var(--c); }
 
-        .region-areas-count {
-            font-size: 14px;
-            color: rgba(255,255,255,0.65);
-            letter-spacing: 1px;
-            font-family: 'Oswald', sans-serif;
-            font-weight: 700;
-        }
+        .done { margin-top: 16px; font-size: 17px; line-height: 1.75; color: var(--body); }
+        .done b { font-size: 15px; color: color-mix(in srgb, var(--c) 78%, #fff); letter-spacing: 4px; margin-right: 14px; }
+        .done span { white-space: nowrap; }
+        .done span + span::before { content: '·'; margin: 0 9px; color: var(--sub); }
 
-        .region-progress-bar {
-            position: relative;
-            width: 100%;
-            max-width: 600px;
-            height: 12px;
-            background: rgba(0,0,0,0.55);
-            border-radius: 6px;
-            overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.08);
-            box-shadow:
-                inset 0 1px 3px rgba(0,0,0,0.6),
-                0 1px 0 rgba(255,255,255,0.04);
-        }
+        .areas { margin-top: 24px; columns: 3; column-gap: 40px; }
+        .area { break-inside: avoid; padding-bottom: 26px; }
+        .area-head { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 8px; margin-bottom: 4px; }
+        .area-head::before, .area-head::after { content: ''; position: absolute; left: 0; bottom: 0; height: 2px; }
+        .area-head::before { right: 0; background: var(--rule); }
+        .area-head::after { width: var(--p); background: var(--c); }
+        .area-name { font-size: 23px; font-weight: bold; letter-spacing: 2px; }
+        .pct { font-family: 'Oswald', sans-serif; font-size: 22px; white-space: nowrap; }
+        .pct small { font-size: 13px; margin-left: 1px; }
+        .zero .pct, .zero .item-name { color: var(--sub); }
+        .low .pct { color: var(--body); }
+        .mid .pct { color: var(--text); font-weight: bold; }
+        .near .pct { color: var(--near); font-weight: bold; }
+        .near .item-name { color: var(--text); }
 
-        .region-progress-fill {
-            position: absolute;
-            top: 0; left: 0; bottom: 0;
-            background: linear-gradient(90deg,
-                var(--region-color, var(--gold)) 0%,
-                var(--gold) 70%,
-                #fff5d8 100%);
-            border-radius: 6px;
-            box-shadow:
-                0 0 10px var(--gold),
-                inset 0 1px 1px rgba(255,255,255,0.4),
-                inset 0 -1px 1px rgba(0,0,0,0.25);
-        }
+        .item { position: relative; display: flex; align-items: center; gap: 9px; padding: 7px 0 8px; }
+        .item::before, .item::after { content: ''; position: absolute; left: 0; bottom: 0; height: 1px; }
+        .item::before { right: 0; background: rgba(255, 255, 255, 0.07); }
+        .item::after { width: var(--p); height: 2px; background: var(--c); }
+        .item.low::after { background: color-mix(in srgb, var(--c) 42%, transparent); }
+        .item.near::after, .area-head.near::after { height: 3px; background: var(--near); box-shadow: 0 0 8px color-mix(in srgb, var(--near) 60%, transparent); }
+        .item img { width: 24px; height: 24px; object-fit: contain; flex-shrink: 0; }
+        .item-name { flex: 1; min-width: 0; font-size: 16px; line-height: 1.35; color: var(--body); overflow-wrap: break-word; }
+        .item .pct { font-size: 18px; }
 
-        .region-progress-fill::after {
-            content: "";
-            position: absolute;
-            right: 0; top: 50%;
-            transform: translate(50%, -50%);
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #fff8e1;
-            box-shadow: 0 0 12px #fff5d8, 0 0 4px var(--gold);
-        }
-
-        .region-percent {
-            font-family: 'Oswald', sans-serif;
-            font-size: 72px;
-            font-weight: 700;
-            line-height: 0.9;
-            color: #fff;
-            text-shadow: 0 3px 12px rgba(0,0,0,0.85);
-            letter-spacing: -1px;
-            margin-left: 18px;
-            flex-shrink: 0;
-        }
-
-        .region-percent .pct-mark {
-            font-size: 32px;
-            font-weight: 600;
-            opacity: 0.85;
-            margin-left: 2px;
-        }
-
-        .region-body {
-            padding: 10px 12px 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 9px;
-        }
-
-        .section-label {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 13px;
-            color: var(--text-sub);
-            font-weight: 700;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            padding-left: 4px;
-        }
-
-        .section-label::after {
-            content: "";
-            flex: 1;
-            height: 1px;
-            background: linear-gradient(90deg, var(--line) 0%, transparent 100%);
-        }
-
-        /* ============ Completed chips (6/row) ============ */
-        .chip-grid {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 6px;
-        }
-
-        .chip {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            padding: 9px 11px;
-            background: linear-gradient(180deg,
-                rgba(255,255,255,0.05),
-                rgba(255,255,255,0.02));
-            border: 1px solid rgba(255,255,255,0.07);
-            border-left: 2px solid var(--region-color, var(--gold));
-            border-radius: 3px;
-            min-width: 0;
-        }
-
-        .chip svg {
-            width: 14px;
-            height: 14px;
-            flex-shrink: 0;
-            color: var(--region-color, var(--gold));
-        }
-
-        .chip-name {
-            flex: 1;
-            font-size: 15px;
-            color: #ececec;
-            font-weight: 600;
-            letter-spacing: 0.3px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            min-width: 0;
-        }
-
-        .chip-percent {
-            font-family: 'Oswald', sans-serif;
-            font-size: 14px;
-            font-weight: 700;
-            color: rgba(255,255,255,0.6);
-            letter-spacing: 0.5px;
-        }
-
-        /* ============ Incomplete sub-area cards (3/row) ============ */
-        .sub-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
-
-        .sub-card {
-            background: rgba(20, 22, 28, 0.55);
-            border: 1px solid var(--line);
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .sub-card-head {
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 12px 9px;
-            background: linear-gradient(180deg,
-                rgba(255,255,255,0.04) 0%,
-                transparent 100%);
-            border-bottom: 1px solid var(--line-soft);
-        }
-
-        .sub-card-head::before {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 2px;
-            background: var(--area-color);
-            opacity: 0.85;
-        }
-
-        .sub-name {
-            font-size: 22px;
-            font-weight: 700;
-            color: #ececec;
-            letter-spacing: 0.4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            min-width: 0;
-        }
-
-        .sub-percent {
-            font-family: 'Oswald', sans-serif;
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--area-color);
-            letter-spacing: 0.5px;
-            margin-left: 10px;
-            line-height: 1;
-            flex-shrink: 0;
-        }
-
-        .sub-percent .pct-mark {
-            font-size: 14px;
-            opacity: 0.7;
-            margin-left: 1px;
-        }
-
-        .item-list {
-            display: flex;
-            flex-direction: column;
-            padding: 5px 6px 6px;
-            gap: 4px;
-        }
-
-        .item-row {
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            padding: 5px 10px 5px 7px;
-            background: rgba(0,0,0,0.25);
-            border-radius: 3px;
-            overflow: hidden;
-            isolation: isolate;
-        }
-
-        .item-row::before {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; bottom: 0;
-            width: var(--item-fill, 0%);
-            background: linear-gradient(90deg,
-                var(--item-color) 0%,
-                var(--item-color) 70%,
-                rgba(0,0,0,0) 100%);
-            opacity: 0.28;
-            z-index: -1;
-        }
-
-        .item-row::after {
-            content: "";
-            position: absolute;
-            top: 0; bottom: 0;
-            left: var(--item-fill, 0%);
-            transform: translateX(-1px);
-            width: 1.5px;
-            background: var(--item-color);
-            opacity: 0.55;
-            z-index: -1;
-        }
-
-        .item-icon {
-            width: 26px;
-            height: 26px;
-            object-fit: contain;
-            flex-shrink: 0;
-            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
-        }
-
-        .item-icon-placeholder {
-            width: 26px;
-            height: 26px;
-            border-radius: 3px;
-            background: rgba(255,255,255,0.06);
-            flex-shrink: 0;
-        }
-
-        .item-name {
-            flex: 1;
-            font-size: 19px;
-            color: #dadada;
-            font-weight: 600;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            min-width: 0;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.6);
-        }
-
-        .item-percent {
-            font-family: 'Oswald', sans-serif;
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--item-color);
-            letter-spacing: 0.3px;
-            flex-shrink: 0;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.7);
-        }
-
-        .footer {
-            margin-top: 4px;
-            text-align: center;
-            opacity: 0.55;
-        }
-
-        .footer img {
-            height: 18px;
-        }
+        .footer { text-align: center; opacity: 0.55; margin-top: -14px; }
+        .footer img { height: 24px; }
     </style>
 </head>
 <body>
-    <div class="bg-layer">
-        {% if bg_url %}<img src="{{ bg_url }}">{% endif %}
-    </div>
+    {% macro tier(value) %}{% if value <= 0 %}zero{% elif value < 50 %}low{% elif value < 90 %}mid{% else %}near{% endif %}{% endmacro %}
     <div class="container">
-
-        <!-- =============== User Card =============== -->
-        <div class="user-card">
-            <div class="compass-mark">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="9"/>
-                    <polygon points="12,4 14,12 12,20 10,12" fill="currentColor" stroke="none" opacity="0.7"/>
-                    <line x1="12" y1="2" x2="12" y2="4"/>
-                    <line x1="12" y1="20" x2="12" y2="22"/>
-                </svg>
-                <span>SOLARIS · EXPEDITION RECORD</span>
-            </div>
-
-            <div class="avatar-wrap">
-                {% if avatar_url %}
-                <img src="{{ avatar_url }}" class="avatar">
-                {% else %}
-                <div class="avatar"></div>
-                {% endif %}
-            </div>
-
-            <div class="user-meta">
-                <div class="user-line-1">
-                    <div class="user-name">{{ user_name }}</div>
-                    <div class="user-uid">UID {{ user_id }}</div>
+        <div class="overlay"></div>
+        <div class="content">
+            <div class="user-card">
+                <div class="compass-mark">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="9"/>
+                        <polygon points="12,4 14,12 12,20 10,12" fill="currentColor" stroke="none" opacity="0.7"/>
+                        <line x1="12" y1="2" x2="12" y2="4"/>
+                        <line x1="12" y1="20" x2="12" y2="22"/>
+                    </svg>
+                    <span>SOLARIS · EXPEDITION RECORD</span>
                 </div>
 
-                {% if show_stats %}
-                <div class="user-stats">
-                    <div class="stat-pair">
-                        <span class="stat-label">联觉</span>
-                        <span class="stat-value">{{ level }}</span>
-                    </div>
-                    <div class="stat-divider"></div>
-                    <div class="stat-pair">
-                        <span class="stat-label">索拉</span>
-                        <span class="stat-value">{{ world_level }}</span>
-                    </div>
+                <div class="avatar-wrap">
+                    {% if avatar_url %}
+                    <img src="{{ avatar_url }}" class="avatar">
+                    {% else %}
+                    <div class="avatar"></div>
+                    {% endif %}
                 </div>
-                {% endif %}
-            </div>
-        </div>
 
-        <!-- =============== Region Cards =============== -->
-        {% for region in explore_list %}
-        <div class="region-card" style="--region-color: {{ region.color_bright or region.color }}; --region-color-deep: {{ region.color }};">
-            <div class="region-header" style="background-color: {{ region.color_tint }};{% if region.bg_url %} background-image: url('{{ region.bg_url }}');{% endif %}">
-                {% if region.icon_url %}
-                <img src="{{ region.icon_url }}" class="region-icon">
-                {% endif %}
+                <div class="user-meta">
+                    <div class="user-line-1">
+                        <div class="user-name">{{ user_name }}</div>
+                        <div class="user-uid">UID {{ user_id }}</div>
+                    </div>
 
-                <div class="region-title">
-                    <div class="region-name-row">
-                        <div class="region-name">{{ region.name }}</div>
-                        <div class="region-areas-count">
-                            {{ (region.completed_sub_areas|length) + (region.incomplete_sub_areas|length) }} AREAS
+                    {% if show_stats %}
+                    <div class="user-stats">
+                        <div class="stat-pair">
+                            <span class="stat-label">联觉</span>
+                            <span class="stat-value">{{ level }}</span>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-pair">
+                            <span class="stat-label">索拉</span>
+                            <span class="stat-value">{{ world_level }}</span>
                         </div>
                     </div>
-                    <div class="region-progress-bar">
-                        <div class="region-progress-fill" style="width: {{ region.progress }}%;"></div>
-                    </div>
-                </div>
-
-                <div class="region-percent">
-                    {{ region.progress|int }}<span class="pct-mark">%</span>
+                    {% endif %}
                 </div>
             </div>
 
-            <div class="region-body">
-                {% if region.completed_sub_areas %}
-                <div>
-                    <div class="section-label">已完成 · COMPLETED</div>
-                    <div class="chip-grid" style="margin-top: 6px;">
-                        {% for area in region.completed_sub_areas %}
-                        <div class="chip">
-                            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="2.5,6.5 5,9 9.5,4"/>
-                            </svg>
-                            <span class="chip-name">{{ area.name }}</span>
-                            <span class="chip-percent">100</span>
+            {% for country in explore_list %}
+            <div class="cty" style="--c: {{ country.color }};">
+                <div class="cty-head" style="--p: {{ country.progress }}%;">
+                    {% if country.icon_url %}<img src="{{ country.icon_url }}">{% endif %}
+                    <div class="cty-name">{{ country.name }}</div>
+                    <div class="cty-pct">{{ country.progress }}<small>%</small></div>
+                </div>
+
+                {% if country.done %}
+                <div class="done"><b>已完成</b>{% for name in country.done %}<span>{{ name }}</span>{% endfor %}</div>
+                {% endif %}
+
+                {% if country.areas %}
+                <div class="areas">
+                    {% for area in country.areas %}
+                    <div class="area">
+                        <div class="area-head {{ tier(area.progress) }}" style="--p: {{ area.progress }}%;">
+                            <div class="area-name">{{ area.name }}</div>
+                            <span class="pct">{{ area.progress }}<small>%</small></span>
+                        </div>
+                        {% for item in area.item_list %}
+                        <div class="item {{ tier(item.progress) }}" style="--p: {{ item.progress }}%;">
+                            {% if item.icon_url %}<img src="{{ item.icon_url }}">{% endif %}
+                            <div class="item-name">{{ item.name }}</div>
+                            <span class="pct">{{ item.progress }}<small>%</small></span>
                         </div>
                         {% endfor %}
                     </div>
-                </div>
-                {% endif %}
-
-                {% if region.incomplete_sub_areas %}
-                <div>
-                    <div class="section-label">未完成 · IN PROGRESS</div>
-                    <div class="sub-grid" style="margin-top: 6px;">
-                        {% for area in region.incomplete_sub_areas %}
-                        <div class="sub-card" style="--area-color: {{ area.progress_color }};">
-                            <div class="sub-card-head">
-                                <span class="sub-name">{{ area.name }}</span>
-                                <span class="sub-percent">{{ area.progress|int }}<span class="pct-mark">%</span></span>
-                            </div>
-                            {% if area.item_list %}
-                            <div class="item-list">
-                                {% for item in area.item_list %}
-                                <div class="item-row" style="--item-color: {{ item.color }}; --item-fill: {{ item.progress }}%;">
-                                    {% if item.icon_url %}
-                                    <img src="{{ item.icon_url }}" class="item-icon">
-                                    {% else %}
-                                    <div class="item-icon-placeholder"></div>
-                                    {% endif %}
-                                    <span class="item-name" title="{{ item.name }}">{{ item.name }}</span>
-                                    <span class="item-percent">{{ item.progress|int }}%</span>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
+                    {% endfor %}
                 </div>
                 {% endif %}
             </div>
-        </div>
-        {% endfor %}
+            {% endfor %}
 
-        {% if footer_b64 %}
-        <div class="footer">
-            <img src="{{ footer_b64 }}" alt="Footer">
+            {% if footer_b64 %}
+            <div class="footer"><img src="{{ footer_b64 }}" alt=""></div>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 </body>
 </html>

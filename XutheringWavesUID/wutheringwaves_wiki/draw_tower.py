@@ -1,13 +1,12 @@
 "深塔和海墟挑战信息绘制"
 
-import asyncio
 import re
 import base64
 from typing import Any, Dict, Union, Optional
 from pathlib import Path
 from io import BytesIO
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 from gsuid_core.logger import logger
 from gsuid_core.models import Event
@@ -20,27 +19,36 @@ from ..utils.image import (
     clean_alpha_matte,
     get_waves_bg,
     get_square_avatar_path,
-    draw_text_with_shadow,
-    make_smooth_circle_mask,
-    make_smooth_rounded_mask,
 )
 from ..utils.fonts.waves_fonts import (
+    fit_text,
+    waves_font_10,
+    waves_font_12,
     waves_font_14,
+    waves_font_15,
     waves_font_16,
     waves_font_18,
     waves_font_20,
+    waves_font_22,
     waves_font_24,
+    waves_font_26,
+    waves_font_28,
+    waves_font_30,
     waves_font_32,
+    waves_font_60,
+    waves_font_origin,
 )
 from ..wutheringwaves_abyss.period import (
     get_slash_period_number,
     get_tower_period_number,
     get_matrix_period_number,
 )
-from ..utils.resource.RESOURCE_PATH import MAP_CHALLENGE_PATH
+from ..utils.resource.RESOURCE_PATH import MAP_CHALLENGE_PATH, SLASH_BUFF_PATH
 from ..utils.name_convert import char_name_to_char_id
 from .tower_wiki_render import (
     get_monster_icon,
+    get_monster_elements,
+    get_matrix_bosses,
     draw_tower_wiki_render,
     draw_slash_wiki_render,
     draw_matrix_wiki_render,
@@ -71,10 +79,24 @@ ELEMENT_COLOR = {
     6: (132, 63, 161),  # 湮灭 (Havoc)
 }
 
-MONSTER_CARD_H = 82
-MONSTER_COLS = 4
-MONSTER_ROW_GAP = 10
-MONSTER_COL_GAP = 12
+WIDTH = 1000
+PAD = 44
+INNER = WIDTH - PAD * 2
+COL_GAP = 48
+HALF = (INNER - COL_GAP) // 2
+
+INK = (9, 11, 16)
+BODY = (205, 209, 217)
+SUB = (143, 150, 163)
+RULE = (48, 52, 62)
+DASH = (38, 41, 50)
+GOLD = (255, 217, 138)
+THEME = {"tower": (78, 124, 255), "slash": (255, 202, 40), "matrix": (255, 107, 107)}
+
+waves_font_96 = waves_font_origin(96)
+NAME_FONTS = (waves_font_18, waves_font_16, waves_font_15, waves_font_14, waves_font_12, waves_font_10)
+BOSS_FONTS = (waves_font_24, waves_font_20, waves_font_18, waves_font_16, waves_font_14)
+
 
 
 async def draw_tower_challenge_img(ev: Event, period: Optional[int] = None) -> Union[bytes, str]:
@@ -135,41 +157,13 @@ async def draw_tower_challenge_img(ev: Event, period: Optional[int] = None) -> U
         if not sections:
             return f"深塔第{period}期没有有效的层级数据"
 
-        card_img = await _render_tower_pil(period, sections)
+        card_img = await _render_tower_pil(period, _duration(tower_data), sections)
         card_img = await convert_img(card_img)
         return card_img
 
     except Exception as e:
         logger.error(f"[鸣潮·百科挑战] Error drawing tower challenge: {e}")
         return f"绘制深塔信息失败: {str(e)}"
-
-
-@to_thread
-def _render_tower_pil(period: int, sections):
-    width = 900
-    total_height = 150
-    section_heights = []
-    for area_name, floor_data in sections:
-        h = _calculate_section_height(area_name, floor_data, width - 80)
-        section_heights.append(h)
-        total_height += h + 20
-
-    total_height += 30
-
-    card_img = get_waves_bg(width, total_height, "bg9")
-    draw = ImageDraw.Draw(card_img)
-
-    draw_text_with_shadow(draw, "深塔", width // 2, 50, waves_font_32, "white", anchor="mm")
-    draw_text_with_shadow(draw, f"第{period}期", 50, 95, waves_font_20, (180, 180, 180), anchor="lm")
-
-    current_y = 130
-    for i, (area_name, floor_data) in enumerate(sections):
-        section_h = section_heights[i]
-        _draw_floor_section(card_img, (40, current_y), area_name, floor_data, width - 80, section_h)
-        current_y += section_h + 20
-
-    card_img = add_footer(card_img, color="white")
-    return card_img
 
 
 async def draw_slash_challenge_img(ev: Event, period: Optional[int] = None) -> Union[bytes, str]:
@@ -221,7 +215,7 @@ async def draw_slash_challenge_img(ev: Event, period: Optional[int] = None) -> U
         buff_json_path = MAP_CHALLENGE_PATH / "slash" / f"buff_{period}.json"
         buff_data = load_json_file(buff_json_path)
 
-        card_img = await _render_slash_pil(period, endless_data, buff_data)
+        card_img = await _render_slash_pil(period, _duration(slash_data), endless_data, buff_data)
         card_img = await convert_img(card_img)
         return card_img
 
@@ -230,278 +224,12 @@ async def draw_slash_challenge_img(ev: Event, period: Optional[int] = None) -> U
         return f"绘制海墟信息失败: {str(e)}"
 
 
-@to_thread
-def _render_slash_pil(period: int, endless_data: Dict[str, Any], buff_data):
-    width = 900
-    title = endless_data.get("Title", "无尽湍渊")
-    desc = endless_data.get("Desc", "")
-    desc = clean_tags(desc).rstrip("。.")
-
-    floors = endless_data.get("Floor", {})
-    floor_list = list(floors.values())
-
-    header_height = 120
-
-    desc_start_y = header_height + 10
-    desc_lines = _wrap_matrix_text_px(desc, waves_font_18, width - 130) if desc else []
-
-    desc_height = 30 + len(desc_lines) * 26 + 10
-
-    buff_height = 0
-    buff_layouts = []
-    if buff_data:
-        buff_height += 40
-        for b_name, b_desc in buff_data.items():
-            b_desc = clean_tags(b_desc).rstrip("。.")
-            b_lines = _wrap_matrix_text_px(b_desc, waves_font_16, width - 170) or [""]
-            buff_layouts.append((b_name, b_lines))
-            buff_height += 30 + len(b_lines) * 24 + 16
-
-    floor_heights = []
-    for floor_data in floor_list:
-        h = 40
-        f_desc = clean_tags(floor_data.get("Desc", "")).rstrip("。.")
-        if f_desc:
-            f_desc_lines = _wrap_matrix_text_px(f_desc, waves_font_16, width - 150)
-            h += len(f_desc_lines) * 24 + 12
-
-        monsters = floor_data.get("Monsters", {})
-        monster_count = len(monsters)
-        monster_rows = (min(monster_count, 8) + MONSTER_COLS - 1) // MONSTER_COLS
-        if monster_count > 0:
-            h += 35 + monster_rows * MONSTER_CARD_H + max(0, monster_rows - 1) * MONSTER_ROW_GAP + 10
-
-        floor_heights.append(h)
-
-    monster_area_height = sum(floor_heights) + 20
-
-    total_height = desc_start_y + desc_height + buff_height + monster_area_height + 30
-
-    card_img = get_waves_bg(width, total_height, "bg9")
-    draw = ImageDraw.Draw(card_img)
-
-    draw_text_with_shadow(draw, f"海墟 第{period}期", width // 2, 50, waves_font_32, "white", anchor="mm")
-    draw_text_with_shadow(draw, f"无尽 - {title}", width // 2, 90, waves_font_24, (255, 200, 100), anchor="mm")
-
-    current_y = desc_start_y
-    draw_text_with_shadow(draw, "【海域特性】", 50, current_y, waves_font_20, (255, 200, 100), anchor="lm")
-    current_y += 30
-
-    for line in desc_lines:
-        draw.text((65, current_y), line, (230, 230, 230), waves_font_18, "lm")
-        current_y += 26
-
-    if buff_data:
-        current_y += 10
-        draw_text_with_shadow(draw, "【本期信物】", 50, current_y, waves_font_20, (255, 215, 0), anchor="lm")
-        current_y += 35
-
-        for b_name, lines in buff_layouts:
-            draw.text((65, current_y), f"◆ {b_name}", (255, 200, 100), waves_font_18, "lm")
-            current_y += 25
-
-            for i, line in enumerate(lines):
-                if i == 0:
-                    draw.text((85, current_y), line, (220, 220, 220), waves_font_16, "lm")
-                else:
-                    draw.text((85, current_y), line, (220, 220, 220), waves_font_16, "lm")
-                current_y += 24
-            current_y += 10
-
-    current_y += 10
-    for i, floor_data in enumerate(floor_list):
-        draw_text_with_shadow(draw, f"【半场 {i + 1}】", 50, current_y, waves_font_20, (100, 200, 255), anchor="lm")
-        current_y += 30
-
-        f_desc = clean_tags(floor_data.get("Desc", "")).rstrip("。.")
-        if f_desc:
-            lines = _wrap_matrix_text_px(f_desc, waves_font_16, width - 150)
-            for i, line in enumerate(lines):
-                if i == 0:
-                    draw.text((65, current_y), f"· {line}", (200, 200, 200), waves_font_16, "lm")
-                else:
-                    draw.text((65 + 12, current_y), line, (200, 200, 200), waves_font_16, "lm")
-                current_y += 24
-            current_y += 10
-
-        monsters = floor_data.get("Monsters", {})
-        floor_level = floor_data.get("Level", 0)
-
-        if monsters:
-            draw_text_with_shadow(draw, "敌人配置", 65, current_y, waves_font_18, (255, 150, 150), anchor="lm")
-            current_y += 35
-
-            x_pos_start = 60
-            x_pos = x_pos_start
-            col = 0
-            card_w = (width - 120 - MONSTER_COL_GAP * (MONSTER_COLS - 1)) // MONSTER_COLS
-            card_h = MONSTER_CARD_H
-
-            for monster_id, monster_info in list(monsters.items())[:8]:
-                name = monster_info.get("Name", "未知")
-                element_id = monster_info.get("Element", 0)
-                element_name = ELEMENT_NAME_MAP.get(element_id, "无")
-                color = ELEMENT_COLOR.get(element_id, (200, 200, 200))
-                level = monster_info.get("Level", 0) or floor_level
-                _draw_challenge_monster_card(
-                    card_img,
-                    (x_pos, current_y),
-                    card_w,
-                    card_h,
-                    name,
-                    monster_id,
-                    element_name,
-                    color,
-                    level,
-                )
-
-                col += 1
-                if col >= MONSTER_COLS:
-                    col = 0
-                    current_y += card_h + MONSTER_ROW_GAP
-                    x_pos = x_pos_start
-                else:
-                    x_pos += card_w + MONSTER_COL_GAP
-
-            if col > 0:
-                current_y += card_h + MONSTER_ROW_GAP
-
-        current_y += 30
-
-    card_img = add_footer(card_img, color="white")
-    return card_img
-
-
-def _calculate_section_height(area_name: str, floor_data: Dict[str, Any], width: int) -> int:
-    """预计算区域高度"""
-    buffs = floor_data.get("Buffs", {})
-    monsters = floor_data.get("Monsters", {})
-
-    buff_lines = 0
-
-    for buff_info in list(buffs.values()):
-        buff_desc = clean_tags(buff_info.get("Desc", "")).rstrip("。.")
-        buff_lines += len(_wrap_matrix_text_px(buff_desc, waves_font_16, width - 90))
-
-    monster_rows = (min(len(monsters), 8) + MONSTER_COLS - 1) // MONSTER_COLS
-
-
-    section_height = 80 + buff_lines * 25
-    if buffs:
-        section_height += 30
-    if monsters:
-        section_height += 45 + monster_rows * MONSTER_CARD_H + max(0, monster_rows - 1) * MONSTER_ROW_GAP + 10
-
-    if section_height < 180:
-        section_height = 180
-    return section_height
-
-
-def _draw_floor_section(
-    img: Image.Image, pos: tuple, area_name: str, floor_data: Dict[str, Any], width: int, section_height: int
-) -> None:
-    """在图片上绘制一个层级的信息"""
-    x, y = pos
-    draw = ImageDraw.Draw(img)
-
-    # 背景框
-    draw.rounded_rectangle(
-        (x, y, x + width, y + section_height), radius=10, fill=(30, 30, 30, 180), outline=(100, 100, 100), width=1
-    )
-
-    # 区域名称和消耗
-    cost = floor_data.get("Cost", 0)
-    title = f"{area_name}"
-    cost_text = f"消耗疲劳: {cost}"
-
-    draw_text_with_shadow(draw, title, x + 20, y + 25, waves_font_24, (255, 215, 0), anchor="lm")
-    draw.text((x + width - 150, y + 25), cost_text, (200, 200, 200), waves_font_18, "lm")
-
-    # 分割线
-    draw.line((x + 20, y + 50, x + width - 20, y + 50), fill=(100, 100, 100), width=1)
-
-    current_y = y + 75
-
-    buffs = floor_data.get("Buffs", {})
-    monsters = floor_data.get("Monsters", {})
-
-    # Buff信息
-    if buffs:
-        draw.text((x + 20, current_y), "【环境Buff】", (100, 200, 255), waves_font_18, "lm")
-        current_y += 25
-
-        for buff_info in list(buffs.values()):
-            buff_desc = clean_tags(buff_info.get("Desc", "")).rstrip("。.")
-
-            # 分行显示
-            lines = _wrap_matrix_text_px(buff_desc, waves_font_16, width - 90)
-            for i, line in enumerate(lines):
-                if i == 0:
-                    draw.text((x + 30, current_y), f"· {line}", (220, 220, 220), waves_font_16, "lm")
-                else:
-                    draw.text((x + 30 + 12, current_y), line, (220, 220, 220), waves_font_16, "lm")
-                current_y += 22
-            current_y += 5
-
-    # 怪物信息
-    if monsters:
-        current_y += 10
-        draw.text((x + 20, current_y), "【敌人列表】", (255, 100, 100), waves_font_18, "lm")
-        current_y += 40
-
-        col = 0
-        x_start = x + 30
-        curr_x = x_start
-
-        card_w = (width - 60 - MONSTER_COL_GAP * (MONSTER_COLS - 1)) // MONSTER_COLS
-        card_h = MONSTER_CARD_H
-
-        for monster_id, monster_info in list(monsters.items())[:8]:
-            name = monster_info.get("Name", "未知")
-            element_id = monster_info.get("Element", 0)
-            element_name = ELEMENT_NAME_MAP.get(element_id, "未知")
-            color = ELEMENT_COLOR.get(element_id, (200, 200, 200))
-            level = monster_info.get("Level", 0)
-
-            _draw_challenge_monster_card(
-                img,
-                (curr_x, current_y),
-                card_w,
-                card_h,
-                name,
-                monster_id,
-                element_name,
-                color,
-                level,
-            )
-
-            col += 1
-            if col >= MONSTER_COLS:
-                col = 0
-                current_y += card_h + MONSTER_ROW_GAP
-                curr_x = x_start
-            else:
-                curr_x += card_w + MONSTER_COL_GAP
-
-
 def _clean_matrix_text(text: str) -> str:
     text = str(text or "")
     text = text.replace("<br/>", "\n").replace("<br />", "\n").replace("<br>", "\n")
     text = clean_tags(text)
     text = re.sub(r"<[^>]+>", "", text)
     return text.replace("&nbsp;", " ").strip()
-
-
-def _wrap_matrix_text(text: str, max_chars: int) -> list[str]:
-    lines = []
-    for part in _clean_matrix_text(text).split("\n"):
-        part = part.strip()
-        if not part:
-            continue
-        while part:
-            lines.append(part[:max_chars])
-            part = part[max_chars:]
-    return lines
 
 
 def _text_width(text: str, font) -> int:
@@ -518,13 +246,17 @@ def _wrap_matrix_text_px(text: str, font, max_width: int) -> list[str]:
         line = ""
         for char in part:
             test = line + char
-            if _text_width(test, font) <= max_width:
+            if _text_width(test, font) <= max_width or (line and char in "%，。；、：）」"):
                 line = test
                 continue
 
             if line:
-                lines.append(line)
-                line = char
+                cut = len(line)
+                while char.isdigit() and cut and line[cut - 1].isdigit():
+                    cut -= 1
+                cut = cut or len(line)
+                lines.append(line[:cut])
+                line = line[cut:] + char
             else:
                 lines.append(char)
                 line = ""
@@ -535,62 +267,6 @@ def _wrap_matrix_text_px(text: str, font, max_width: int) -> list[str]:
     return lines
 
 
-def _draw_round_icon(base: Image.Image, icon: Optional[Image.Image], box: tuple[int, int, int, int], color) -> None:
-    draw = ImageDraw.Draw(base, "RGBA")
-    draw.ellipse(box, fill=(42, 46, 53, 220), outline=(*color, 210), width=2)
-    if icon is None:
-        return
-    size = box[2] - box[0]
-    layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    icon = clean_alpha_matte(icon, (42, 46, 53, 255))
-    layer.alpha_composite(icon.resize((size, size), Image.LANCZOS), (0, 0))
-    mask = make_smooth_circle_mask(size)
-    layer.putalpha(ImageChops.multiply(layer.getchannel("A"), mask))
-    base.alpha_composite(layer, (box[0], box[1]))
-
-
-def _draw_challenge_monster_card(
-    base: Image.Image,
-    pos: tuple[int, int],
-    width: int,
-    height: int,
-    name: str,
-    monster_id: Union[str, int],
-    element_name: str,
-    color,
-    level: int = 0,
-) -> None:
-    x, y = pos
-    draw = ImageDraw.Draw(base, "RGBA")
-    draw.rounded_rectangle(
-        (x, y, x + width, y + height),
-        radius=12,
-        fill=(0, 0, 0, 115),
-        outline=(*color, 180),
-        width=1,
-    )
-
-    icon_size = 48
-    icon = _decode_data_url(get_monster_icon(name, monster_id), icon_size)
-    _draw_round_icon(base, icon, (x + 8, y + 8, x + 8 + icon_size, y + 8 + icon_size), color)
-
-    text_x = x + 64
-    text_w = max(40, width - 72)
-    name_lines = _wrap_matrix_text_px(name, waves_font_18, text_w)
-    name_max_lines = 1 if level else 2
-    for idx, line in enumerate(name_lines[:name_max_lines]):
-        draw.text((text_x, y + 18 + idx * 20), line, "white", waves_font_18, "lm")
-
-    if level:
-        draw.text((text_x, y + 42), f"Lv.{level}", (210, 210, 210), waves_font_14, "lm")
-
-    meta_y = y + height - 18
-    tag_text = f"{element_name}抗性" if element_name not in ("无", "无属性", "未知") else element_name
-    elem_w = min(_text_width(tag_text, waves_font_14) + 14, max(34, width - 72))
-    elem_x = text_x
-    _draw_matrix_tag(draw, (elem_x, meta_y - 11, elem_x + elem_w, meta_y + 11), tag_text, color)
-
-
 def _parse_matrix_tag_color(raw_color: str) -> tuple[int, int, int]:
     color = str(raw_color or "").strip().lstrip("#")
     if len(color) >= 6:
@@ -599,31 +275,6 @@ def _parse_matrix_tag_color(raw_color: str) -> tuple[int, int, int]:
         except ValueError:
             pass
     return (230, 205, 140)
-
-
-def _contrast_text_color(rgb: tuple[int, int, int]) -> tuple[int, int, int]:
-    luminance = rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114
-    return (24, 24, 28) if luminance > 165 else (255, 255, 255)
-
-
-def _draw_matrix_tag(
-    draw: ImageDraw.ImageDraw,
-    box: tuple[int, int, int, int],
-    text: str,
-    color: tuple[int, int, int],
-) -> None:
-    text_color = _contrast_text_color(color)
-    shadow_color = (255, 255, 255, 105) if text_color[0] < 100 else (0, 0, 0, 145)
-    draw.rounded_rectangle(
-        box,
-        radius=11,
-        fill=(*color, 185),
-        outline=(*color, 235),
-        width=1,
-    )
-    tx, ty = box[0] + 9, (box[1] + box[3]) // 2
-    draw.text((tx + 1, ty + 1), text, shadow_color, waves_font_14, "lm")
-    draw.text((tx, ty), text, text_color, waves_font_14, "lm")
 
 
 def _decode_data_url(data_url: Optional[str], size: int) -> Optional[Image.Image]:
@@ -649,101 +300,283 @@ def _load_role_icon(role_id: Optional[int], role_name: str, size: int) -> Option
         return None
 
 
-def _paste_matrix_icon(
-    base: Image.Image,
-    icon: Optional[Image.Image],
-    xy: tuple[int, int],
-    size: int,
-    radius: int = 8,
-) -> None:
-    if icon is None:
-        return
-    layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    icon = clean_alpha_matte(icon, (42, 46, 53, 255))
-    layer.alpha_composite(icon.resize((size, size), Image.LANCZOS), (0, 0))
-    mask = make_smooth_rounded_mask((size, size), radius)
-    layer.putalpha(ImageChops.multiply(layer.getchannel("A"), mask))
-    base.alpha_composite(layer, xy)
+def _mix(color, other, ratio: float) -> tuple:
+    return tuple(int(c + (o - c) * ratio) for c, o in zip(color[:3], other))
 
 
-def _draw_matrix_info_panel(
-    draw: ImageDraw.ImageDraw,
-    box: tuple[int, int, int, int],
-    title: str,
-    title_color=(255, 200, 100),
-) -> None:
-    draw.rounded_rectangle(
-        box,
-        radius=10,
-        fill=(18, 22, 28, 190),
-        outline=(255, 255, 255, 28),
-        width=1,
-    )
-    draw.text((box[0] + 20, box[1] + 30), title, title_color, waves_font_20, "lm")
-    draw.line((box[0] + 20, box[1] + 54, box[2] - 20, box[1] + 54), fill=(212, 177, 99, 90), width=1)
+def _edge_mask(size: tuple[int, int]) -> Image.Image:
+    """中间实、四周渐隐"""
+    mask = Image.radial_gradient("L").point(lambda v: max(0, min(255, int((176 - v) * 3.2))))
+    return mask.resize(size, Image.LANCZOS)
 
 
-def _prepare_matrix_info(matrix_data: Dict[str, Any]) -> tuple[str, list[Dict], list[Dict], list[Dict]]:
+def _duration(data: Dict[str, Any]) -> str:
+    begin, end = data.get("Begin", ""), data.get("End", "")
+    if not begin or not end:
+        return ""
+    return f"{begin[5:] if len(begin) >= 10 else begin} ~ {end[5:] if len(end) >= 10 else end}"
+
+
+class _Poster:
+    """先画在足够高的画布上, finish 时按实际高度裁切"""
+
+    def __init__(self, kind: str):
+        self.accent = THEME[kind]
+        self.soft = _mix(self.accent, (255, 255, 255), 0.45)
+        self.img = Image.new("RGBA", (WIDTH, 7000), (*INK, 255))
+        top = get_waves_bg(WIDTH, 420, "bg9").convert("RGBA")
+        top.putalpha(Image.linear_gradient("L").resize((WIDTH, 420)).point(lambda v: int((255 - v) * 0.5)))
+        self.img.alpha_composite(top)
+        haze = Image.new("RGBA", (900, 480), (*self.accent, 0))
+        haze.putalpha(_edge_mask((900, 480)).point(lambda v: int(v * 0.42)))
+        self.img.alpha_composite(haze, (330, -200))
+        self.draw = ImageDraw.Draw(self.img)
+        self.y = 0
+
+    def finish(self) -> Image.Image:
+        return add_footer(self.img.crop((0, 0, WIDTH, self.y + 70)), color="white")
+
+    def hero(self, title: str, tag: str, sub: str, arts: list) -> None:
+        x = WIDTH + 36
+        for i, art in enumerate([a for a in arts if a][:3]):
+            size = (336, 302, 268)[i]
+            art = art.resize((size, size), Image.LANCZOS)
+            duo = ImageOps.colorize(art.convert("L"), _mix(self.accent, (0, 0, 0), 0.8), self.soft).convert("RGBA")
+            alpha = ImageChops.multiply(art.getchannel("A"), _edge_mask((size, size)))
+            duo.putalpha(alpha.point(lambda v, k=(0.92, 0.62, 0.36)[i]: int(v * k)))
+            x -= size if i == 0 else 208
+            self.img.alpha_composite(duo, (x, 330 - size))
+        fade = Image.new("RGBA", (WIDTH, 150), (*INK, 0))
+        fade.putalpha(Image.linear_gradient("L").resize((WIDTH, 150)).point(lambda v: int(v * 0.96)))
+        self.img.alpha_composite(fade, (0, 168))
+        self.draw.text((PAD, 226), title, "white", waves_font_96, "ls")
+        tag_w = _text_width(tag, waves_font_32)
+        self.draw.text((PAD, 280), tag, self.soft, waves_font_32, "ls")
+        self.draw.text((PAD + tag_w + 22, 280), sub, (223, 226, 232), waves_font_28, "ls")
+        self.y = 340
+
+    def head(self, x: int, w: int, title: str, note: str = "", value: str = "") -> None:
+        self.draw.text((x, self.y + 34), title, "white", waves_font_32, "ls")
+        right = x + w
+        if value:
+            self.draw.text((right, self.y + 34), value, self.soft, waves_font_26, "rs")
+            right -= _text_width(value, waves_font_26) + 8
+        if note:
+            self.draw.text((right, self.y + 34), note, SUB, waves_font_18, "rs")
+            right -= _text_width(note, waves_font_18) + 18
+        left = x + _text_width(title, waves_font_32) + 18
+        if right > left:
+            self.draw.line((left, self.y + 22, right, self.y + 22), RULE, 1)
+
+    def paragraphs(self, x: int, y: int, w: int, texts: list, font=waves_font_18, color=BODY, center=False) -> int:
+        """返回占用高度"""
+        line_h = font.size + 11
+        top = y
+        for i, text in enumerate(texts):
+            if i:
+                self.draw.line((x, y + 8, x + w, y + 8), DASH, 1)
+                y += 17
+            for line in _wrap_matrix_text_px(text, font, w):
+                if center:
+                    self.draw.text((x + w // 2, y + line_h // 2), line, color, font, "mm")
+                else:
+                    self.draw.text((x, y + line_h // 2), line, color, font, "lm")
+                y += line_h
+        return y - top
+
+    def art(self, x: int, y: int, size: int, icon, color) -> int:
+        """半身像 + 脚下属性色光。返回图高"""
+        art_h = int(size * 0.94)
+        glow = Image.new("RGBA", (size, size // 2), (*color, 0))
+        glow.putalpha(_edge_mask(glow.size).point(lambda v: int(v * 0.62)))
+        self.img.alpha_composite(glow, (x, y + art_h - size // 2 + 10))
+        if icon is not None:
+            art = icon.resize((size, size), Image.LANCZOS).crop((0, 0, size, art_h))
+            mask = _edge_mask((size, int(size * 1.1))).crop((0, 0, size, art_h))
+            art.putalpha(ImageChops.multiply(art.getchannel("A"), mask))
+            self.img.alpha_composite(art, (x, y))
+        self.draw.line((x + size // 8, y + art_h, x + size - size // 8, y + art_h), _mix(color, (255, 255, 255), 0.2), 2)
+        return art_h
+
+    def foe(
+        self, x: int, y: int, size: int, name: str, icon, color, meta: list, fonts=NAME_FONTS, meta_font=waves_font_14
+    ) -> int:
+        """meta: [(文字, 颜色)]。返回占用高度"""
+        art_h = self.art(x, y, size, icon, color)
+        cx = x + size // 2
+        name_font, name = fit_text(self.draw, name, size - 6, fonts)
+        name_h = fonts[0].size + 8
+        self.draw.text((cx, y + art_h + 10 + name_h // 2), name, "white", name_font, "mm")
+        my = y + art_h + 12 + name_h + meta_font.size // 2
+        tx = cx - (sum(_text_width(t, meta_font) for t, _ in meta) + 6 * (len(meta) - 1)) // 2
+        for text, text_color in meta:
+            self.draw.text((tx, my), text, text_color, meta_font, "lm")
+            tx += _text_width(text, meta_font) + 6
+        return art_h + 12 + name_h + meta_font.size + 8
+
+    def lineup(self, x: int, y: int, w: int, monsters: Dict[str, Any], size: int, level: int = 0) -> int:
+        monsters = list(monsters.items())[:8]
+        if not monsters:
+            return 0
+        size = min(size, w // len(monsters))
+        height = 0
+        for i, (monster_id, info) in enumerate(monsters):
+            name = info.get("Name", "未知")
+            elements = get_monster_elements(info)
+            color = ELEMENT_COLOR.get(elements[0], (180, 180, 180))
+            meta = []
+            monster_level = info.get("Level", 0) or level
+            if monster_level:
+                meta.append((f"Lv.{monster_level}", SUB))
+            meta += [
+                (ELEMENT_NAME_MAP.get(e, "未知"), _mix(ELEMENT_COLOR.get(e, (180, 180, 180)), (255, 255, 255), 0.3))
+                for e in elements
+            ]
+            icon = _decode_data_url(get_monster_icon(name, monster_id), 256)
+            height = self.foe(x + i * size, y, size, name, icon, color, meta)
+        return height
+
+
+def _floor_buffs(floor_data: Dict[str, Any]) -> list[str]:
+    return [desc for buff in floor_data.get("Buffs", {}).values() if (desc := clean_tags(buff.get("Desc", "")).rstrip("。."))]
+
+
+def _top_arts(monsters: Dict[str, Any]) -> list:
+    return [_decode_data_url(get_monster_icon(info.get("Name", ""), mid), 336) for mid, info in list(monsters.items())[:3]]
+
+
+@to_thread
+def _render_tower_pil(period: int, duration: str, sections):
+    wings = [s for s in sections if not s[0].startswith("深境")]
+    deep = [s for s in sections if s[0].startswith("深境")]
+    p = _Poster("tower")
+    p.hero("逆境深塔", f"第{period}期", duration, _top_arts((deep or wings)[-1][1].get("Monsters", {})))
+
+    if wings:
+        heights = []
+        for i, (name, floor_data) in enumerate(wings):
+            x = PAD + i * (HALF + COL_GAP)
+            p.head(x, HALF, name, "第4层 · 疲劳", str(floor_data.get("Cost", 0)))
+            h = 60 + p.paragraphs(x, p.y + 60, HALF, _floor_buffs(floor_data))
+            h += 18 + p.lineup(x, p.y + h + 18, HALF, floor_data.get("Monsters", {}), 136)
+            heights.append(h)
+        p.y += max(heights) + 34
+
+    if deep:
+        p.head(PAD, INNER, "深境之塔")
+        p.y += 60
+        groups: list = []
+        for no, (_, floor_data) in enumerate(deep, 1):
+            buffs = _floor_buffs(floor_data)
+            if groups and groups[-1][0] == buffs:
+                groups[-1][1].append((no, floor_data))
+            else:
+                groups.append((buffs, [(no, floor_data)]))
+        text_w = 394
+        right_x = PAD + text_w + 40
+        for gi, (buffs, floors) in enumerate(groups):
+            if gi:
+                p.draw.line((PAD, p.y, WIDTH - PAD, p.y), RULE, 1)
+                p.y += 22
+            text_h = p.paragraphs(PAD, p.y, text_w, buffs)
+            ly = p.y
+            for no, floor_data in floors:
+                p.draw.text((right_x, ly - 6), str(no), INK, waves_font_60, "la", stroke_width=2, stroke_fill=p.soft)
+                p.draw.text((right_x, ly + 78), f"疲劳 {floor_data.get('Cost', 0)}", SUB, waves_font_14, "lm")
+                ly += max(96, p.lineup(right_x + 76, ly, WIDTH - PAD - right_x - 76, floor_data.get("Monsters", {}), 112)) + 14
+            p.y += max(text_h, ly - p.y) + 8
+    return p.finish()
+
+
+@to_thread
+def _render_slash_pil(period: int, duration: str, endless_data: Dict[str, Any], buff_data):
+    floors = list(endless_data.get("Floor", {}).values())
+    p = _Poster("slash")
+    p.hero("冥歌海墟", f"第{period}期", duration, _top_arts(floors[-1].get("Monsters", {}) if floors else {}))
+
+    desc = [
+        line
+        for part in re.split(r"<br\s*/?>|\n", endless_data.get("Desc", ""))
+        if (line := clean_tags(part).strip().rstrip("。."))
+    ]
+    if desc:
+        p.head(PAD, INNER, "海域特性")
+        p.y += 60 + p.paragraphs(PAD, p.y + 60, INNER, desc) + 34
+
+    if buff_data:
+        p.head(PAD, INNER, "本期信物")
+        p.y += 66
+        icons = load_json_file(MAP_CHALLENGE_PATH / "slash_buff_icon.json") or {}
+        col_w = (INNER - 60) // 3
+        buffs = list(buff_data.items())
+        for row in range(0, len(buffs), 3):
+            heights = []
+            for i, (name, desc_text) in enumerate(buffs[row : row + 3]):
+                x = PAD + i * (col_w + 30)
+                path = SLASH_BUFF_PATH / f"{icons.get(name)}.png"
+                if path.exists():
+                    art = Image.open(path).convert("RGBA").resize((132, 132), Image.LANCZOS)
+                    p.img.alpha_composite(art, (x + (col_w - 132) // 2, p.y))
+                    mirror = ImageOps.flip(art).crop((0, 0, 132, 56))
+                    mirror.putalpha(
+                        ImageChops.multiply(
+                            mirror.getchannel("A"),
+                            Image.linear_gradient("L").resize((132, 56)).point(lambda v: int((255 - v) * 0.4)),
+                        )
+                    )
+                    p.img.alpha_composite(mirror, (x + (col_w - 132) // 2, p.y + 112))
+                p.draw.text((x + col_w // 2, p.y + 196), name, p.soft, waves_font_22, "mm")
+                heights.append(
+                    216 + p.paragraphs(x, p.y + 216, col_w, [clean_tags(desc_text).rstrip("。.")], center=True)
+                )
+            p.y += max(heights) + 30
+
+    heights = []
+    for i, floor_data in enumerate(floors[:2]):
+        x = PAD + i * (HALF + COL_GAP)
+        p.head(x, HALF, f"半场{i + 1}")
+        floor_desc = clean_tags(floor_data.get("Desc", "")).rstrip("。.")
+        h = 60 + p.paragraphs(x, p.y + 60, HALF, [floor_desc] if floor_desc else [])
+        h += 18 + p.lineup(x, p.y + h + 18, HALF, floor_data.get("Monsters", {}), 108, floor_data.get("Level", 0))
+        heights.append(h)
+    p.y += max(heights, default=0)
+    return p.finish()
+
+
+def _prepare_matrix_info(matrix_data: Dict[str, Any]) -> tuple[str, list, list, list]:
+    """(关卡名, [(buff名, 说明)], [boss], [(增益说明, [角色])])"""
     levels = matrix_data.get("Levels", [])
     if not levels:
         return "", [], [], []
-
     target_level = next((level for level in levels if level.get("Name") == "奇点扩张"), None) or levels[-1]
-    level_name = target_level.get("Name", "奇点扩张")
 
-    buffs = []
-    for buff in target_level.get("NewTowerBuffs", []):
-        desc_lines = _wrap_matrix_text(buff.get("Desc", ""), 40)
-        buffs.append({
-            "name": buff.get("Name", "增益"),
-            "desc_lines": desc_lines,
-        })
+    buffs = [
+        (buff.get("Name", "增益"), _clean_matrix_text(buff.get("Desc", "")))
+        for buff in target_level.get("NewTowerBuffs", [])
+    ]
 
     bosses = []
-    seen_names = set()
-    for wave in target_level.get("Waves", []):
-        name = wave.get("Name", "未知")
-        if name in seen_names:
-            continue
-        seen_names.add(name)
-
-        tags = []
-        for tag in wave.get("Tags", []):
-            tag_name = tag.get("Name", "")
-            if not tag_name:
-                continue
-            tags.append({
-                "name": tag_name,
-                "color": _parse_matrix_tag_color(tag.get("Color", "")),
-            })
-        desc_lines = []
-        for part in re.split(r"<br\s*/?>", wave.get("Desc", "")):
-            cleaned = _clean_matrix_text(part)
-            if not cleaned or cleaned == name:
-                continue
-            desc_lines.extend(_wrap_matrix_text(cleaned, 36))
-
+    for boss in get_matrix_bosses(target_level):
+        later = [line.split("】", 1) for line in boss["desc_lines"] if line.startswith("【轮次")]
         bosses.append({
-            "name": name,
-            "tags": tags,
-            "desc_lines": desc_lines[:4],
-            "icon": _decode_data_url(get_monster_icon(name, wave.get("MonsterId", 0)), 62),
+            "name": boss["name"],
+            "tags": [
+                (tag["Name"], _parse_matrix_tag_color(tag.get("Color", ""))) for tag in boss["tags"] if tag.get("Name")
+            ],
+            "base": [line for line in boss["desc_lines"] if not line.startswith("【轮次")],
+            "later": [(head.lstrip("【").replace("解锁", " 起"), line) for head, line in later],
+            "icon": _decode_data_url(get_monster_icon(boss["name"], boss["monster_id"]), 256),
         })
 
-    roles = []
+    groups: Dict[str, list] = {}
     for role_data in matrix_data.get("Roles", []):
-        role_info = role_data.get("RoleInfo", {})
-        name = role_info.get("Name", "未知")
+        name = role_data.get("RoleInfo", {}).get("Name", "未知")
         enhance_descs = role_data.get("EnhanceSkillDesc", [])
-        desc = enhance_descs[0].get("Value", "") if enhance_descs else ""
-        roles.append({
-            "id": role_data.get("Id"),
-            "name": name,
-            "desc": desc,
-            "icon": _load_role_icon(role_data.get("Id"), name, 58),
-        })
+        desc = _clean_matrix_text(enhance_descs[0].get("Value", "")) if enhance_descs else ""
+        groups.setdefault(desc, []).append((name, _load_role_icon(role_data.get("Id"), name, 116)))
+    roles = sorted(groups.items(), key=lambda group: len(group[1]) <= 2)
 
-    return level_name, buffs, bosses, roles
+    return target_level.get("Name", "奇点扩张"), buffs, bosses, roles
 
 
 async def _draw_matrix_challenge_pil(season: int, matrix_data: Dict[str, Any]) -> Union[bytes, str]:
@@ -754,134 +587,112 @@ async def _draw_matrix_challenge_pil(season: int, matrix_data: Dict[str, Any]) -
     return await convert_img(card_img)
 
 
+def _role_tile(name: str, icon: Optional[Image.Image]) -> Image.Image:
+    w, h = 96, 116
+    body = Image.new("RGBA", (w, h), (27, 30, 38, 255))
+    if icon is not None:
+        body.alpha_composite(icon, (-10, 0))
+    fade = Image.new("RGBA", (w, 46), (8, 9, 14, 0))
+    fade.putalpha(Image.linear_gradient("L").resize((w, 46)).point(lambda v: min(255, int(v * 1.7))))
+    body.alpha_composite(fade, (0, h - 46))
+    draw = ImageDraw.Draw(body)
+    font, name = fit_text(draw, name, 62, (waves_font_14, waves_font_12, waves_font_10))
+    draw.text((w // 2 - 6, h - 13), name, "white", font, "mm")
+    mask = Image.new("L", (w * 2, h * 2), 0)
+    ImageDraw.Draw(mask).polygon([(32, 0), (w * 2, 0), (w * 2 - 32, h * 2), (0, h * 2)], fill=255)
+    tile = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    tile.paste(body, mask=mask.resize((w, h), Image.LANCZOS))
+    return tile
+
+
 @to_thread
 def _render_matrix_pil(season, level_name, buffs, bosses, roles):
+    p = _Poster("matrix")
+    p.hero("矩阵叠兵", f"第{season}期", level_name, [boss["icon"] for boss in bosses])
 
-    width = 900
-    buff_item_heights = [
-        62 + max(1, len(item["desc_lines"])) * 24
-        for item in buffs
-    ]
-    buff_h = 70 + sum(item_h + 10 for item_h in buff_item_heights) + 16
-    if not buffs:
-        buff_h = 150
-    boss_h = 76 + sum(92 + max(1, len(item["desc_lines"])) * 21 for item in bosses)
-    role_gap = 20
-    col_w = (width - 120 - role_gap) // 2
-    text_max_w = col_w - 102
-    role_layouts = []
-    for role in roles:
-        name_lines = _wrap_matrix_text_px(role["name"], waves_font_18, text_max_w) or [role["name"]]
-        desc_lines = _wrap_matrix_text_px(role.get("desc", ""), waves_font_14, text_max_w) or ["暂无增益描述"]
-        item_h = max(96, 24 + len(name_lines) * 22 + 6 + len(desc_lines) * 18 + 16)
-        role_layouts.append({**role, "name_lines": name_lines, "desc_lines": desc_lines, "height": item_h})
+    if buffs:
+        p.head(PAD, INNER, "选择Buff")
+        p.y += 60
+        for row in range(0, len(buffs), 2):
+            if row:
+                p.draw.line((PAD, p.y, WIDTH - PAD, p.y), DASH, 1)
+                p.y += 14
+            heights = []
+            for i, (name, desc) in enumerate(buffs[row : row + 2]):
+                x = PAD + i * (HALF + COL_GAP)
+                p.draw.text((x, p.y + 14), name, p.soft, waves_font_22, "lm")
+                heights.append(34 + p.paragraphs(x, p.y + 34, HALF, [desc], waves_font_16))
+            p.y += max(heights) + 14
+        p.y += 20
 
-    role_rows = (len(role_layouts) + 1) // 2
-    role_row_gap = 14
-    row_heights = []
-    for row in range(role_rows):
-        left = role_layouts[row * 2]["height"]
-        right = role_layouts[row * 2 + 1]["height"] if row * 2 + 1 < len(role_layouts) else left
-        row_heights.append(max(left, right))
-    role_h = 96 + sum(row_heights) + max(0, role_rows - 1) * role_row_gap
-    total_height = 145 + buff_h + boss_h + role_h + 85
+    if bosses:
+        p.head(PAD, INNER, "Boss列表")
+        p.y += 62
+        if any(boss["base"] or boss["later"] for boss in bosses):
+            text_x = PAD + 170
+            for i, boss in enumerate(bosses):
+                if i:
+                    p.draw.line((PAD, p.y, WIDTH - PAD, p.y), DASH, 1)
+                    p.y += 14
+                color = boss["tags"][0][1] if boss["tags"] else (139, 147, 163)
+                art_h = p.art(PAD, p.y, 140, boss["icon"], color)
+                p.draw.text((text_x, p.y + 32), boss["name"], "white", waves_font_30, "ls")
+                tag_x = text_x + _text_width(boss["name"], waves_font_30) + 16
+                for tag_name, tag_color in boss["tags"]:
+                    p.draw.text((tag_x, p.y + 32), tag_name, _mix(tag_color, (255, 255, 255), 0.3), waves_font_16, "ls")
+                    tag_x += _text_width(tag_name, waves_font_16) + 10
+                col_w = (WIDTH - PAD - text_x - 30) // 2 if boss["later"] else WIDTH - PAD - text_x
+                text_h = p.paragraphs(text_x, p.y + 46, col_w, boss["base"], waves_font_16)
+                ly = p.y + 46
+                for label, line in boss["later"]:
+                    p.draw.text((text_x + col_w + 30, ly + 8), label, SUB, waves_font_14, "lm")
+                    ly += 20 + p.paragraphs(text_x + col_w + 30, ly + 20, col_w, [line], waves_font_16, GOLD) + 6
+                p.y += max(art_h + 10, 46 + text_h, ly - p.y) + 14
+        else:
+            size = min(186, INNER // len(bosses))
+            x = PAD + (INNER - size * len(bosses)) // 2
+            for i, boss in enumerate(bosses):
+                color = boss["tags"][0][1] if boss["tags"] else (139, 147, 163)
+                meta = [(name, _mix(tag_color, (255, 255, 255), 0.3)) for name, tag_color in boss["tags"]]
+                height = p.foe(x + i * size, p.y, size, boss["name"], boss["icon"], color, meta, BOSS_FONTS, waves_font_16)
+            p.y += height
+        p.y += 20
 
-    card_img = get_waves_bg(width, total_height, "bg9")
-    draw = ImageDraw.Draw(card_img, "RGBA")
-
-    draw_text_with_shadow(draw, f"矩阵叠兵 第{season}期", width // 2, 50, waves_font_32, "white", anchor="mm")
-    draw_text_with_shadow(draw, level_name, width // 2, 92, waves_font_24, (255, 200, 100), anchor="mm")
-
-    current_y = 125
-    _draw_matrix_info_panel(draw, (40, current_y, width - 40, current_y + buff_h), "全局增益")
-    y = current_y + 70
-    if not buffs:
-        draw.text((65, y + 28), "暂无增益数据", (220, 220, 220), waves_font_16, "lm")
-    for idx, buff in enumerate(buffs):
-        item_h = buff_item_heights[idx]
-        draw.rounded_rectangle(
-            (60, y, width - 60, y + item_h),
-            radius=8,
-            fill=(0, 0, 0, 80),
-            outline=(255, 255, 255, 22),
-            width=1,
-        )
-        draw.text((78, y + 24), f"◆ {buff['name']}", (255, 200, 100), waves_font_18, "lm")
-        desc_y = y + 52
-        for line in buff["desc_lines"] or ["暂无描述"]:
-            draw.text((98, desc_y), line, (220, 220, 220), waves_font_16, "lm")
-            desc_y += 24
-        y += item_h + 10
-
-    current_y += buff_h + 20
-    _draw_matrix_info_panel(draw, (40, current_y, width - 40, current_y + boss_h), "Boss 信息", (255, 150, 150))
-    y = current_y + 74
-    for boss in bosses:
-        card_top = y - 18
-        card_h = 78 + max(1, len(boss["desc_lines"])) * 21
-        draw.rounded_rectangle(
-            (60, card_top, width - 60, card_top + card_h),
-            radius=8,
-            fill=(0, 0, 0, 95),
-            outline=(255, 255, 255, 24),
-            width=1,
-        )
-        draw.rounded_rectangle((75, card_top + 12, 137, card_top + 74), radius=8, fill=(42, 46, 53, 210))
-        _paste_matrix_icon(card_img, boss["icon"], (75, card_top + 12), 62)
-        draw.text((155, y), boss["name"], "white", waves_font_20, "lm")
-        if boss["tags"]:
-            tag_x = 155
-            for tag in boss["tags"][:3]:
-                tag_name = tag["name"]
-                tag_w = _text_width(tag_name, waves_font_14) + 18
-                if tag_x + tag_w > width - 75:
-                    break
-                _draw_matrix_tag(
-                    draw,
-                    (tag_x, y + 18, tag_x + tag_w, y + 40),
-                    tag_name,
-                    tag["color"],
-                )
-                tag_x += tag_w + 8
-        desc_y = y + 50
-        for line in boss["desc_lines"] or ["暂无机制描述"]:
-            draw.text((155, desc_y), line, (210, 210, 210), waves_font_16, "lm")
-            desc_y += 21
-        y = card_top + card_h + 16
-
-    current_y += boss_h + 20
-    _draw_matrix_info_panel(draw, (40, current_y, width - 40, current_y + role_h), "推荐角色增益", (100, 200, 255))
-    y = current_y + 74
-    row_tops = []
-    row_y = 0
-    for height in row_heights:
-        row_tops.append(row_y)
-        row_y += height + role_row_gap
-    for idx, role in enumerate(role_layouts):
-        col = idx % 2
-        row = idx // 2
-        x = 60 + col * (col_w + role_gap)
-        item_y = y + row_tops[row]
-        draw.rounded_rectangle(
-            (x, item_y, x + col_w, item_y + role["height"]),
-            radius=8,
-            fill=(0, 0, 0, 100),
-            outline=(255, 255, 255, 22),
-            width=1,
-        )
-        draw.rounded_rectangle((x + 14, item_y + 15, x + 72, item_y + 73), radius=8, fill=(42, 46, 53, 210))
-        _paste_matrix_icon(card_img, role["icon"], (x + 14, item_y + 15), 58)
-        text_y = item_y + 24
-        for line in role["name_lines"]:
-            draw.text((x + 88, text_y), line, "white", waves_font_18, "lm")
-            text_y += 22
-        desc_y = text_y + 6
-        for line in role["desc_lines"]:
-            draw.text((x + 88, desc_y), line, (210, 210, 210), waves_font_14, "lm")
-            desc_y += 18
-
-    card_img = add_footer(card_img, color="white")
-    return card_img
+    if roles:
+        p.head(PAD, INNER, "角色增益")
+        p.y += 62
+        col = 0
+        row_h = 0
+        for i, (desc, members) in enumerate(roles):
+            wide = len(members) > 2
+            if wide and col:
+                p.y += row_h
+                col = row_h = 0
+            x = PAD + col * (HALF + COL_GAP)
+            if i and not col:
+                p.draw.line((PAD, p.y, WIDTH - PAD, p.y), DASH, 1)
+                p.y += 14
+            tx = x
+            for name, icon in members:
+                p.img.alpha_composite(_role_tile(name, icon), (tx, p.y))
+                tx += 82
+            tx += 32
+            lines = _wrap_matrix_text_px(desc, waves_font_16, x + (INNER if wide else HALF) - tx)
+            ty = p.y + 58 - len(lines) * 27 // 2
+            for line in lines:
+                p.draw.text((tx, ty + 13), line, BODY, waves_font_16, "lm")
+                ty += 27
+            cell_h = max(116, len(lines) * 27) + 14
+            if wide:
+                p.y += cell_h
+            else:
+                row_h = max(row_h, cell_h)
+                col += 1
+                if col == 2:
+                    p.y += row_h
+                    col = row_h = 0
+        p.y += row_h
+    return p.finish()
 
 
 async def draw_matrix_challenge_img(ev: Event, season: Optional[int] = None) -> Union[bytes, str]:

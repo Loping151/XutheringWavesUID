@@ -1,420 +1,151 @@
+{% import "wiki/_challenge_base.html" as ui with context %}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wuthering Waves Matrix Wiki</title>
     <style>
-        @import url('{{ font_css_url }}');
+        {{ ui.base_css() }}
 
-        :root {
-            --bg-color: #0f0f13;
-            --card-bg: rgba(20, 20, 25, 0.88);
-            --main-color: {{ theme_color }};
-            --text-main: #ffffff;
-            --text-sub: #a0a0a0;
-            --border-color: rgba(255, 255, 255, 0.1);
+        .buffs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
+        .buffs .p { margin: 0; padding: 14px 0; border-top: 1px dashed rgba(255, 255, 255, 0.1); }
+        .buffs .p:nth-child(-n+2) { border-top: 0; padding-top: 0; }
+
+        .stage .lineup { justify-content: center; gap: 10px; }
+        .stage .foe { flex-basis: 186px; }
+        .stage .foe-name { margin-top: 12px; font-size: 24px; height: 34px; line-height: 34px; letter-spacing: 2px; }
+        .stage .foe-meta { font-size: 15px; line-height: 22px; }
+
+        .dossier { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 0 26px; align-items: center; padding: 14px 0; border-top: 1px dashed rgba(255, 255, 255, 0.1); }
+        .dossier:first-child { border-top: 0; padding-top: 0; }
+        .dossier .foe { flex: none; }
+        .dossier .foe-name, .dossier .foe-meta { display: none; }
+        .dossier-name { display: flex; align-items: baseline; gap: 14px; font-size: 28px; font-weight: bold; letter-spacing: 3px; }
+        .dossier-name b { font-size: 15px; letter-spacing: 1px; }
+        .dossier-text { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 30px; margin-top: 8px; }
+        .dossier-text .p { font-size: 15px; }
+        .dossier-text .p.later { color: #ffd98a; }
+        .dossier-text .p.later::before {
+            content: attr(data-round);
+            display: block;
+            font-family: 'Oswald', 'Source Han Sans CN', sans-serif;
+            font-size: 13px;
+            letter-spacing: 3px;
+            color: var(--sub);
         }
+        .dossier-text.single { grid-template-columns: minmax(0, 1fr); }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            background-color: transparent;
-            font-family: 'Source Han Sans CN', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif;
-            color: var(--text-main);
-            width: 1000px;
-            overflow: hidden;
-        }
-
-        .container {
-            width: 1000px;
-            min-height: 400px;
+        .role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
+        .role-group { display: flex; align-items: center; gap: 18px; padding: 14px 0; border-top: 1px dashed rgba(255, 255, 255, 0.1); min-width: 0; }
+        .role-group.wide { grid-column: span 2; border-top: 0; padding-top: 0; }
+        .role-group .p { flex: 1; min-width: 0; }
+        .role-list { flex-shrink: 0; max-width: 62%; display: flex; flex-wrap: wrap; gap: 8px 0; padding-left: 14px; }
+        .role-group.wide .role-list { max-width: 82%; }
+        .role {
             position: relative;
-            background-color: var(--bg-color);
-            background-image: url('{{ bg_url }}');
-            background-size: cover;
-            background-position: center;
+            width: 96px; height: 116px;
+            margin-left: -14px;
+            clip-path: polygon(17% 0, 100% 0, 83% 100%, 0 100%);
+            background: linear-gradient(to bottom, color-mix(in srgb, var(--accent) 36%, #1b1e26), #12141b);
         }
-
-        .overlay {
+        .role img { position: absolute; left: -10%; top: 0; width: 120%; height: 100%; object-fit: cover; }
+        .role-name {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(to bottom, rgba(15, 15, 19, 0.4), rgba(15, 15, 19, 0.95) 80%),
-                        linear-gradient(to right, rgba(255, 107, 107, 0.15) 0%, transparent 40%);
-            z-index: 1;
-        }
-
-        .content {
-            position: relative;
-            z-index: 2;
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            gap: 25px;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 15px;
-        }
-
-        .title {
-            font-size: 72px;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 4px 20px rgba(0,0,0,0.8);
-            margin-bottom: 10px;
-            letter-spacing: 4px;
-        }
-
-        .subtitle {
-            font-size: 26px;
-            color: #ccc;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 8px 28px;
-            border-radius: 24px;
-            display: inline-block;
-            border: 1px solid rgba(255,255,255,0.15);
-            letter-spacing: 2px;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 24px;
-            backdrop-filter: blur(12px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-            min-width: 0;
-            overflow: hidden;
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid rgba(255,255,255,0.08);
-            padding-bottom: 12px;
-            margin-bottom: 8px;
-        }
-
-        .card-title {
-            font-size: 34px;
-            font-weight: bold;
-            color: var(--main-color);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
-        }
-
-        .section-block {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            min-width: 0;
-            max-width: 100%;
-        }
-
-        .block-title {
-            font-size: 28px;
-            font-weight: bold;
-            color: var(--main-color);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            text-shadow: 0 2px 6px rgba(0,0,0,0.4);
-        }
-
-        .block-title.monster-title {
-            color: #ff7676;
-        }
-
-        /* Buff Grid - 2x2 */
-        .buff-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-        }
-
-        .buff-item {
-            padding: 14px 18px;
-            background: rgba(255,255,255,0.03);
-            border-radius: 10px;
-            border-left: 4px solid rgba(255, 107, 107, 0.5);
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-        }
-
-        .buff-content {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .buff-name {
-            font-size: 22px;
-            font-weight: bold;
-            color: #ff9a9a;
-            margin-bottom: 6px;
-        }
-
-        .buff-desc {
-            font-size: 17px;
-            color: #ccc;
-            line-height: 1.6;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-
-        /* Boss Grid - 2x2 */
-        .boss-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-        }
-
-        .boss-card {
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.45) 0%, rgba(20, 20, 30, 0.35) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
-        }
-
-        .boss-header {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .boss-icon {
-            width: 64px;
-            height: 64px;
-            object-fit: cover;
-            border-radius: 50%;
-            background: linear-gradient(135deg, rgba(40,40,50,0.8) 0%, rgba(20,20,25,0.9) 100%);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            flex-shrink: 0;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-        }
-
-        .boss-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .boss-name {
-            font-size: 22px;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.5);
-            margin-bottom: 6px;
-        }
-
-        .boss-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .tag-badge {
+            left: 0; right: 0; bottom: 0;
+            height: 42px;
+            padding: 18px 16px 0 6px;
             font-size: 14px;
             font-weight: bold;
-            padding: 2px 10px;
-            border-radius: 12px;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid;
-        }
-
-        .boss-desc {
-            font-size: 15px;
-            color: #bbb;
-            line-height: 1.5;
-            padding: 8px 10px;
-            background: rgba(0,0,0,0.2);
-            border-radius: 8px;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-
-        .boss-desc-line {
-            margin-bottom: 4px;
-            line-height: 1.5;
-        }
-
-        .boss-desc-line:last-child {
-            margin-bottom: 0;
-        }
-
-        .round2-line {
-            color: #ffd12f;
-        }
-
-        /* Role List */
-        .role-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 14px;
-        }
-
-        .role-item {
-            padding: 14px 16px;
-            background: rgba(255,255,255,0.03);
-            border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.08);
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-        }
-
-        .role-avatar {
-            width: 56px;
-            height: 56px;
-            object-fit: cover;
-            border-radius: 50%;
-            background: linear-gradient(135deg, rgba(40,40,50,0.8) 0%, rgba(20,20,25,0.9) 100%);
-            border: 2px solid rgba(255, 107, 107, 0.5);
-            flex-shrink: 0;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-        }
-
-        .role-content {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .role-name {
-            font-size: 20px;
-            font-weight: bold;
-            color: #fff;
-            margin-bottom: 4px;
-        }
-
-        .role-desc {
-            font-size: 15px;
-            color: #ccc;
-            line-height: 1.5;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-
-        .footer {
-            margin-top: 12px;
+            line-height: 22px;
             text-align: center;
-            opacity: 0.6;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: linear-gradient(to bottom, transparent, rgba(8, 9, 14, 0.95) 55%);
         }
-
-        .footer img {
-            height: 24px;
-        }
+        .role-name.s1 { font-size: 12px; }
+        .role-name.s2 { font-size: 10px; }
+        .role-name.s3 { font-size: 9px; letter-spacing: -0.2px; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="overlay"></div>
         <div class="content">
-            <div class="header">
-                <div class="title">{{ title }}</div>
-                {% if subtitle %}
-                <div class="subtitle">{{ subtitle }}</div>
+            {{ ui.hero(title, subtitle, bosses|map(attribute='icon')|list) }}
+
+            {% if buffs %}
+            <div>
+                <div class="head"><h2>选择Buff</h2><i></i></div>
+                <div class="buffs">
+                    {% for buff in buffs %}<div class="p"><b>{{ buff.name }}</b>{{ buff.desc }}</div>{% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if bosses %}
+            <div>
+                <div class="head"><h2>Boss列表</h2><i></i></div>
+                {% if bosses|selectattr('desc_lines')|list %}
+                {% for boss in bosses %}
+                {% set tags = [] %}
+                {% for tag in boss.tags %}{% set _ = tags.append({'name': tag.name, 'color': '#' ~ tag.color}) %}{% endfor %}
+                {% set base = [] %}{% set later = [] %}
+                {% for line in boss.desc_lines %}
+                {% if line.startswith('【轮次') %}{% set _ = later.append(line.split('】', 1)) %}{% else %}{% set _ = base.append(line) %}{% endif %}
+                {% endfor %}
+                <div class="dossier">
+                    {{ ui.foe('', boss.icon, tags[0].color if tags else '#8b93a3', 0, []) }}
+                    <div>
+                        <div class="dossier-name">{{ boss.name }}{% for tag in tags %}<b style="color: color-mix(in srgb, {{ tag.color }} 72%, #fff);">{{ tag.name }}</b>{% endfor %}</div>
+                        <div class="dossier-text{% if not later %} single{% endif %}">
+                            <div>{% for line in base %}<div class="p">{{ line }}</div>{% endfor %}</div>
+                            {% if later %}
+                            <div>{% for head, line in later %}<div class="p later" data-round="{{ head|replace('【', '')|replace('解锁', ' 起') }}">{{ line }}</div>{% endfor %}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="stage">
+                    <div class="lineup">
+                        {% for boss in bosses %}
+                        {% set tags = [] %}
+                        {% for tag in boss.tags %}{% set _ = tags.append({'name': tag.name, 'color': '#' ~ tag.color}) %}{% endfor %}
+                        {{ ui.foe(boss.name, boss.icon, tags[0].color if tags else '#8b93a3', 0, tags) }}
+                        {% endfor %}
+                    </div>
+                </div>
                 {% endif %}
             </div>
-
-            <!-- Buffs -->
-            {% if buffs %}
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">选择Buff</div>
-                </div>
-                <div class="buff-grid">
-                    {% for buff in buffs %}
-                    <div class="buff-item">
-                        <div class="buff-content">
-                            <div class="buff-name">{{ buff.name }}</div>
-                            <div class="buff-desc">{{ buff.desc }}</div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
             {% endif %}
 
-            <!-- Bosses -->
-            {% if bosses %}
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title" style="color: #ff7676;">Boss列表</div>
-                </div>
-                <div class="boss-grid">
-                    {% for boss in bosses %}
-                    <div class="boss-card">
-                        <div class="boss-header">
-                            {% if boss.icon %}
-                            <img src="{{ boss.icon }}" class="boss-icon">
-                            {% endif %}
-                            <div class="boss-info">
-                                <div class="boss-name">{{ boss.name }}</div>
-                                <div class="boss-tags">
-                                    {% for tag in boss.tags %}
-                                    <span class="tag-badge" style="color: #{{ tag.color }}; border-color: #{{ tag.color }}50;">{{ tag.name }}</span>
-                                    {% endfor %}
-                                </div>
+            {% if roles %}
+            <div>
+                <div class="head"><h2>角色增益</h2><i></i></div>
+                <div class="role-grid">
+                    {% for wide in (true, false) %}
+                    {% for desc, group in roles|groupby('desc') if (group|length > 2) == wide %}
+                    <div class="role-group{% if wide %} wide{% endif %}">
+                        <div class="role-list">
+                            {% for role in group %}
+                            {% set _l = role.name|length if role.name else 0 %}
+                            <div class="role">
+                                {% if role.icon %}<img src="{{ role.icon }}">{% endif %}
+                                <div class="role-name{% if _l > 7 %} s3{% elif _l > 6 %} s2{% elif _l > 5 %} s1{% endif %}">{{ role.name }}</div>
                             </div>
-                        </div>
-                        {% if boss.desc_lines %}
-                        <div class="boss-desc">
-                            {% for line in boss.desc_lines %}
-                            <div class="boss-desc-line {% if '【轮次2解锁】' in line %}round2-line{% endif %}">{{ line }}</div>
                             {% endfor %}
                         </div>
-                        {% endif %}
+                        <div class="p">{{ desc }}</div>
                     </div>
+                    {% endfor %}
                     {% endfor %}
                 </div>
             </div>
             {% endif %}
 
-            <!-- Roles -->
-            {% if roles %}
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">角色增益</div>
-                </div>
-                <div class="role-grid">
-                    {% for role in roles %}
-                    <div class="role-item">
-                        {% if role.icon %}
-                        <img src="{{ role.icon }}" class="role-avatar">
-                        {% endif %}
-                        <div class="role-content">
-                            <div class="role-name">{{ role.name }}</div>
-                            <div class="role-desc">{{ role.desc }}</div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            {% if footer_url %}
-            <div class="footer">
-                <img src="{{ footer_url }}" alt="Footer">
-            </div>
-            {% endif %}
+            {{ ui.footer() }}
         </div>
     </div>
 </body>
