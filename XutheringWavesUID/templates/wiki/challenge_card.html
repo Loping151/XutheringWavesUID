@@ -63,7 +63,8 @@
             {% else %}{% set _ = groups.append({'buffs': floor.buffs, 'floors': [(loop.index, floor)]}) %}{% endif %}
             {% endfor %}
             <div>
-                <div class="head"><h2>深境之塔</h2><i></i></div>
+                {% set costs = deep_tower.floors|map(attribute='cost')|unique|list %}
+                <div class="head"><h2>深境之塔</h2><i></i>{% if costs|length == 1 %}<span>每层 · 疲劳<b>{{ costs[0] }}</b></span>{% endif %}</div>
                 {% for group in groups %}
                 <div class="storey">
                     <div>
@@ -72,7 +73,7 @@
                     <div class="levels">
                         {% for no, floor in group.floors %}
                         <div class="level">
-                            <div class="level-no">{{ no }}<small>疲劳 {{ floor.cost }}</small></div>
+                            <div class="level-no">{{ no }}{% if costs|length > 1 %}<small>疲劳 {{ floor.cost }}</small>{% endif %}</div>
                             {{ ui.lineup(floor.monsters) }}
                         </div>
                         {% endfor %}

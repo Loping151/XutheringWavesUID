@@ -463,7 +463,9 @@ def _render_tower_pil(period: int, duration: str, sections):
         p.y += max(heights) + 34
 
     if deep:
-        p.head(PAD, INNER, "深境之塔")
+        costs = {floor_data.get("Cost", 0) for _, floor_data in deep}
+        same_cost = len(costs) == 1
+        p.head(PAD, INNER, "深境之塔", *(("每层 · 疲劳", str(min(costs))) if same_cost else ()))
         p.y += 60
         groups: list = []
         for no, (_, floor_data) in enumerate(deep, 1):
@@ -482,7 +484,8 @@ def _render_tower_pil(period: int, duration: str, sections):
             ly = p.y
             for no, floor_data in floors:
                 p.draw.text((right_x, ly - 6), str(no), INK, waves_font_60, "la", stroke_width=2, stroke_fill=p.soft)
-                p.draw.text((right_x, ly + 78), f"疲劳 {floor_data.get('Cost', 0)}", SUB, waves_font_14, "lm")
+                if not same_cost:
+                    p.draw.text((right_x, ly + 78), f"疲劳 {floor_data.get('Cost', 0)}", SUB, waves_font_14, "lm")
                 ly += max(96, p.lineup(right_x + 76, ly, WIDTH - PAD - right_x - 76, floor_data.get("Monsters", {}), 112)) + 14
             p.y += max(text_h, ly - p.y) + 8
     return p.finish()
