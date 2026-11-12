@@ -74,6 +74,9 @@ MAP_CHALLENGE_PATH = RESOURCE_PATH / "map" / "detail_json" / "challenge"
 MAP_FORTE_PATH = RESOURCE_PATH / "map" / "detail_json" / "forte"
 MAP_BUILD_PATH = BUILD_ROOT / "map" / "waves_build"
 MAP_BUILD_TEMP = MAIN_PATH / "build" / "map" / "waves_build"
+# 资源 hash 清单
+HASH_PATH = RESOURCE_PATH / "hash"
+HASH_CHECKED_PATH = RESOURCE_PATH / "hash_checked.json"
 MAP_ALIAS_PATH = MAP_PATH / "alias"
 LOCALIZATION_PATH = MAP_PATH / "i18n"
 
@@ -159,6 +162,7 @@ def init_dir():
         BUILD_TEMP,
         MAP_BUILD_PATH,
         MAP_BUILD_TEMP,
+        HASH_PATH,
         MAP_PATH,
         MAP_CHAR_PATH,
         MAP_DETAIL_PATH,

@@ -122,37 +122,59 @@ def get_file_hash_sha256(file_path):
 
 
 def check_file_hash(path: Path) -> bool:
-    hash_file = path / "hash.json"
-    if not hash_file.exists():
-        return False
+    # 兼容旧版构建的导入
+    return False
+
+
+def check_resource_hash(epath_map: dict, fix: bool = True) -> int:
+    """按 resource/hash 清单校验资源, fix 时删除内容不符的文件; 全部一致的清单记下摘要, 未变化不再校验"""
+    from .resource.download_cnb import resolve_local_path
+    from .resource.RESOURCE_PATH import HASH_PATH, HASH_CHECKED_PATH
 
     try:
-        with open(hash_file, 'r', encoding='utf-8') as f:
-            hash_data = json.load(f)
-    except Exception as e:
-        logger.error(f"[鸣潮·下载工具] 读取 hash.json 失败: {e}")
-        return False
+        checked = json.loads(HASH_CHECKED_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        checked = {}
 
-    deleted = False
+    mismatched = 0
+    for manifest in sorted(HASH_PATH.glob("*.json")):
+        try:
+            raw = manifest.read_bytes()
+            digest = hashlib.sha256(raw).hexdigest()
+            if checked.get(manifest.name) == digest:
+                continue
+            hash_data = json.loads(raw)
+        except Exception as e:
+            logger.error(f"[鸣潮·下载工具] 读取清单 {manifest.name} 失败: {e}")
+            continue
 
-    for file in path.iterdir():
-        if file.is_file() and file.suffix != '.json':
-            filename = file.name
-
-            if filename in hash_data:
-                try:
-                    file_hash = get_file_hash_sha256(file)
-                    expected_hash = hash_data[filename]
-
-                    if file_hash != expected_hash:
-                        logger.info(f"[鸣潮·下载工具] 文件 {filename} hash 不匹配，已删除")
+        passed = True
+        for rel_path, expected_hash in hash_data.items():
+            file = resolve_local_path(rel_path, epath_map)
+            if file is None or not file.is_file():
+                continue
+            try:
+                if get_file_hash_sha256(file) != expected_hash:
+                    passed = False
+                    mismatched += 1
+                    if fix:
                         file.unlink()
-                        deleted = True
-                except Exception as e:
-                    logger.error(f"[鸣潮·下载工具] 检查文件 {filename} hash 失败: {e}")
+            except Exception as e:
+                passed = False
+                logger.error(f"[鸣潮·下载工具] 检查文件 {rel_path} hash 失败: {e}")
+        if passed:
+            checked[manifest.name] = digest
 
-    return deleted
+    try:
+        HASH_CHECKED_PATH.write_text(json.dumps(checked), encoding="utf-8")
+    except Exception as e:
+        logger.error(f"[鸣潮·下载工具] 写入清单校验记录失败: {e}")
 
+    if mismatched and fix:
+        logger.info(f"[鸣潮·下载工具] {mismatched} 个资源文件 hash 不匹配，已删除")
+    elif mismatched:
+        logger.warning(f"[鸣潮·下载工具] {mismatched} 个资源文件重下后仍与清单不符，下次同步重试")
+    return mismatched
 
 
 def _is_same_file(src_file: Path, dst_file: Path) -> bool:

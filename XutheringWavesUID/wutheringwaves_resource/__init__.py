@@ -8,15 +8,11 @@ from gsuid_core.aps import scheduler
 from gsuid_core.logger import logger
 
 from ..wutheringwaves_config import WutheringWavesConfig
-from ..utils.download_utils import copy_build_files, check_file_hash
+from ..utils.download_utils import copy_build_files
 from ..utils.resource.download_all_resource import (
     reload_all_modules,
     download_all_resource,
     notify_master_and_restart,
-)
-from ..utils.resource.RESOURCE_PATH import (
-    BUILD_TEMP,
-    MAP_BUILD_TEMP,
 )
 
 # 网页面板编辑器 (导入即注册路由 /waves/panel-edit/, 由 WavesPanelEditPassword 启停)
@@ -43,10 +39,6 @@ async def send_download_resource_msg(bot: Bot, ev: Event):
     await bot.send("[鸣潮] 正在开始下载~可能需要较久的时间！请勿重复执行！")
     try:
         await download_all_resource(force="强制" in ev.raw_text)
-
-        if check_file_hash(BUILD_TEMP) or check_file_hash(MAP_BUILD_TEMP):
-            await download_all_resource()
-
         build_updated, map_updated = copy_build_files(soft=True)
     except Exception as e:
         logger.exception(f"[鸣潮·资源] 手动下载失败: {e}")
@@ -77,9 +69,6 @@ async def startup():
     await download_all_resource()
 
     logger.info("[鸣潮·资源] 资源下载完成，开始校验...")
-    if check_file_hash(BUILD_TEMP) or check_file_hash(MAP_BUILD_TEMP):
-        await download_all_resource()
-
     build_updated, map_updated = copy_build_files(soft=True)
 
     if build_updated or map_updated:
@@ -97,9 +86,6 @@ async def auto_download_resource():
         await asyncio.sleep(delay_seconds)
     logger.info("[鸣潮·资源] 定时任务: 开始下载全部资源...")
     await download_all_resource()
-
-    if check_file_hash(BUILD_TEMP) or check_file_hash(MAP_BUILD_TEMP):
-        await download_all_resource()
 
     build_updated, map_updated = copy_build_files(soft=True)
     if build_updated or map_updated:
