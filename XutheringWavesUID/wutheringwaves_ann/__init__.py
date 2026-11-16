@@ -23,7 +23,7 @@ from ..utils.database.models import WavesBind, WavesUser
 from ..utils.database.waves_user_sdk import WavesUserSdk
 from ..wutheringwaves_config import WutheringWavesConfig
 from ..wutheringwaves_config.ann_config import get_ann_new_ids, set_ann_new_ids
-from ..utils.resource.RESOURCE_PATH import ANN_CARD_PATH, BAKE_PATH, CALENDAR_PATH, WIKI_CACHE_PATH
+from ..utils.resource.RESOURCE_PATH import ANN_CARD_PATH, BAKE_PATH, WIKI_CACHE_PATH, CALENDAR_CACHE_PATH
 from ..wutheringwaves_resource.panel_editor.storage import PANEL_EDIT_TMP
 from ..utils.database.waves_subscribe import WavesSubscribe
 from ..utils.database.waves_group_activity import WavesGroupActivity, ANN_PUSH_GUARD
@@ -423,7 +423,7 @@ async def clean_cache_directories(days: int) -> str:
         total_count += ann_count
         total_space += ann_space
 
-    cal_count, cal_space = clean_old_cache_files(CALENDAR_PATH, days)
+    cal_count, cal_space = clean_old_cache_files(CALENDAR_CACHE_PATH, days)
     if cal_count > 0:
         results.append(f"日历: {cal_count}个文件, {cal_space:.2f}MB")
         total_count += cal_count

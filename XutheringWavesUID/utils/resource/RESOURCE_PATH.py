@@ -100,6 +100,7 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 # 其他的素材
 OTHER_PATH = MAIN_PATH / "other"
 CALENDAR_PATH = OTHER_PATH / "calendar"
+CALENDAR_CACHE_PATH = OTHER_PATH / "calendar_cache"
 SLASH_PATH = OTHER_PATH / "slash"
 MATRIX_PATH = OTHER_PATH / "matrix"
 CHALLENGE_PATH = OTHER_PATH / "challenge"
@@ -151,6 +152,7 @@ def init_dir():
         CUSTOM_CARD_PATH,
         OTHER_PATH,
         CALENDAR_PATH,
+        CALENDAR_CACHE_PATH,
         MATRIX_PATH,
         ANN_CARD_PATH,
         BAKE_PATH,
