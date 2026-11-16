@@ -85,6 +85,8 @@ async def sync_repo(repo_url: str, branch: str, sparse: List[str], TAG: str) -> 
         logger.info(f"[鸣潮·资源下载] {TAG} 首次拉取资源仓库, 约 1GB, 请耐心等待...")
         code, out = await run_git(
             "clone",
+            "-c",
+            "core.autocrlf=false",
             "--depth=1",
             "--filter=blob:none",
             "--sparse",
@@ -105,6 +107,11 @@ async def sync_repo(repo_url: str, branch: str, sparse: List[str], TAG: str) -> 
         if code != 0:
             logger.warning(f"[鸣潮·资源下载] {TAG} 仓库更新失败: {out}")
             return False
+        _, autocrlf = await run_git("config", "--bool", "core.autocrlf", cwd=REPO_PATH)
+        if autocrlf == "true":
+            # 删掉索引, 下面 reset 按 LF 重新签出
+            await run_git("config", "core.autocrlf", "false", cwd=REPO_PATH)
+            (REPO_PATH / ".git" / "index").unlink(missing_ok=True)
         code, out = await run_git("reset", "--hard", "FETCH_HEAD", cwd=REPO_PATH)
         if code != 0:
             logger.warning(f"[鸣潮·资源下载] {TAG} 仓库重置失败: {out}")
