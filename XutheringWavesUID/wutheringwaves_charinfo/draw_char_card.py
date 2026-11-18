@@ -1217,15 +1217,26 @@ async def draw_char_detail_img(
     )
     panel_items = list(card_sort_name[:-1]) + [(_last_slot_name, "0.0%")]
 
+    panel_values = dict(calc.role_card)
+    if not is_limit_query and not change_list_regex:
+        for _key in ("生命", "攻击", "防御"):
+            _remote = role_detail.get_attr_value(_key)
+            if not _remote or not _remote.isdigit():
+                continue
+            _local = _pct(panel_values.get(_key, "0"))
+            if _local > 0 and not 0.7 <= int(_remote) / _local <= 1.1:
+                continue
+            panel_values[_key] = _remote
+
     for index, name_default in enumerate(panel_items):
         name, default_value = name_default
         if name == "属性伤害加成":
-            value = calc.role_card.get(shuxing, default_value)
+            value = panel_values.get(shuxing, default_value)
             prop_img = await get_attribute_prop(shuxing)
             name_color, _ = get_valid_color(shuxing, value, calc.calc_temp)
             name = t(shuxing, locale)
         else:
-            value = calc.role_card.get(name, default_value)
+            value = panel_values.get(name, default_value)
             prop_img = await get_attribute_prop(name)
             name_color, _ = get_valid_color(name, value, calc.calc_temp)
             if index < 4:

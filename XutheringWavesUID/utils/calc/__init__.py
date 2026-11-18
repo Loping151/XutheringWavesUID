@@ -15,6 +15,14 @@ class WuWaCalc:
         )
 
 
+def resolve_node_state(role_detail):
+    try:
+        from ..waves_build.wuwacalc import resolve_node_state as f
+    except Exception:
+        return {}
+    return f(role_detail)
+
+
 def reload_wuwacalc_module():
     global WuWaCalc
     try:

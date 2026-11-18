@@ -1,6 +1,6 @@
-from typing import Dict, List, Union, Literal, Optional
+from typing import Any, Dict, List, Union, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 
 class RoleSkin(BaseModel):
@@ -145,6 +145,22 @@ class RoleDetailData(BaseModel):
     skillList: List[SkillData]
     activeBranchId: int = 0
     skillBranchList: Optional[List[SkillBranch]] = None
+    roleAttributeList: Any = None
+    _node_state: Optional[Dict[str, float]] = PrivateAttr(default=None)
+
+    def get_attr_value(self, name: str) -> Optional[str]:
+        if not isinstance(self.roleAttributeList, list):
+            return None
+        for item in self.roleAttributeList:
+            if not isinstance(item, dict) or item.get("attributeName") != name:
+                continue
+            value = item.get("attributeValue")
+            if isinstance(value, int) and not isinstance(value, bool):
+                return str(value)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            return None
+        return None
 
     def get_chain_num(self):
         """获取命座数量"""

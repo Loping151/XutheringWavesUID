@@ -17,6 +17,7 @@ from ..utils.api.model_other import EnemyDetailData
 from ..utils.char_info_utils import PATTERN, get_all_role_detail_info_list, parse_skill_levels
 from ..utils.ascension.sonata import WavesSonataResult, get_sonata_detail
 from ..utils.ascension.weapon import WavesWeaponResult, get_weapon_detail
+from ..utils.calc import resolve_node_state
 from ..utils.resource.constant import SPECIAL_CHAR, SONATA_FIRST_ID, SONATA_FIRST_ID_BY_ROLE
 
 phantom_main_value = [
@@ -610,6 +611,7 @@ async def change_role_detail(
     user_id: str = "",
     bot_id: str = "",
 ) -> tuple[RoleDetailData, str]:
+    resolve_node_state(role_detail)
     parser: ChangeParser = ChangeParser(change_list_regex)
     parserResult: ReplaceResult = parser.rr
     if parserResult.role.skill:

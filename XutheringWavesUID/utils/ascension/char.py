@@ -56,6 +56,7 @@ class WavesCharResult:
         },
         self.skillTrees = {}
         self.fixed_skill = {}
+        self.node_values = {}
 
 
 def get_breach(breach: Union[int, None], level: int):
@@ -145,7 +146,8 @@ def get_char_detail(char_id: Union[str, int], level: int, breach: Union[int, Non
 
             try:
                 result.fixed_skill[name] = sum_percentages(skill_info["param"][0], result.fixed_skill[name])
-            except (IndexError, KeyError, TypeError) as e:
+                result.node_values.setdefault(name, []).append(float(str(skill_info["param"][0]).rstrip("%")))
+            except (IndexError, KeyError, TypeError, ValueError) as e:
                 logger.warning(f"[鸣潮·角色升级] get_char_detail param[0] failed for char_id {char_id}, skill {name}: {e}")
 
         if skill_info.get("type") == "固有技能":
