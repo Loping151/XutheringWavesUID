@@ -23,7 +23,7 @@ guide_map = {
     "吃我无痕": "WuHen",
     "巡游天国FM": "XFM",
     "猫眼石攻略组": "Chrysoberyl",
-    "拉格朗日变分主义": "Lagvar",
+    "莫宁宁小学": "Lagvar",
 }
 
 guide_author_map = {v: k for k, v in guide_map.items()}

@@ -48,7 +48,7 @@ GUIDE_AUTHORS = {
     "WuHen": "吃我无痕",
     "XFM": "巡游天国",
     "KuroBBS": "社区攻略",
-    "Lagvar": "拉格朗日变分主义",
+    "Lagvar": "莫宁宁小学",
 }
 
 

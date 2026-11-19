@@ -60,7 +60,7 @@ XFM_GUIDE_PATH = GUIDE_PATH / "XFM"
 KUROBBS_GUIDE_PATH = GUIDE_PATH / "KuroBBS"
 # 猫眼石 攻略库
 CHRYSOBERYL_GUIDE_PATH = GUIDE_PATH / "Chrysoberyl"
-# 拉格朗日变分主义 攻略库
+# 莫宁宁小学 攻略库
 LAGVAR_GUIDE_PATH = GUIDE_PATH / "Lagvar"
 
 # 构建 和 详情文件

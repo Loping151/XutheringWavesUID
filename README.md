@@ -146,4 +146,4 @@ android_termux: python3.10-3.14<br>
   - [吃我无痕](https://space.bilibili.com/347744)
   - [巡游天国FM](https://space.bilibili.com/444694026)
   - [猫眼石攻略组](https://space.bilibili.com/3546862856440377)
-  - 拉格朗日变分主义
+  - 莫宁宁小学
