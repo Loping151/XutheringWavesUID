@@ -9,7 +9,7 @@ from gsuid_core.models import Event
 from gsuid_core.utils.image.convert import convert_img
 
 from .period import get_slash_period_number
-from ..utils.hint import error_reply
+from ..utils.hint import error_reply, not_shown_msg
 from ..utils.at_help import safe_sender_avatar
 from ..utils.util import hide_uid, get_hide_uid_pref
 from ..utils.image import (
@@ -44,7 +44,7 @@ from ..utils.fonts.waves_fonts import (
     waves_font_42,
 )
 from ..utils.resource.RESOURCE_PATH import SLASH_PATH, PLAYER_PATH
-from ..wutheringwaves_config import WutheringWavesConfig, PREFIX
+from ..wutheringwaves_config import WutheringWavesConfig
 
 TEXT_PATH = Path(__file__).parent / "texture2d"
 
@@ -84,7 +84,7 @@ COLOR_QUALITY = {
 }
 
 
-async def get_slash_data(uid: str, ck: str, is_self_ck: bool) -> Union[SlashDetail, str]:
+async def get_slash_data(uid: str, ck: str, is_self_ck: bool, peek: bool = False) -> Union[SlashDetail, str]:
     if is_self_ck:
         slash_data = await waves_api.get_slash_detail(uid, ck)
     else:
@@ -97,7 +97,7 @@ async def get_slash_data(uid: str, ck: str, is_self_ck: bool) -> Union[SlashDeta
     if not slash_data or (isinstance(slash_data, dict) and not slash_data.get("isUnlock", False)):
         if not is_self_ck:
             if slash_data is None and await waves_api.is_hidden_to_guest(uid, ck):
-                return f"用户未展示挑战数据, 请尝试【{PREFIX}登录】"
+                return not_shown_msg(uid, peek, "挑战数据")
             return SLASH_ERROR_MESSAGE_NO_UNLOCK
         return SLASH_ERROR_MESSAGE_NO_DATA
     else:
@@ -128,7 +128,7 @@ async def draw_slash_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
                 challengeIds = [int(layer)]
 
     # 冥海数据
-    slash_detail: Union[SlashDetail, str] = await get_slash_data(uid, ck, is_self_ck)
+    slash_detail: Union[SlashDetail, str] = await get_slash_data(uid, ck, is_self_ck, peek)
     if isinstance(slash_detail, str):
         return slash_detail
 
@@ -159,7 +159,7 @@ async def draw_slash_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
     if not account_info.success:
         return account_info.throw_msg()
     if not account_info.data:
-        return f"用户未展示数据, 请尝试【{PREFIX}登录】"
+        return not_shown_msg(uid, peek)
     account_info = AccountBaseInfo.model_validate(account_info.data)
 
     # 绘制图片
@@ -335,7 +335,8 @@ async def draw_slash_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
 
     card_img = add_footer(card_img, 600, 20)
     card_img = await convert_img(card_img)
-    await save_slash_record(uid, slash_detail)
+    if not peek:
+        await save_slash_record(uid, slash_detail)
     await upload_slash_record(is_self_ck, uid, slash_detail, sender_avatar, user_id, ev.bot_id)
     return card_img
 

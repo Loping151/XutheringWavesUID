@@ -7,7 +7,7 @@ from gsuid_core.models import Event
 from gsuid_core.utils.image.convert import convert_img
 
 from .period import get_tower_period_number
-from ..utils.hint import error_reply
+from ..utils.hint import error_reply, not_shown_msg
 from ..utils.util import get_version, hide_uid, get_hide_uid_pref
 from ..utils.image import GREY, CHAIN_COLOR, add_footer, get_waves_bg, paste_skill_branch_emblem
 from ..utils.api.model import (
@@ -48,7 +48,7 @@ no_login_msg = [
 ABYSS_ERROR_MESSAGE_LOGIN = "\n".join(no_login_msg)
 
 
-async def get_abyss_data(uid: str, ck: str, is_self_ck: bool):
+async def get_abyss_data(uid: str, ck: str, is_self_ck: bool, peek: bool = False):
     if is_self_ck:
         abyss_data = await waves_api.get_abyss_data(uid, ck)
     else:
@@ -59,6 +59,10 @@ async def get_abyss_data(uid: str, ck: str, is_self_ck: bool):
 
     abyss_data = abyss_data.data
     if not abyss_data or (isinstance(abyss_data, dict) and not abyss_data.get("isUnlock", False)):
+        if peek:
+            if abyss_data is None and await waves_api.is_hidden_to_guest(uid, ck):
+                return not_shown_msg(uid, peek, "挑战数据")
+            return ABYSS_ERROR_MESSAGE_NO_UNLOCK
         if not is_self_ck:
             return ABYSS_ERROR_MESSAGE_LOGIN
         return ABYSS_ERROR_MESSAGE_NO_DATA
@@ -93,7 +97,7 @@ async def draw_abyss_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
     if not account_info.success:
         return account_info.throw_msg()
     if not account_info.data:
-        return f"用户未展示数据, 请尝试【{PREFIX}登录】"
+        return not_shown_msg(uid, peek)
     account_info = AccountBaseInfo.model_validate(account_info.data)
 
     # 共鸣者信息
@@ -107,7 +111,7 @@ async def draw_abyss_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
             pass
 
     # 深塔
-    abyss_data = await get_abyss_data(uid, ck, is_self_ck)
+    abyss_data = await get_abyss_data(uid, ck, is_self_ck, peek)
     if isinstance(abyss_data, str) or not abyss_data:
         return abyss_data
     if not abyss_data.isUnlock:
@@ -265,7 +269,7 @@ async def draw_abyss_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
             yset += 50
         break
     else:
-        if not is_self_ck:
+        if not is_self_ck and not peek:
             return ABYSS_ERROR_MESSAGE_LOGIN
         return ABYSS_ERROR_MESSAGE_NO_DATA
 

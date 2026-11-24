@@ -7,7 +7,7 @@ from PIL import Image
 from gsuid_core.models import Event
 from gsuid_core.logger import logger
 
-from ..utils.hint import error_reply
+from ..utils.hint import error_reply, not_shown_msg
 from ..utils.util import hide_uid, get_hide_uid_pref
 from ..utils.waves_api import waves_api
 from ..utils.error_reply import WAVES_CODE_102
@@ -16,7 +16,7 @@ from ..utils.api.model import (
     RoleList,
 )
 from ..utils.ascension.char import get_char_detail
-from ..wutheringwaves_config import WutheringWavesConfig, PREFIX
+from ..wutheringwaves_config import WutheringWavesConfig
 from ..utils.render_utils import (
     PLAYWRIGHT_AVAILABLE,
     render_html,
@@ -70,10 +70,10 @@ async def draw_abyss_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
         if not account_info_res.success:
             return account_info_res.throw_msg()
         if not account_info_res.data:
-            return f"用户未展示数据, 请尝试【{PREFIX}登录】"
+            return not_shown_msg(uid, peek)
         account_info = AccountBaseInfo.model_validate(account_info_res.data)
 
-        abyss_data = await get_abyss_data(uid, ck, is_self_ck)
+        abyss_data = await get_abyss_data(uid, ck, is_self_ck, peek)
         if isinstance(abyss_data, str) or not abyss_data:
             return abyss_data
         if not abyss_data.isUnlock:

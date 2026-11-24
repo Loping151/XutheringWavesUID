@@ -10,6 +10,12 @@ WAVES_ERROR_CODE = {}
 WAVES_ERROR_CODE.update(ERROR_CODE)
 
 
+def not_shown_msg(uid: str, peek: bool, what: str = "数据") -> str:
+    if peek:
+        return f"[鸣潮] 特征码[{uid}] 未在库街区展示{what}"
+    return f"用户未展示{what}, 请尝试【{PREFIX}登录】"
+
+
 def error_reply(code: Optional[int] = None, msg: str = "") -> str:
     msg_list = []
     if msg:

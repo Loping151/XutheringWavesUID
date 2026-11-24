@@ -8,7 +8,7 @@ from PIL import Image
 from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
-from ..utils.hint import error_reply
+from ..utils.hint import error_reply, not_shown_msg
 from ..utils.at_help import safe_sender_avatar
 from ..utils.util import hide_uid, get_hide_uid_pref
 from ..utils.waves_api import waves_api
@@ -57,7 +57,7 @@ async def _get_account_info(uid: str, ck: str) -> Union[AccountBaseInfo, str]:
     return AccountBaseInfo.model_validate(account_info_res.data)
 
 
-async def get_matrix_data(uid: str, ck: str, is_self_ck: bool) -> Union[MatrixDetail, str]:
+async def get_matrix_data(uid: str, ck: str, is_self_ck: bool, peek: bool = False) -> Union[MatrixDetail, str]:
     if is_self_ck:
         matrix_data = await waves_api.get_matrix_detail(uid, ck)
     else:
@@ -70,7 +70,7 @@ async def get_matrix_data(uid: str, ck: str, is_self_ck: bool) -> Union[MatrixDe
     if not matrix_data or (isinstance(matrix_data, dict) and not matrix_data.get("isUnlock", False)):
         if not is_self_ck:
             if matrix_data is None and await waves_api.is_hidden_to_guest(uid, ck):
-                return f"用户未展示挑战数据, 请尝试【{PREFIX}登录】"
+                return not_shown_msg(uid, peek, "挑战数据")
             return MATRIX_ERROR_NO_UNLOCK
         return MATRIX_ERROR_NO_DATA
     else:
@@ -226,7 +226,7 @@ async def draw_matrix_img(ev: Event, uid: str, user_id: str, peek: bool = False)
         return error_reply(WAVES_CODE_102)
 
     # 矩阵数据
-    matrix_detail: Union[MatrixDetail, str] = await get_matrix_data(uid, ck, is_self_ck)
+    matrix_detail: Union[MatrixDetail, str] = await get_matrix_data(uid, ck, is_self_ck, peek)
     if isinstance(matrix_detail, str):
         return matrix_detail
 
@@ -261,7 +261,7 @@ async def draw_matrix_img(ev: Event, uid: str, user_id: str, peek: bool = False)
         # 未登录: 展示所有模式，不区分稳态/奇点
         result = await _draw_matrix_index_html(ev, uid, user_id, ck, matrix_detail)
 
-    if isinstance(result, bytes):
+    if isinstance(result, bytes) and not peek:
         await save_matrix_record(uid, matrix_detail, char_ids_map)
         await upload_matrix_record(is_self_ck, uid, matrix_detail, char_ids_map, sender_avatar, user_id, ev.bot_id)
     return result

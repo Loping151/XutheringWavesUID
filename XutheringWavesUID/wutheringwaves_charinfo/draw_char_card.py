@@ -756,7 +756,7 @@ async def draw_char_detail_img(
 
     if not is_limit_query:
         info, ck, _ = await base_info_cache.load_account_context(
-            uid, user_id, ev.bot_id, force_ck=bool(waves_id)
+            uid, user_id, ev.bot_id, force_ck=bool(waves_id), peek=bool(waves_id)
         )
         if isinstance(info, str):
             # ck 也失败 → 返错误; ck 有效但 baseinfo 失败 → 降级出图
@@ -1321,7 +1321,7 @@ async def draw_char_score_img(ev: Event, uid: str, char: str, user_id: str, wave
 
     if not is_limit_query:
         info, ck, _ = await base_info_cache.load_account_context(
-            uid, user_id, ev.bot_id, force_ck=bool(waves_id)
+            uid, user_id, ev.bot_id, force_ck=bool(waves_id), peek=bool(waves_id)
         )
         if isinstance(info, str):
             # ck 也失败 → 返错误; ck 有效但 baseinfo 失败 → 降级出图
@@ -1884,7 +1884,7 @@ async def draw_char_optimize_img(ev: Event, uid: str, char: str, user_id: str, w
     force_resource_id = None
     if not is_limit_query:
         info, ck, _ = await base_info_cache.load_account_context(
-            uid, user_id, ev.bot_id, force_ck=bool(waves_id)
+            uid, user_id, ev.bot_id, force_ck=bool(waves_id), peek=bool(waves_id)
         )
         if isinstance(info, str):
             # ck 也失败 → 返错误; ck 有效但 baseinfo 失败 → 降级出图

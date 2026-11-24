@@ -8,7 +8,7 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
 from .period import get_slash_period_number
-from ..utils.hint import error_reply
+from ..utils.hint import error_reply, not_shown_msg
 from ..utils.at_help import safe_sender_avatar
 from ..utils.util import hide_uid, get_hide_uid_pref
 from ..utils.waves_api import waves_api
@@ -18,7 +18,7 @@ from ..utils.api.model import (
     AccountBaseInfo,
     RoleList,
 )
-from ..wutheringwaves_config import WutheringWavesConfig, PREFIX
+from ..wutheringwaves_config import WutheringWavesConfig
 from ..utils.render_utils import (
     PLAYWRIGHT_AVAILABLE,
     render_html,
@@ -79,7 +79,7 @@ async def draw_slash_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
                     challengeIds = [int(layer)]
 
         # 冥海数据
-        slash_detail: Union[SlashDetail, str] = await get_slash_data(uid, ck, is_self_ck)
+        slash_detail: Union[SlashDetail, str] = await get_slash_data(uid, ck, is_self_ck, peek)
         if isinstance(slash_detail, str):
             return slash_detail
 
@@ -110,7 +110,7 @@ async def draw_slash_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
         if not account_info_res.success:
             return account_info_res.throw_msg()
         if not account_info_res.data:
-            return f"用户未展示数据, 请尝试【{PREFIX}登录】"
+            return not_shown_msg(uid, peek)
         account_info = AccountBaseInfo.model_validate(account_info_res.data)
 
         # 准备渲染数据
@@ -262,7 +262,8 @@ async def draw_slash_img(ev: Event, uid: str, user_id: str, peek: bool = False) 
         logger.debug("[鸣潮·冥海渲染] 准备 HTML 渲染")
         img_bytes = await render_html(waves_templates, "abyss/slash_card.html", context)
         if img_bytes:
-            await save_slash_record(uid, slash_detail)
+            if not peek:
+                await save_slash_record(uid, slash_detail)
             await upload_slash_record(is_self_ck, uid, slash_detail, sender_avatar, user_id, ev.bot_id)
             return img_bytes
         else:

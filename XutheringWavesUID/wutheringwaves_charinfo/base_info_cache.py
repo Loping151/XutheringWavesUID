@@ -105,12 +105,14 @@ async def load_account_context(
     use_cache: bool = True,
     require_fresh: bool = False,
     force_ck: bool = False,
+    peek: bool = False,
 ) -> "tuple[AccountBaseInfo | str, str, bool]":
     """统一账号上下文获取, 返回 (info_or_err, ck, self_ck)。
 
     use_cache: 是否优先读内存/落盘缓存。
     require_fresh: True 时即便命中缓存也走 API 强制刷新。
     force_ck: 即便命中缓存也强制取 ck (peek/refresh 后续仍需 ck 调其它 API)。
+    peek: 以他人视角取 ck, 不用目标本人的凭据。
     """
     from ..utils import hint
     from ..utils.waves_api import waves_api
@@ -126,7 +128,7 @@ async def load_account_context(
         if info is not None:
             return info, "", False
 
-    self_ck, ck = await waves_api.get_ck_result(target_uid, user_id, bot_id)
+    self_ck, ck = await waves_api.get_ck_result(target_uid, user_id, bot_id, peek=peek)
     if not ck:
         return hint.error_reply(WAVES_CODE_102), "", False
 
