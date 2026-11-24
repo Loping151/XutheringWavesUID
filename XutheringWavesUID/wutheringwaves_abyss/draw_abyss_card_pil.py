@@ -67,8 +67,8 @@ async def get_abyss_data(uid: str, ck: str, is_self_ck: bool):
 
 
 # TODO: PIL 卸到线程池 (循环里多处 await draw_pic / draw_pic_with_ring 与 PIL 操作交错)
-async def draw_abyss_img(ev: Event, uid: str, user_id: str) -> Union[bytes, str]:
-    is_self_ck, ck = await waves_api.get_ck_result(uid, user_id, ev.bot_id)
+async def draw_abyss_img(ev: Event, uid: str, user_id: str, peek: bool = False) -> Union[bytes, str]:
+    is_self_ck, ck = await waves_api.get_ck_result(uid, user_id, ev.bot_id, peek=peek)
     if not ck:
         return error_reply(WAVES_CODE_102)
     user_pref = await get_hide_uid_pref(uid, user_id, ev.bot_id)

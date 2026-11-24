@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Type, TypeVar, Optional, AbstractSet
+from typing import Any, Set, Dict, List, Type, TypeVar, Optional, AbstractSet
 
 from sqlmodel import Field, col, select
 from sqlalchemy import func, null, delete, update
@@ -352,6 +352,13 @@ class WavesUser(User, table=True):
             sql = sql.where(col(cls.cookie).not_in(exclude_cks))
         result = await session.execute(sql.order_by(func.random()).limit(limit))
         return list(result.scalars().all())
+
+    @classmethod
+    @with_read_session
+    async def get_cookies_by_uid(cls: Type[T_WavesUser], session: AsyncSession, uid: str) -> Set[str]:
+        """该 uid 名下所有记录的 cookie(含失效)"""
+        result = await session.execute(select(col(cls.cookie)).where(col(cls.uid) == uid))
+        return {c for c in result.scalars().all() if c}
 
     @classmethod
     @with_session

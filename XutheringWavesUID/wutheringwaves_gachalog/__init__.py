@@ -459,7 +459,7 @@ async def send_gacha_log_card_info(bot: Bot, ev: Event):
     await bot.send(im)
 
 
-@sv_gacha_help_log.on_fullmatch(("抽卡帮助", "抽卡导入", "导入抽卡", "导入抽卡数据", "抽卡导入方法", "抽卡记录导入方法", "如何导入抽卡"))
+@sv_gacha_help_log.on_fullmatch(("抽卡帮助", "抽卡导入", "导入抽卡", "导入抽卡数据", "抽卡导入方法", "抽卡记录导入方法", "如何导入抽卡", "如何导入抽卡记录"))
 async def send_gacha_log_help(bot: Bot, ev: Event):
     im = await draw_card_help()
     await bot.send(im)

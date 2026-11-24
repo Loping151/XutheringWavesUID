@@ -45,13 +45,13 @@ from .draw_abyss_card_pil import (
 TEXT_PATH = Path(__file__).parent / "texture2d"
 
 
-async def draw_abyss_img(ev: Event, uid: str, user_id: str) -> Union[bytes, str]:
+async def draw_abyss_img(ev: Event, uid: str, user_id: str, peek: bool = False) -> Union[bytes, str]:
     use_html_render = WutheringWavesConfig.get_config("UseHtmlRender").data
     if not PLAYWRIGHT_AVAILABLE or not use_html_render:
-        return await draw_abyss_img_pil(ev, uid, user_id)
+        return await draw_abyss_img_pil(ev, uid, user_id, peek=peek)
 
     try:
-        is_self_ck, ck = await waves_api.get_ck_result(uid, user_id, ev.bot_id)
+        is_self_ck, ck = await waves_api.get_ck_result(uid, user_id, ev.bot_id, peek=peek)
         if not ck:
             return error_reply(WAVES_CODE_102)
         user_pref = await get_hide_uid_pref(uid, user_id, ev.bot_id)
@@ -218,8 +218,8 @@ async def draw_abyss_img(ev: Event, uid: str, user_id: str) -> Union[bytes, str]
             return img_bytes
         else:
             logger.warning("[鸣潮·深塔渲染] Playwright 返回空, 回退到 PIL")
-            return await draw_abyss_img_pil(ev, uid, user_id)
+            return await draw_abyss_img_pil(ev, uid, user_id, peek=peek)
 
     except Exception as e:
         logger.exception(f"[鸣潮·深塔渲染] HTML 失败: {e}")
-        return await draw_abyss_img_pil(ev, uid, user_id)
+        return await draw_abyss_img_pil(ev, uid, user_id, peek=peek)

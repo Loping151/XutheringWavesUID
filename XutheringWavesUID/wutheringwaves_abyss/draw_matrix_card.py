@@ -220,8 +220,8 @@ def _resolve_mode_id(ev) -> int:
     return 1
 
 
-async def draw_matrix_img(ev: Event, uid: str, user_id: str) -> Union[bytes, str]:
-    is_self_ck, ck = await waves_api.get_ck_result(uid, user_id, ev.bot_id)
+async def draw_matrix_img(ev: Event, uid: str, user_id: str, peek: bool = False) -> Union[bytes, str]:
+    is_self_ck, ck = await waves_api.get_ck_result(uid, user_id, ev.bot_id, peek=peek)
     if not ck:
         return error_reply(WAVES_CODE_102)
 

@@ -10,6 +10,7 @@ sv_pool_countdown = SV("鸣潮卡池倒计时")
 
 _GET_POOL_COUNTDOWN_KEYWORDS = (
     "卡池倒计时",
+    "卡尺倒计时",
     "复刻",
     "未复刻",
     "复刻统计",

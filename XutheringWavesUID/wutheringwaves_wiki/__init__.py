@@ -25,19 +25,55 @@ sv_waves_slash_info = SV("waves查询海墟信息", priority=4)
 sv_waves_matrix_info = SV("waves查询矩阵信息", priority=4)
 
 
-_PERIOD_OFFSETS = {
-    "下一期": 1, "下期": 1, "下下期": 2,
-    "上一期": -1, "上期": -1, "上上期": -2,
-}
+_CN_NUM = {c: i for i, c in enumerate("零一二三四五六七八九")}
+_NUM = r"\d{1,3}|[一二三四五六七八九十]{1,3}"
+_PERIOD = (
+    rf"第?(?:{_NUM})期|第(?:{_NUM})|[上下]一期|上+期?|下+期?"
+    r"|本期|当期|这一?期|当前|[本这上下]赛季|往期|历史"
+)
+_INFO = r"信息|详情|情报|查询|一览|列表|配置|打法|buff|boss|怪物|敌人|xx"
+_SEP = r"[\s,，、.。:：]*"
+
+
+def _challenge_pattern(names: str) -> str:
+    """期数可前可后, 须带期数或信息类后缀"""
+    info = rf"(?:(?:{_INFO}){_SEP})"
+    period = rf"\d{{1,3}}|{_PERIOD}"
+    return (
+        rf"(?i)^{_SEP}(?:(?P<pre>{period}){_SEP}(?:{names}){_SEP}{info}*"
+        rf"|(?:{names}){_SEP}(?:(?P<post>{period}){_SEP}{info}*|{info}+(?P<tail>{period})?{_SEP}{info}*))"
+        r"[～~!！?？]*$"
+    )
+
+
+def _cn_to_int(s: str) -> int:
+    if "十" not in s:
+        return int("".join(str(_CN_NUM[c]) for c in s))
+    tens, _, ones = s.partition("十")
+    return (_CN_NUM[tens] if tens else 1) * 10 + (_CN_NUM[ones] if ones else 0)
 
 
 def resolve_period_offset(period_val: str, current_period: int) -> int:
-    """解析期数描述（数字 / 上一期/下期/上上期/下下期 等）为绝对期数。"""
-    if not period_val:
-        return current_period
-    if period_val.isdigit():
-        return int(period_val)
-    return current_period + _PERIOD_OFFSETS.get(period_val, 0)
+    """解析期数描述（数字 / 七 / 上期 / 上上上期 / 本期 / 下赛季 等）为绝对期数。"""
+    p = (period_val or "").strip().strip("第期")
+    if p.isdigit():
+        return int(p)
+    if p and all(c in _CN_NUM or c == "十" for c in p):
+        return _cn_to_int(p)
+    if p in ("往", "历史", "上赛季", "上一"):
+        return current_period - 1
+    if p in ("下赛季", "下一"):
+        return current_period + 1
+    if p and set(p) == {"上"}:
+        return current_period - len(p)
+    if p and set(p) == {"下"}:
+        return current_period + len(p)
+    return current_period
+
+
+def _period_of(ev: Event) -> str:
+    rd = ev.regex_dict
+    return rd.get("pre") or rd.get("post") or rd.get("tail") or ""
 
 
 @sv_waves_guide.on_regex(
@@ -217,7 +253,7 @@ async def send_sonata_list(bot: Bot, ev: Event):
 
 
 @sv_waves_tower.on_regex(
-    r"^(?:第?(?P<period_pre>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)期?(?:深塔|st)(?:信息)?|(?:深塔|st)(?:(?:信息(?:第)?|第)(?P<period>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)?|(?P<period_force>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期))期?)$",
+    _challenge_pattern("逆境深塔|深塔|st"),
     block=True,
     to_ai="""查询逆境深塔某期的关卡配置图（每层 Buff + 怪物 + 体力消耗）。
 
@@ -230,8 +266,7 @@ Args:
 )
 async def send_tower_challenge_info(bot: Bot, ev: Event):
     """查询深塔挑战信息"""
-    period_val = ev.regex_dict.get("period", "") or ev.regex_dict.get("period_force", "") or ev.regex_dict.get("period_pre", "")
-    target_period = resolve_period_offset(period_val, get_tower_period_number())
+    target_period = resolve_period_offset(_period_of(ev), get_tower_period_number())
 
     im = await draw_tower_challenge_img(ev, target_period)
     if isinstance(im, str):
@@ -241,7 +276,7 @@ async def send_tower_challenge_info(bot: Bot, ev: Event):
         await bot.send(im)
 
 @sv_waves_slash_info.on_regex(
-    r"^(?:第?(?P<period_pre>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)期?(?:海墟|冥海|无尽|無盡|hx|wj)(?:信息)?|(?:海墟|冥海|无尽|無盡|hx|wj)(?:(?:信息(?:第)?|第)(?P<period>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)?|(?P<period_force>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期))期?)$",
+    _challenge_pattern("冥歌海墟|海墟|海虚|海旭|冥海|无尽深渊|无尽|無盡|hx|wj"),
     block=True,
     to_ai="""查询冥歌海墟（无尽/冥海）某期的全 Buff 信物列表图。
 
@@ -254,8 +289,7 @@ Args:
 )
 async def send_slash_challenge_info(bot: Bot, ev: Event):
     """查询海墟挑战信息"""
-    period_val = ev.regex_dict.get("period", "") or ev.regex_dict.get("period_force", "") or ev.regex_dict.get("period_pre", "")
-    target_period = resolve_period_offset(period_val, get_slash_period_number())
+    target_period = resolve_period_offset(_period_of(ev), get_slash_period_number())
 
     im = await draw_slash_challenge_img(ev, target_period)
     if isinstance(im, str):
@@ -266,7 +300,7 @@ async def send_slash_challenge_info(bot: Bot, ev: Event):
 
 
 @sv_waves_matrix_info.on_regex(
-    r"^(?:第?(?P<period_pre>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)期?(?:矩阵|矩陣|jz信息|matrix)(?:信息)?|(?:矩阵|矩陣|jz(?=信息|第|上|下|\d{1,3}(?!\d))|matrix)(?:(?:信息(?:第)?|第)(?P<period>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期)?|(?P<period_force>\d+|下(?:一)?期|下下期|上(?:一)?期|上上期))期?)$",
+    _challenge_pattern("终焉矩阵|矩阵|矩陣|距阵|距陣|matrix|jz"),
     block=True,
     to_ai="""查询全息矩阵（终焉矩阵）某期的关卡配置图（稳态协议+奇点扩张，含 Buff、敌人、推荐角色）。
 
@@ -279,8 +313,7 @@ Args:
 )
 async def send_matrix_challenge_info(bot: Bot, ev: Event):
     """查询矩阵挑战信息"""
-    period_val = ev.regex_dict.get("period", "") or ev.regex_dict.get("period_force", "") or ev.regex_dict.get("period_pre", "")
-    target_period = resolve_period_offset(period_val, get_matrix_period_number())
+    target_period = resolve_period_offset(_period_of(ev), get_matrix_period_number())
 
     im = await draw_matrix_challenge_img(ev, target_period)
     if isinstance(im, str):

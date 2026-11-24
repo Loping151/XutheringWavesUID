@@ -16,7 +16,7 @@ from .captcha.base import CaptchaResult
 from ..error_reply import WAVES_CODE_999, WAVES_CODE_104
 from .captcha.errors import CaptchaError
 from ..constants import WAVES_GAME_ID
-from ..database.models import WavesUser
+from ..database.models import WavesBind, WavesUser
 from ..resource.RESOURCE_PATH import CACHE_PATH
 from ...wutheringwaves_config import WutheringWavesConfig
 from .request_util import (
@@ -184,8 +184,10 @@ class WavesApi:
         headers["b-at"] = waves_user.bat or ""
         return headers
 
-    async def get_ck_result(self, uid, user_id, bot_id) -> tuple[bool, Optional[str]]:
+    async def get_ck_result(self, uid, user_id, bot_id, peek: bool = False) -> tuple[bool, Optional[str]]:
         try:
+            if peek:
+                return False, await self.get_peek_ck(uid, user_id, bot_id)
             ck = await self.get_self_waves_ck(uid, user_id, bot_id)
             if ck:
                 return True, ck
@@ -278,6 +280,16 @@ class WavesApi:
         # 更新最后使用时间
         await WavesUser.update_last_used_time(uid, user_id, bot_id, game_id=WAVES_GAME_ID)
         return waves_user.cookie
+
+    async def get_peek_ck(self, target_uid: str, user_id: str, bot_id: str) -> Optional[str]:
+        """以他人视角查 target: 优先请求者当前账号 token, 否则公共池; target 名下的 token 一律不用"""
+        target_cks = await WavesUser.get_cookies_by_uid(target_uid)
+        self_uid = await WavesBind.get_uid_by_game(user_id, bot_id)
+        if self_uid and self_uid != target_uid:
+            ck = await self.get_self_waves_ck(self_uid, user_id, bot_id)
+            if ck and ck not in target_cks:
+                return ck
+        return await self.get_waves_random_cookie(target_uid, user_id, exclude_cks=target_cks)
 
     async def get_waves_random_cookie(
         self, uid: str, user_id: str, exclude_cks: AbstractSet[str] = frozenset()

@@ -1,4 +1,5 @@
-from typing import Any, List
+import re
+from typing import Any, List, Callable, Awaitable
 
 from gsuid_core.sv import SV
 from gsuid_core.bot import Bot
@@ -42,21 +43,99 @@ def _parse_matrix_rank_args(ev: Event, strict: bool):
     return char_ids, chains, page, err
 
 
+_ABYSS_KEYWORDS = (
+    "查询深渊",
+    "sy",
+    "st",
+    "深渊",
+    "逆境深塔",
+    "深塔",
+    "超载",
+    "超载区",
+    "稳定",
+    "稳定区",
+    "实验",
+    "实验区",
+)
+_MATRIX_KEYWORDS = (
+    "矩阵",
+    "终焉",
+    "终焉矩阵",
+    "矩阵叠兵",
+    "距阵",
+    "矩阵分数",
+    "查询矩阵",
+    "奇点扩张",
+    "稳态协议",
+    "囚笼",
+    "jz",
+)
+_SLASH_KEYWORDS = (
+    "冥海",
+    "mh",
+    "hx",
+    "海墟",
+    "海虚",
+    "海旭",
+    "冥歌海墟",
+    "查询冥海",
+    "查询无尽",
+    "查询海墟",
+    "无尽",
+    "wj",
+    "无尽深渊",
+    "禁忌",
+    "禁忌海域",
+    "再生海域",
+)
+
+
+def _kw_alt(keywords: tuple[str, ...]) -> str:
+    return "|".join(re.escape(k) for k in sorted(keywords, key=len, reverse=True))
+
+
+def _peek_patterns(keywords: tuple[str, ...], tail_uid: bool = True) -> tuple[str, ...]:
+    head = rf"^(?P<uid>\d{{9}})\s*(?P<kw>{_kw_alt(keywords)})$"
+    if not tail_uid:
+        return (head,)
+    return (head, rf"^(?P<kw>{_kw_alt(keywords)})\s*(?P<uid>\d{{9}})$")
+
+
+async def _send_peek(
+    bot: Bot,
+    ev: Event,
+    target_uid: str,
+    draw: Callable[..., Awaitable[Any]],
+):
+    if is_intl_uid(target_uid):
+        return await bot.send(intl_unavailable_msg(target_uid))
+    im = await draw(ev, target_uid, ev.user_id, peek=True)
+    if isinstance(im, str):
+        at_sender = True if ev.group_id else False
+        return await bot.send(f" {im}" if at_sender else im, at_sender)
+    return await bot.send(im)
+
+
+@sv_waves_abyss.on_regex(_peek_patterns(_ABYSS_KEYWORDS), block=True)
+async def send_waves_abyss_peek(bot: Bot, ev: Event):
+    ev.command, ev.text = ev.regex_dict["kw"], ""
+    return await _send_peek(bot, ev, ev.regex_dict["uid"], draw_abyss_img)
+
+
+@sv_waves_matrix.on_regex(_peek_patterns(_MATRIX_KEYWORDS), block=True)
+async def send_waves_matrix_peek(bot: Bot, ev: Event):
+    ev.command, ev.text = ev.regex_dict["kw"], ""
+    return await _send_peek(bot, ev, ev.regex_dict["uid"], draw_matrix_img)
+
+
+@sv_waves_slash.on_regex(_peek_patterns(_SLASH_KEYWORDS, tail_uid=False), block=True)
+async def send_waves_slash_peek(bot: Bot, ev: Event):
+    ev.command, ev.text = ev.regex_dict["kw"], ""
+    return await _send_peek(bot, ev, ev.regex_dict["uid"], draw_slash_img)
+
+
 @sv_waves_abyss.on_fullmatch(
-    with_refresh_alias((
-        "查询深渊",
-        "sy",
-        "st",
-        "深渊",
-        "逆境深塔",
-        "深塔",
-        "超载",
-        "超载区",
-        "稳定",
-        "稳定区",
-        "实验",
-        "实验区",
-    )),
+    with_refresh_alias(_ABYSS_KEYWORDS),
     block=True,
     to_ai="""查询用户本人在鸣潮「逆境深塔」（深境区/超载/稳定/实验）当前期数的挑战记录。
 
@@ -133,23 +212,7 @@ async def send_waves_challenge_info(bot: Bot, ev: Event):
         return await bot.send(im)
 
 
-_SEND_WAVES_SLASH_INFO_KEYWORDS = with_refresh_alias((
-    "冥海",
-    "mh",
-    "hx",
-    "海墟",
-    "海虚",
-    "冥歌海墟",
-    "查询冥海",
-    "查询无尽",
-    "查询海墟",
-    "无尽",
-    "wj",
-    "无尽深渊",
-    "禁忌",
-    "禁忌海域",
-    "再生海域",
-), suffix=False)
+_SEND_WAVES_SLASH_INFO_KEYWORDS = with_refresh_alias(_SLASH_KEYWORDS, suffix=False)
 
 
 @sv_waves_slash.on_command(
@@ -167,6 +230,10 @@ Args:
 )
 async def send_waves_slash_info(bot: Bot, ev: Event):
     use_longest_keyword(ev, _SEND_WAVES_SLASH_INFO_KEYWORDS)
+    peek = re.fullmatch(r"\s*(\d{9})\s*", ev.text)
+    if peek:
+        ev.text = ""
+        return await _send_peek(bot, ev, peek.group(1), draw_slash_img)
     user_id = ruser_id(ev)
     uid = await WavesBind.get_uid_by_game(user_id, ev.bot_id)
     if not uid:
@@ -183,24 +250,14 @@ async def send_waves_slash_info(bot: Bot, ev: Event):
         buttons: List[Any] = [
             WavesButton("冥歌海墟", "冥海"),
             WavesButton("冥海前6层", "禁忌"),
-            WavesButton("冥海11层", "冥海11"),
+            WavesButton("冥海11层", "冥海11层"),
             WavesButton("冥海12层", "无尽"),
         ]
         return await bot.send_option(im, buttons)
 
 
 @sv_waves_matrix.on_fullmatch(
-    with_refresh_alias((
-        "矩阵",
-        "终焉",
-        "终焉矩阵",
-        "矩阵叠兵",
-        "查询矩阵",
-        "奇点扩张",
-        "稳态协议",
-        "囚笼",
-        "jz"
-    )),
+    with_refresh_alias(_MATRIX_KEYWORDS),
     block=True,
     to_ai="""查询用户本人在鸣潮「全息矩阵」（矩阵叠兵 / 终焉矩阵 / 奇点扩张 / 稳态协议）的挑战记录。
 
@@ -305,7 +362,7 @@ async def send_waves_rank_matrix_info(bot: Bot, ev: Event):
 
 
 @sv_waves_rank_matrix_list.on_regex(
-    r"^(?:矩阵排行|jzph|jzpm|jzddph|jzddpm|jzdwph|jzdwpm|矩阵排行榜|矩阵排名|矩阵群排行|矩阵群排行榜|矩阵群排名|群矩阵排行|群矩阵排名|矩阵单队排行|矩阵单队排行榜|矩阵单队群排行|矩阵单队群排行榜|jzddqph|矩阵队伍排行|矩阵队伍排行榜|矩阵队伍群排行|矩阵队伍群排行榜|jzdwqph)(?P<pages>\d+(?![一-鿿]))?(?P<team>[\s,，、/|]*[一-鿿\d][\s\S]*)?$",
+    r"^(?:矩阵排行|jzph|jzpm|jzddph|jzddpm|jzdwph|jzdwpm|矩阵排行榜|矩阵排名|矩阵群排行|矩阵群排行榜|矩阵群排名|群矩阵排行|群矩阵排名|群矩阵|矩阵单队排行|矩阵单队排行榜|矩阵单队群排行|矩阵单队群排行榜|jzddqph|矩阵队伍排行|矩阵队伍排行榜|矩阵队伍群排行|矩阵队伍群排行榜|jzdwqph)(?P<pages>\d+(?![一-鿿]))?(?P<team>[\s,，、/|]*[一-鿿\d][\s\S]*)?$",
     block=True,
     to_ai='''查询本群终焉矩阵积分排行，仅群聊可用。
 

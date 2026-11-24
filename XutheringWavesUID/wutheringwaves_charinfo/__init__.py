@@ -22,8 +22,11 @@ from ..utils.at_help import ruser_id, is_valid_at, is_intl_uid, intl_unavailable
 from ..utils.resource.constant import SPECIAL_CHAR
 from ..utils.name_convert import is_valid_char_name, char_name_to_char_id
 from ..utils.name_resolve import resolve_char
+from ..utils import name_convert
+from ..utils.fuzzy_match import fuzzy_suggest
 from ..wutheringwaves_config import PREFIX, WutheringWavesConfig
 from .draw_char_card import draw_char_score_img, draw_char_detail_img, draw_char_optimize_img
+from .role_info_change import ChangeParser, has_phantom_change, normalize_change_text
 from .upload_card import (
     delete_custom_card,
     upload_custom_card,
@@ -76,24 +79,12 @@ def _has_full_phantom(role_detail) -> bool:
     return bool(eq) and sum(1 for p in eq if p and p.phantomProp) >= 5
 
 
-def _normalize_change_list(change: str, char: str, query_type: str) -> str:
-    """替换/换成/换为 统一成 换; X声骸 → 声骸X; 专武 补上武器前缀和本角色"""
-    for alias in ("替换", "换成", "换为"):
-        change = change.replace(alias, "换")
-    change = re.sub(r"换(?!声骸|圣遗物)([^换]+?)声骸", r"换声骸\1", change)
-    if query_type == "声骸" and change and not change.startswith("换声骸"):
+def _normalize_change_list(change: str, query_type: str) -> str:
+    """X声骸换Y 写法补成 换声骸Y; 其余写法交给 ChangeParser"""
+    change = normalize_change_text(change)
+    if query_type in _PH_QT and change.startswith("换") and not change.startswith("换声骸"):
         change = "换声骸" + change[1:]
-    change = re.sub(r"换(?:武器)?专武(?=换|$)", f"换武器{char}专武", change)
-    return re.sub(r"换(?!武器|装备)([^换]+专武)", r"换武器\1", change)
-
-
-def _is_phantom_change(change_list_regex) -> bool:
-    """替换指令是否含换声骸。"""
-    if not change_list_regex:
-        return False
-    from .role_info_change import ReplacePhantom
-
-    return any(f"换{p}" in change_list_regex for p in ReplacePhantom.PREFIX_RE)
+    return change
 
 
 def _space_hint() -> str:
@@ -138,6 +129,10 @@ async def _resolve_self_uid(bot: Bot, ev: Event):
     return uid, user_id
 
 _CW = r"[cC][wW]_[0-9a-zA-Z]{8}"
+_PH_QT = ("声骸", "声骇", "生骸")
+_CHAR = rf"(?:(?!换){PATTERN[: PATTERN.rindex('{')]}){{1,15}}"
+_PRE = r"(?:声骸|声骇|生骸|圣遗物|主词条|词条|武器|专武|共鸣链|合鸣|套装|角色|暴击|暴伤|爆伤|攻击|生命|防御|属伤|共鸣效率|[1-4][cC]|[cC][1-4]|[0-6零一二三四五六满]链)"
+_CHANGE = rf"(?:{_PRE}[^换]*?(?=替?换))?(?:替?换[^换]*)*"
 _MB = "面板|面版|面包|🍞|mb"
 _RF = "刷新|更新|upd"
 _RF_RE = re.compile(_RF)
@@ -853,6 +848,31 @@ async def send_char_detail_msg2_typo(bot: Bot, ev: Event):
         return await _send_char_detail_typo(bot, ev)
 
 
+def _bare_char_pattern() -> str:
+    """正式角色的中文别名"""
+    name_convert.ensure_data_loaded()
+    names = set()
+    for key, aliases in name_convert.char_alias_data.items():
+        cid = char_name_to_char_id(key)
+        if not (cid and len(cid) == 4 and cid.isdigit()):
+            continue
+        names.update(a for a in (key, *aliases) if re.search(r"[一-鿿]", a))
+    if not names:
+        return r"(?!)"
+    return "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+
+
+@waves_char_fallback.on_regex(rf"^(?P<waves_id>\d{{9}})?(?P<char>{_bare_char_pattern()})$", block=False)
+async def send_char_detail_bare_name(bot: Bot, ev: Event):
+    plan = await _weight_plan(bot, ev, ev.regex_dict.get("char") or "")
+    if plan is None:
+        return
+    from ..utils.custom_weight import using
+
+    with using(plan):
+        return await _send_char_detail_typo(bot, ev)
+
+
 async def _send_char_detail_typo(bot: Bot, ev: Event):
     waves_id = ev.regex_dict.get("waves_id")
     char = ev.regex_dict.get("char")
@@ -889,7 +909,7 @@ async def _send_char_detail_typo(bot: Bot, ev: Event):
 
 
 @waves_new_char_detail.on_regex(
-    rf"^(?P<lead_space>\s+)?(?:(?P<cw1>{_CW})\s*)?(?P<waves_id>\d{{9}})?(?P<char>{PATTERN})(?:\s*(?P<cw2>{_CW})\s*)?(?P<query_type>面板|面版|面包|🍞|mb|limit|声骸(?=替?换)|伤害(?P<damage>(\d+)?))(?:\s*(?P<waves_id_tail>\d{{9}}))?(?:\s*(?P<cw3>{_CW}))?(?P<is_pk>pk|对比|PK|比|比较)?(\s*)?(?P<change_list>((替?换[^换]*)*)?)\s*(?P<cw4>{_CW})?\s*$",
+    rf"^(?P<lead_space>\s+)?(?:(?P<cw1>{_CW})\s*)?(?P<waves_id>\d{{9}})?(?P<char>{_CHAR})(?:\s*(?P<cw2>{_CW})\s*)?(?P<query_type>面板|面版|面包|🍞|mb|limit|(?:声骸|声骇|生骸)(?=替?换)|伤害(?P<damage>(\d+)?))(?:\s*(?P<waves_id_tail>\d{{9}}))?(?:\s*(?P<cw3>{_CW}))?(?P<is_pk>pk|对比|PK|比|比较)?[\s,，]*(?P<change_list>{_CHANGE})\s*(?P<cw4>{_CW})?\s*$",
     block=True,
 )
 async def send_char_detail_msg2(bot: Bot, ev: Event):
@@ -899,7 +919,7 @@ async def send_char_detail_msg2(bot: Bot, ev: Event):
     rd["waves_id"] = rd.get("waves_id") or rd.get("waves_id_tail")
     if _RF_RE.search(rd.get("char") or ""):
         return await _reroute_refresh(bot, ev)
-    rd["change_list"] = _normalize_change_list(rd.get("change_list") or "", rd.get("char") or "", rd.get("query_type") or "")
+    rd["change_list"] = _normalize_change_list(rd.get("change_list") or "", rd.get("query_type") or "")
     plan = await _weight_plan(bot, ev, rd.get("char") or "", _cw_from(ev))
     if plan is None:
         return
@@ -1012,7 +1032,7 @@ async def _send_char_detail2(bot: Bot, ev: Event):
         uid, user_id = _ru
         # 换声骸且原面板 5 件齐全: 替换前后左右拼接对比 (同刷新 concat_diff)
         old_im = None
-        if not waves_id and _is_phantom_change(change_list_regex):
+        if not waves_id and has_phantom_change(change_list_regex):
             from ..utils.char_info_utils import get_char_detail_for_id
 
             char_id = char_name_to_char_id(matched)
@@ -1039,6 +1059,35 @@ async def _send_char_detail2(bot: Bot, ev: Event):
         if isinstance(im, bytes):
             await bot.send(_append_advice(ev, res.wrap(im, canonical_cmd)), at_sender)
             return
+
+
+_LOOSE_KW = r"(?:声骸|声骇|生骸|武器|专武|共鸣链|合鸣|套装|模态|主词条|[1-4][cC]|[cC][1-4]|[0-6零一二三四五六满]链)"
+_LOOSE_QT = "面板|面版|面包|🍞|mb|limit|伤害|优化|提升|yh|练度|权重|qz|排行"
+_LOOSE_CHAR = rf"(?:(?!换|替换|更换|声骸|声骇|生骸|{_LOOSE_QT}){PATTERN[: PATTERN.rindex('{')]}){{1,15}}?"
+
+
+@waves_char_fallback.on_regex(
+    rf"^(?!.*(?:评分|評分|查分|分析))(?P<waves_id>\d{{9}})?(?P<char>{_LOOSE_CHAR})"
+    rf"(?![^换\s]*?(?:声骸|声骇|生骸)替?换)(?!(?:声骸|声骇|生骸)?(?:{_LOOSE_QT}))"
+    rf"\s*(?=.*?{_LOOSE_KW})(?P<change_list>{_CHANGE})$",
+    block=False,
+)
+async def send_char_detail_loose_change(bot: Bot, ev: Event):
+    """漏写「面板」的替换: 锁暝换声骸心 / 千咲换安可声骸 / 绯雪4c换攻击"""
+    rd = ev.regex_dict
+    char = rd.get("char") or ""
+    change = rd.get("change_list") or ""
+    if "换" not in change or not ChangeParser(change).has_changes():
+        return
+    if not is_valid_char_name(char) and not fuzzy_suggest(char, name_convert.char_alias_data, min_score=0.95):
+        return
+    tail = re.search(rf"(?:伤害(\d*)|{_MB})\s*$", change)
+    rd["query_type"] = "面板"
+    if tail:
+        rd["change_list"] = change[: tail.start()]
+        if tail.group(0).startswith("伤害"):
+            rd["query_type"], rd["damage"] = tail.group(0).strip(), tail.group(1)
+    return await send_char_detail_msg2(bot, ev)
 
 
 @waves_new_char_detail.on_regex(
@@ -1111,7 +1160,7 @@ async def _overall_plan(bot: Bot, ev: Event, char: str):
     return plan
 
 
-@waves_new_char_detail.on_regex(rf"^(?P<waves_id>\d{{9}})?(?P<char>{PATTERN})(优化建议|优化|提升建议|提升|yh)(\s*)?(?P<change_list>((换[^换]*)*)?)$", block=True)
+@waves_new_char_detail.on_regex(rf"^(?P<waves_id>\d{{9}})?(?P<char>{_CHAR})(优化建议|优化|提升建议|提升|yh)[\s,，]*(?P<change_list>{_CHANGE})$", block=True)
 async def send_char_optimize_msg(bot: Bot, ev: Event):
     waves_id = ev.regex_dict.get("waves_id")
     char = ev.regex_dict.get("char")
