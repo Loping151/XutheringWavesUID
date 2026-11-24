@@ -1,7 +1,7 @@
-from typing import Any, Dict, List, Type, TypeVar, Optional
+from typing import Any, Dict, List, Type, TypeVar, Optional, AbstractSet
 
 from sqlmodel import Field, col, select
-from sqlalchemy import null, delete, update
+from sqlalchemy import func, null, delete, update
 from sqlalchemy.sql import or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,8 @@ from gsuid_core.utils.database.base_models import (
     with_session,
 )
 
+from ..constants import WAVES_GAME_ID
+from ._session import with_read_session
 from .waves_subscribe import WavesSubscribe
 from .waves_user_activity import WavesUserActivity
 from .waves_user_sdk import WavesUserSdk
@@ -51,6 +53,8 @@ exec_list.extend(
         "DELETE FROM WavesStaminaRecord WHERE id NOT IN (SELECT MAX(id) FROM WavesStaminaRecord GROUP BY user_id, bot_id, uid)",
         'CREATE TABLE IF NOT EXISTS "WavesGachaCloud" (id INTEGER NOT NULL, bot_id VARCHAR NOT NULL, user_id VARCHAR NOT NULL, uid VARCHAR NOT NULL, login_info VARCHAR NOT NULL, is_valid BOOLEAN NOT NULL, created_time INTEGER, last_used_time INTEGER, PRIMARY KEY (id))',
         'CREATE INDEX IF NOT EXISTS "ix_WavesGachaCloud_uid" ON "WavesGachaCloud" (uid)',
+        'CREATE INDEX IF NOT EXISTS "ix_WavesUser_cookie" ON "WavesUser" (cookie)',
+        'CREATE INDEX IF NOT EXISTS "ix_WavesUser_uid" ON "WavesUser" (uid)',
     ]
 )
 
@@ -65,14 +69,14 @@ class WavesBind(Bind, table=True):
     pgr_uid: Optional[str] = Field(default=None, title="战双UID")
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_group_all_uid(cls: Type[T_WavesBind], session: AsyncSession, group_id: Optional[str] = None):
         """根据传入`group_id`获取该群号下所有绑定`uid`列表"""
         result = await session.scalars(select(cls).where(col(cls.group_id).contains(group_id)))
         return result.all()
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_binds_by_uid(
         cls: Type[T_WavesBind],
         session: AsyncSession,
@@ -197,7 +201,7 @@ class WavesUser(User, table=True):
         return True
 
     @classmethod
-    @with_session
+    @with_read_session
     async def select_cookie(
         cls: Type[T_WavesUser],
         session: AsyncSession,
@@ -215,7 +219,7 @@ class WavesUser(User, table=True):
         return data[0].cookie if data else None
 
     @classmethod
-    @with_session
+    @with_read_session
     async def select_waves_user(
         cls: Type[T_WavesUser],
         session: AsyncSession,
@@ -237,7 +241,7 @@ class WavesUser(User, table=True):
         return data[0] if data else None
 
     @classmethod
-    @with_session
+    @with_read_session
     async def select_user_cookie_uids(
         cls: Type[T_WavesUser],
         session: AsyncSession,
@@ -256,7 +260,7 @@ class WavesUser(User, table=True):
         return [i.uid for i in data] if data else []
 
     @classmethod
-    @with_session
+    @with_read_session
     async def select_data_by_cookie(
         cls: Type[T_WavesUser], session: AsyncSession, cookie: str, game_id: Optional[int] = None
     ) -> Optional[T_WavesUser]:
@@ -269,7 +273,7 @@ class WavesUser(User, table=True):
         return data[0] if data else None
 
     @classmethod
-    @with_session
+    @with_read_session
     async def select_data_by_bat(
         cls: Type[T_WavesUser], session: AsyncSession, bat: str
     ) -> Optional[T_WavesUser]:
@@ -279,7 +283,7 @@ class WavesUser(User, table=True):
         return data[0] if data else None
 
     @classmethod
-    @with_session
+    @with_read_session
     async def select_data_by_cookie_and_uid(
         cls: Type[T_WavesUser],
         session: AsyncSession,
@@ -315,7 +319,7 @@ class WavesUser(User, table=True):
             return user
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_waves_all_user(cls: Type[T_WavesUser], session: AsyncSession) -> List[T_WavesUser]:
         """获取所有有效用户"""
         sql = select(cls).where(
@@ -329,6 +333,25 @@ class WavesUser(User, table=True):
         result = await session.execute(sql)
         data = result.scalars().all()
         return list(data)
+
+    @classmethod
+    @with_read_session
+    async def get_random_waves_users(
+        cls: Type[T_WavesUser],
+        session: AsyncSession,
+        limit: int,
+        exclude_cks: AbstractSet[str] = frozenset(),
+    ) -> List[T_WavesUser]:
+        """随机抽 limit 个有效鸣潮账号"""
+        sql = select(cls).where(
+            or_(col(cls.status) == null(), col(cls.status) == ""),
+            col(cls.cookie) != "",
+            col(cls.game_id) == WAVES_GAME_ID,
+        )
+        if exclude_cks:
+            sql = sql.where(col(cls.cookie).not_in(exclude_cks))
+        result = await session.execute(sql.order_by(func.random()).limit(limit))
+        return list(result.scalars().all())
 
     @classmethod
     @with_session
@@ -470,7 +493,7 @@ class WavesUser(User, table=True):
         return False
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_avatar_url(
         cls: Type[T_WavesUser],
         session: AsyncSession,
@@ -538,7 +561,7 @@ class WavesUser(User, table=True):
             )
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_active_user_count(
         cls: Type[T_WavesUser],
         session: AsyncSession,
@@ -726,7 +749,7 @@ class WavesLangSettings(BaseIDModel, table=True):
     lang: str = Field(default="", title="语言设置")
 
     @classmethod
-    @with_session
+    @with_read_session
     async def get_lang(
         cls: Type[T_WavesLangSettings],
         session: AsyncSession,

@@ -3,7 +3,7 @@ import random
 import string
 import asyncio
 import inspect
-from typing import Any, Dict, List, Tuple, Union, Literal, Mapping, Optional
+from typing import Any, Dict, List, Tuple, Union, Literal, Mapping, Optional, AbstractSet
 
 import aiohttp
 from gsuid_core.logger import logger
@@ -279,17 +279,15 @@ class WavesApi:
         await WavesUser.update_last_used_time(uid, user_id, bot_id, game_id=WAVES_GAME_ID)
         return waves_user.cookie
 
-    async def get_waves_random_cookie(self, uid: str, user_id: str) -> Optional[str]:
+    async def get_waves_random_cookie(
+        self, uid: str, user_id: str, exclude_cks: AbstractSet[str] = frozenset()
+    ) -> Optional[str]:
         if WutheringWavesConfig.get_config("WavesOnlySelfCk").data:
             return None
 
         # 公共 ck 随机抽一个可用的; login_log 失败不计次, refresh 最多深探 5 个 (耗配额)
-        user_list = await WavesUser.get_waves_all_user()
-        random.shuffle(user_list)
         deep_probe = 0
-        for user in user_list:
-            if user.game_id != WAVES_GAME_ID:
-                continue
+        for user in await WavesUser.get_random_waves_users(50, exclude_cks):
             if self.is_net(user.uid):
                 # 国际服账号 cookie 是 launcher auto_token，作为 kurobbs JWT 用必失败
                 continue
