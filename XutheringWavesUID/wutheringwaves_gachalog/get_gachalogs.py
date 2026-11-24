@@ -71,6 +71,18 @@ ERROR_MSG_INVALID_LINK = "当前抽卡链接已经失效，请重新导入抽卡
 
 # 找到两个数组中最长公共子串的下标（忽略resourceType字段差异）。
 # 仅遍历 match_key 真正相同的位置，避免旧实现申请 n*m 的二维 Python 表。
+def _load_json_bytes(data: bytes) -> Optional[Dict]:
+    encodings = ["utf-8-sig", "gbk"]
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        encodings.insert(0, "utf-16")
+    for enc in encodings:
+        try:
+            return json.loads(data.decode(enc))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+    return None
+
+
 def find_longest_common_subarray_indices(
     a: List[GachaLog], b: List[GachaLog]
 ) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
@@ -758,23 +770,14 @@ async def import_gachalogs(ev: Event, history_url: str, type: str, uid: str, for
                     if "application/json" in content_type:
                         history_data = await response.json()
                     else:
-                        data_bytes = await response.read()
-                        try:
-                            history_data = json.loads(data_bytes.decode("utf-8"))
-                        except UnicodeDecodeError:
-                            try:
-                                history_data = json.loads(data_bytes.decode("gbk"))
-                            except UnicodeDecodeError:
-                                return "无法解码文件内容，请检查文件编码格式"
+                        history_data = _load_json_bytes(await response.read())
+                        if history_data is None:
+                            return "请传入正确的JSON格式文件!"
         except Exception as e:
             return f"下载文件失败: {str(e)}"
     else:
-        data_bytes = base64.b64decode(history_url)
-        try:
-            history_data = json.loads(data_bytes.decode())
-        except UnicodeDecodeError:
-            history_data = json.loads(data_bytes.decode("gbk"))
-        except json.decoder.JSONDecodeError:
+        history_data = _load_json_bytes(base64.b64decode(history_url))
+        if history_data is None:
             return "请传入正确的JSON格式文件!"
 
     def turn_wwuid_gacha(data: Dict) -> Optional[WWUIDGacha]:
