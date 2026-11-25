@@ -1,4 +1,5 @@
 import os
+import re
 import ssl
 import time
 import shutil
@@ -243,7 +244,7 @@ async def delete_custom_card(bot: Bot, ev: Event, char: str, hash_id: str, targe
         msg = f"[鸣潮] 角色【{char}】暂未上传过{type_label}图！"
         return await bot.send((" " if at_sender else "") + msg, at_sender)
 
-    hash_ids = [id.strip() for id in hash_id.replace("，", ",").split(",") if id.strip()]
+    hash_ids = [id for id in re.split(r"[\s,，]+", hash_id) if id]
 
     if not hash_ids:
         msg = f"[鸣潮] 未提供有效的{type_label}图ID！"

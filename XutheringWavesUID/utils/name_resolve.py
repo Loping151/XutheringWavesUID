@@ -66,6 +66,7 @@ class CharResolution:
 
 
 def resolve_char(char_name: Optional[str], top_n: int = 3) -> CharResolution:
+    char_name = (char_name or "").strip()
     if not char_name:
         return CharResolution(None)
 

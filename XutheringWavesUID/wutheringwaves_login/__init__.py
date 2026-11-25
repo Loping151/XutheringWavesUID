@@ -20,7 +20,8 @@ sv_cloud_login = SV("抽卡登录")
 async def get_login_msg(bot: Bot, ev: Event):
     game_title = "[鸣潮]"
 
-    text = re.sub(r'["\n\t ]+', "", ev.text.strip())
+    text = re.sub(r"^(\d+)\s+(\d+)$", r"\1,\2", ev.text.strip())
+    text = re.sub(r'["\s]+', "", text)
     text = text.replace("，", ",")
     has_text = bool(text)
     branch = "page" if not text else ("code" if "," in text else ("digit_skip" if text.isdigit() else "invalid"))

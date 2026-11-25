@@ -234,7 +234,7 @@ async def get_char_card_list(bot: Bot, ev: Event):
 
 
 @waves_delete_char_card.on_regex(
-    rf"^删除(?P<char>{PATTERN})(?P<type>{_CARD_TYPES})图\s*(?P<hash_id>[a-zA-Z0-9,，]+)$", block=True
+    rf"^删除(?P<char>{PATTERN})(?P<type>{_CARD_TYPES})图\s*(?P<hash_id>[a-zA-Z0-9][a-zA-Z0-9,，\s]*)$", block=True
 )
 async def delete_char_card(bot: Bot, ev: Event):
     char = ev.regex_dict.get("char")
@@ -354,7 +354,7 @@ async def get_char_card_shortcut(bot: Bot, ev: Event):
     (
         rf"^(?P<kind_upload>(?:强制)?上传)(?P<char>{PATTERN})(?P<type>{_CARD_TYPES})图$",
         rf"^(?P<char>{PATTERN})(?P<type>{_CARD_TYPES})(?P<kind_list>图列表)$",
-        rf"^(?P<kind_delete>删除)(?P<char>{PATTERN})(?P<type>{_CARD_TYPES})图\s*[a-zA-Z0-9,，]+$",
+        rf"^(?P<kind_delete>删除)(?P<char>{PATTERN})(?P<type>{_CARD_TYPES})图\s*[a-zA-Z0-9][a-zA-Z0-9,，\s]*$",
         rf"^(?P<kind_delete_all>删除全部)(?P<char>{PATTERN})(?P<type>{_CARD_TYPES})图$",
     ),
     block=True,

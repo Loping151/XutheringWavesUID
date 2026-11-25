@@ -2,7 +2,7 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
 from ..utils.constants import WAVES_GAME_ID
-from ..utils.name_convert import is_valid_char_name, alias_to_char_name
+from ..utils.name_convert import alias_to_char_name_optional
 from ..utils.database.models import WavesUser
 from ..utils.util import get_hide_uid_pref, hide_uid
 
@@ -33,15 +33,16 @@ async def set_waves_user_value(ev: Event, func: str, uid: str, value: str):
         # 只写"随机"则剥空, 等效清空设置回落全局默认
         value = value.replace("随机", "").strip()
     if func == "体力背景" and value:
-        pure_value = value.replace("官方", "").replace("立绘", "").replace("背景", "").replace("图", "")
-        if not pure_value.strip():
+        pure_value = value.replace("官方", "").replace("立绘", "").replace("背景", "").replace("图", "").strip()
+        if not pure_value:
             if not any(k in value for k in ("背景", "立绘", "官方")):
                 return "未找到对应体力背景!\n请检查输入的角色名称或图片ID是否正确!"
             bg_random_hint = True
-        elif is_valid_char_name(pure_value):
-            value = alias_to_char_name(pure_value) + ("官方" if "官方" in value else "") + ("立绘" if "立绘" in value else "") + ("背景" if "背景" in value else "")
         elif not _is_valid_stamina_bg_hash(pure_value):
-            return "未找到对应体力背景!\n请检查输入的角色名称或图片ID是否正确!"
+            char_name = alias_to_char_name_optional(pure_value)
+            if not char_name:
+                return "未找到对应体力背景!\n请检查输入的角色名称或图片ID是否正确!"
+            value = char_name + ("官方" if "官方" in value else "") + ("立绘" if "立绘" in value else "") + ("背景" if "背景" in value else "")
 
     if (
         await WavesUser.update_data_by_data(

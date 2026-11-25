@@ -43,6 +43,10 @@ def _normalize(name: str) -> str:
     return name.lower().replace(" ", "").replace("\u3000", "")
 
 
+def _clean(name: str) -> str:
+    return name.strip() or name
+
+
 def _build_i18n_reverse(i18n_path) -> Dict[str, str]:
     """从 i18n JSON 文件构建反向查找表"""
     reverse_map: Dict[str, str] = {}
@@ -68,8 +72,8 @@ def _i18n_to_chs(name: str, reverse_map: Dict[str, str]) -> Optional[str]:
 
 
 def add_dictionaries(dict1, dict2):
-    all_keys = set(dict1.keys()) | set(dict2.keys())
-    return {key: list(set(dict1.get(key, []) + dict2.get(key, []))) for key in all_keys}
+    all_keys = dict.fromkeys([*dict1, *dict2])
+    return {key: list(dict.fromkeys(dict1.get(key, []) + dict2.get(key, []))) for key in all_keys}
 
 
 def load_alias_data():
@@ -233,6 +237,7 @@ def ensure_data_loaded(force: bool = False):
 
 def alias_to_char_name(char_name: str) -> str:
     ensure_data_loaded()
+    char_name = _clean(char_name)
     # 先尝试 i18n 反向查找（忽略大小写和空格）
     chs = _i18n_to_chs(char_name, _char_i18n_reverse)
     if chs:
@@ -248,6 +253,7 @@ def alias_to_char_name(char_name: str) -> str:
 
 def is_valid_char_name(char_name: str) -> bool:
     ensure_data_loaded()
+    char_name = _clean(char_name)
     all_names = set(char_alias_data.keys()) | {alias for aliases in char_alias_data.values() for alias in aliases}
     return char_name in sorted(all_names, key=len, reverse=True)
 
@@ -256,6 +262,7 @@ def alias_to_char_name_optional(char_name: Optional[str]) -> Optional[str]:
     ensure_data_loaded()
     if not char_name:
         return None
+    char_name = _clean(char_name)
     # 先尝试 i18n 反向查找（忽略大小写和空格）
     chs = _i18n_to_chs(char_name, _char_i18n_reverse)
     if chs:
@@ -271,6 +278,7 @@ def alias_to_char_name_optional(char_name: Optional[str]) -> Optional[str]:
 
 def alias_to_char_name_list(char_name: str) -> List[str]:
     ensure_data_loaded()
+    char_name = _clean(char_name)
     # 先尝试 i18n 反向查找（忽略大小写和空格）
     chs = _i18n_to_chs(char_name, _char_i18n_reverse)
     if chs:
@@ -307,6 +315,7 @@ def char_name_to_char_id(char_name: str) -> Optional[str]:
 
 def alias_to_weapon_name(weapon_name: str) -> str:
     ensure_data_loaded()
+    weapon_name = _clean(weapon_name)
     # 先尝试 i18n 反向查找（忽略大小写和空格）
     chs = _i18n_to_chs(weapon_name, _weapon_i18n_reverse)
     if chs:
@@ -348,7 +357,7 @@ def alias_to_sonata_name(sonata_name: str | None) -> str | None:
     if sonata_name is None:
         return None
     # Remove "套" character to make it optional
-    normalized_sonata_name = sonata_name.rstrip('套')
+    normalized_sonata_name = _clean(sonata_name).rstrip('套')
     for i in sonata_alias_data:
         if normalized_sonata_name == i.rstrip('套') or any(
             normalized_sonata_name == alias.rstrip('套') for alias in sonata_alias_data[i]
@@ -368,6 +377,7 @@ def alias_to_sonata_name(sonata_name: str | None) -> str | None:
 
 def alias_to_echo_name(echo_name: str) -> str:
     ensure_data_loaded()
+    echo_name = _clean(echo_name)
     # 先尝试 i18n 反向查找（忽略大小写和空格）
     chs = _i18n_to_chs(echo_name, _echo_i18n_reverse)
     if chs:
